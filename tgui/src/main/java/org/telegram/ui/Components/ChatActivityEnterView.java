@@ -4092,6 +4092,10 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                             fixHandlesColor();
                             delegate.onKeyboardRequested();
                         }
+                    } else if (event.getAction() == MotionEvent.ACTION_UP && !keyboardVisible && !isPopupShowing()
+                            && sizeNotifierLayout instanceof ChatInputLayout) {
+                        // tgui: lift the input before the window resizes for the keyboard
+                        ((ChatInputLayout) sizeNotifierLayout).onKeyboardRequested(keyboardHeight);
                     }
                     return super.onTouchEvent(event);
                 }

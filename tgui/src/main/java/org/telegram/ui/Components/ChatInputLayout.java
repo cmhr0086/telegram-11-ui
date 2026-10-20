@@ -1,5 +1,8 @@
 package org.telegram.ui.Components;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.view.Gravity;
 import android.view.View;
@@ -22,9 +25,12 @@ import org.telegram.ui.ActionBar.INavigationLayout;
  *     ChatActivity's {@code bottomPanelTranslationYChanged}): the content keeps its height for the
  *     larger panel padding, extends upwards by the panel height and is translated with it;</li>
  *     <li>the chat background (wallpaper) is drawn behind everything, as SizeNotifierFrameLayout does;</li>
- *     <li>when the keyboard opens or closes, the window resize is animated with the keyboard
- *     ({@link AdjustPanLayoutHelper}, as upstream ChatActivityFragmentView): the layout slides while
- *     the action bar and the wallpaper stay in place.</li>
+ *     <li>tgui's own keyboard motion (upstream animates the whole layout with
+ *     {@link AdjustPanLayoutHelper}, which re-sizes the view chain and redraws the wallpaper every
+ *     frame and is too heavy on older phones): when the field is tapped the input and the content
+ *     are lifted right away to the remembered keyboard height, and whenever the window resizes for
+ *     the keyboard they keep their on-screen position and ease into the new layout. Only
+ *     {@code translationY} of those two views changes, so there is no relayout per frame.</li>
  * </ul>
  * Add the action bar last so it stays on top.
  */
@@ -33,82 +39,23 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
     private ChatActivityEnterView enterView;
     private View contentView;
     private ActionBar actionBar;
-    private final INavigationLayout navigationLayout;
     private int emojiViewPadding;
 
     public ChatInputLayout(Context context, INavigationLayout parentLayout) {
         super(context, parentLayout);
-        navigationLayout = parentLayout;
     }
 
     public void setEnterView(ChatActivityEnterView enterView) {
         this.enterView = enterView;
-        if (enterView != null && adjustPanLayoutHelper != null) {
-            enterView.setAdjustPanLayoutHelper(adjustPanLayoutHelper);
-        }
-    }
-
-    /** upstream ChatActivityFragmentView's keyboard animation, minus the chat-only views. */
-    @Override
-    protected AdjustPanLayoutHelper createAdjustPanLayoutHelper() {
-        return new AdjustPanLayoutHelper(this) {
-            @Override
-            protected void onTransitionStart(boolean keyboardVisible, int contentHeight) {
-                if (enterView != null) {
-                    enterView.onAdjustPanTransitionStart(keyboardVisible, contentHeight);
-                }
-            }
-
-            @Override
-            protected void onTransitionEnd() {
-                if (enterView != null) {
-                    enterView.onAdjustPanTransitionEnd();
-                }
-            }
-
-            @Override
-            protected void onPanTranslationUpdate(float y, float progress, boolean keyboardVisible) {
-                if (navigationLayout != null && navigationLayout.isPreviewOpenAnimationInProgress()) {
-                    return;
-                }
-                if (actionBar != null) {
-                    actionBar.setTranslationY(y);
-                }
-                setBackgroundTranslation((int) y);
-                if (contentView != null) {
-                    contentView.invalidate();
-                }
-                if (enterView != null) {
-                    enterView.onAdjustPanTransitionUpdate(y, progress, keyboardVisible);
-                }
-            }
-
-            @Override
-            protected boolean heightAnimationEnabled() {
-                if (AndroidUtilities.isInMultiwindow || navigationLayout == null || enterView == null) {
-                    return false;
-                }
-                return !navigationLayout.isTransitionAnimationInProgress() && !navigationLayout.isPreviewOpenAnimationInProgress();
-            }
-        };
-    }
-
-    @Override
-    protected void onAttachedToWindow() {
-        super.onAttachedToWindow();
-        if (adjustPanLayoutHelper != null) {
-            adjustPanLayoutHelper.onAttach();
-            if (enterView != null) {
-                enterView.setAdjustPanLayoutHelper(adjustPanLayoutHelper);
-            }
-        }
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        if (adjustPanLayoutHelper != null) {
-            adjustPanLayoutHelper.onDetach();
+        AndroidUtilities.cancelRunOnUIThread(keyboardLiftTimeout);
+        if (keyboardMotionAnimator != null) {
+            keyboardMotionAnimator.cancel();
+            keyboardMotionAnimator = null;
         }
     }
 
@@ -119,6 +66,63 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
 
     public void setActionBar(ActionBar actionBar) {
         this.actionBar = actionBar;
+    }
+
+    private ValueAnimator keyboardMotionAnimator;
+    private final Runnable keyboardLiftTimeout = () -> animateKeyboardMotion(currentKeyboardMotion(), 0);
+
+    private float currentKeyboardMotion() {
+        return enterView == null ? 0 : enterView.getTranslationY();
+    }
+
+    private void setKeyboardMotion(float translation) {
+        enterView.setTranslationY(translation);
+        if (contentView != null) {
+            contentView.setTranslationY(translation);
+        }
+    }
+
+    private void animateKeyboardMotion(float from, float to) {
+        if (keyboardMotionAnimator != null) {
+            keyboardMotionAnimator.cancel();
+            keyboardMotionAnimator = null;
+        }
+        if (enterView == null) {
+            return;
+        }
+        if (Math.abs(from - to) < 1) {
+            setKeyboardMotion(to);
+            return;
+        }
+        setKeyboardMotion(from);
+        keyboardMotionAnimator = ValueAnimator.ofFloat(from, to);
+        keyboardMotionAnimator.addUpdateListener(a -> setKeyboardMotion((float) a.getAnimatedValue()));
+        keyboardMotionAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if (keyboardMotionAnimator == animation) {
+                    keyboardMotionAnimator = null;
+                }
+            }
+        });
+        keyboardMotionAnimator.setDuration(AdjustPanLayoutHelper.keyboardDuration);
+        keyboardMotionAnimator.setInterpolator(AdjustPanLayoutHelper.keyboardInterpolator);
+        keyboardMotionAnimator.start();
+    }
+
+    /**
+     * Called by {@link ChatActivityEnterView} when the field is touched and the keyboard is about
+     * to open: lift the input and the content to where the keyboard will put them. If the window
+     * has not resized within a second (hardware keyboard, IME refused), they go back down.
+     */
+    public void onKeyboardRequested(int expectedKeyboardHeight) {
+        if (enterView == null || expectedKeyboardHeight <= 0 || measureKeyboardHeight() > AndroidUtilities.dp(20)
+                || enterView.isPopupShowing() || enterView.panelAnimationInProgress() || AndroidUtilities.isInMultiwindow) {
+            return;
+        }
+        animateKeyboardMotion(currentKeyboardMotion(), -expectedKeyboardHeight);
+        AndroidUtilities.cancelRunOnUIThread(keyboardLiftTimeout);
+        AndroidUtilities.runOnUIThread(keyboardLiftTimeout, 1000);
     }
 
     /**
@@ -209,6 +213,7 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
             notifyHeightChanged();
             return;
         }
+        int oldInputBottom = enterView.getBottom();
         int keyboardSize = measureKeyboardHeight();
         int paddingBottom = keyboardSize <= AndroidUtilities.dp(20) && !AndroidUtilities.isInMultiwindow ? enterView.getEmojiPadding() : 0;
         // no setBottomClip(): upstream ChatActivity lets the wallpaper run under the (opaque) panel,
@@ -263,6 +268,12 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
                 childTop = lp.topMargin + getPaddingTop() - contentExtraTop();
             }
             child.layout(childLeft, childTop, childLeft + width, childTop + height);
+        }
+        // keyboard opened or closed: keep the input where it is on screen and ease it into place
+        int newInputBottom = enterView.getBottom();
+        if (oldInputBottom > 0 && newInputBottom != oldInputBottom && !enterView.panelAnimationInProgress()) {
+            AndroidUtilities.cancelRunOnUIThread(keyboardLiftTimeout);
+            animateKeyboardMotion(currentKeyboardMotion() + oldInputBottom - newInputBottom, 0);
         }
         notifyHeightChanged();
     }
