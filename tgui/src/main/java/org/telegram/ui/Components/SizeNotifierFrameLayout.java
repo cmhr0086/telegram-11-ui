@@ -52,6 +52,7 @@ import org.telegram.ui.ActionBar.INavigationLayout;
 import org.telegram.ui.ActionBar.Theme;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 
 public class SizeNotifierFrameLayout extends FrameLayout {
 
@@ -174,6 +175,10 @@ public class SizeNotifierFrameLayout extends FrameLayout {
                     oldBackgroundDrawable = backgroundDrawable;
                     oldBackgroundMotion = backgroundMotion;
                 }
+                if (newDrawable instanceof MotionBackgroundDrawable) {
+                    MotionBackgroundDrawable motionBackgroundDrawable = (MotionBackgroundDrawable) newDrawable;
+                    motionBackgroundDrawable.setParentView(backgroundView);
+                }
                 backgroundDrawable = newDrawable;
                 backgroundMotion = newMotion;
                 themeAnimationValue = 0f;
@@ -206,7 +211,43 @@ public class SizeNotifierFrameLayout extends FrameLayout {
                     translationX = 0;
                     translationY = 0;
                 }
-                if (drawable instanceof ColorDrawable) {
+                if (drawable instanceof MotionBackgroundDrawable) {
+                    MotionBackgroundDrawable motionBackgroundDrawable = (MotionBackgroundDrawable) drawable;
+                    if (motionBackgroundDrawable.hasPattern()) {
+                        int actionBarHeight = (isActionBarVisible() ? ActionBar.getCurrentActionBarHeight() : 0) + (isStatusBarVisible() && Build.VERSION.SDK_INT >= 21 && occupyStatusBar ? AndroidUtilities.statusBarHeight : 0);
+                        int viewHeight = useRootView() ? getRootView().getMeasuredHeight() - actionBarHeight : getHeight();
+                        float scaleX = (float) getMeasuredWidth() / (float) drawable.getIntrinsicWidth();
+                        float scaleY = (float) (viewHeight) / (float) drawable.getIntrinsicHeight();
+                        float scale = Math.max(scaleX, scaleY);
+                        int width = (int) Math.ceil(drawable.getIntrinsicWidth() * scale * parallaxScale);
+                        int height = (int) Math.ceil(drawable.getIntrinsicHeight() * scale * parallaxScale);
+                        int x = (getMeasuredWidth() - width) / 2 + (int) translationX;
+                        int y = backgroundTranslationY + (viewHeight - height) / 2 + actionBarHeight + (int) translationY;
+                        canvas.save();
+                        canvas.clipRect(0, actionBarHeight, width, getMeasuredHeight() - bottomClip);
+                        drawable.setBounds(x, y, x + width, y + height);
+                        drawable.draw(canvas);
+                        checkSnowflake(canvas);
+                        canvas.restore();
+                    } else {
+                        if (bottomClip != 0) {
+                            canvas.save();
+                            canvas.clipRect(0, 0, getMeasuredWidth(), getRootView().getMeasuredHeight() - bottomClip);
+                        }
+                        motionBackgroundDrawable.setTranslationY(backgroundTranslationY);
+                        int bottom = (int) (getRootView().getMeasuredHeight() - backgroundTranslationY + translationY);
+                        if (animationInProgress) {
+                            bottom -= emojiOffset;
+                        } else if (emojiHeight != 0) {
+                            bottom -= emojiHeight;
+                        }
+                        drawable.setBounds(0, 0, getMeasuredWidth(), bottom);
+                        drawable.draw(canvas);
+                        if (bottomClip != 0) {
+                            canvas.restore();
+                        }
+                    }
+                } else if (drawable instanceof ColorDrawable) {
                     if (bottomClip != 0) {
                         canvas.save();
                         canvas.clipRect(0, 0, getMeasuredWidth(), getMeasuredHeight() - bottomClip);
@@ -295,6 +336,10 @@ public class SizeNotifierFrameLayout extends FrameLayout {
         if (backgroundView == null) {
             addView(backgroundView = new BackgroundView(getContext()), 0, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
             checkLayerType();
+        }
+        if (bitmap instanceof MotionBackgroundDrawable) {
+            MotionBackgroundDrawable motionBackgroundDrawable = (MotionBackgroundDrawable) bitmap;
+            motionBackgroundDrawable.setParentView(backgroundView);
         }
         backgroundDrawable = bitmap;
         checkMotion();
@@ -419,11 +464,34 @@ public class SizeNotifierFrameLayout extends FrameLayout {
     }
 
     public int getBackgroundTranslationY() {
+        if (backgroundDrawable instanceof MotionBackgroundDrawable) {
+            if (animationInProgress) {
+                return (int) emojiOffset;
+            } else if (emojiHeight != 0) {
+                return emojiHeight;
+            }
+            return backgroundTranslationY;
+        }
         return 0;
     }
 
     public int getBackgroundSizeY() {
-        return getMeasuredHeight();
+        int offset = 0;
+        if (backgroundDrawable instanceof MotionBackgroundDrawable) {
+            MotionBackgroundDrawable motionBackgroundDrawable = (MotionBackgroundDrawable) backgroundDrawable;
+            if (!motionBackgroundDrawable.hasPattern()) {
+                if (animationInProgress) {
+                    offset = (int) emojiOffset;
+                } else if (emojiHeight != 0) {
+                    offset = emojiHeight;
+                } else {
+                    offset = backgroundTranslationY;
+                }
+            } else {
+                offset = backgroundTranslationY != 0 ? 0 : -keyboardHeight;
+            }
+        }
+        return getMeasuredHeight() - offset;
     }
 
     public int getHeightWithKeyboard() {

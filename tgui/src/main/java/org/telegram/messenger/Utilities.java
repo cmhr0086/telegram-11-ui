@@ -56,7 +56,128 @@ public class Utilities {
         }
     }
 //    public static native int saveProgressiveJpeg(Bitmap bitmap, int width, int height, int stride, int quality, String path);
-    public static native void generateGradient(Bitmap bitmap, boolean unpin, int phase, float progress, int width, int height, int stride, int[] colors);
+    private static final float[] GRADIENT_POSITIONS = {
+            0.80f, 0.10f,
+            0.60f, 0.20f,
+            0.35f, 0.25f,
+            0.25f, 0.60f,
+            0.20f, 0.90f,
+            0.40f, 0.80f,
+            0.65f, 0.75f,
+            0.75f, 0.40f
+    };
+    private static float[] gradientPixelCache;
+    private static int gradientPixelCacheW, gradientPixelCacheH;
+
+    private static float[] gatherGradientPositions(int phase) {
+        float[] result = new float[8];
+        for (int i = 0; i < 4; i++) {
+            int pos = (phase + i * 2) % 8;
+            result[i * 2] = GRADIENT_POSITIONS[pos * 2];
+            result[i * 2 + 1] = 1.0f - GRADIENT_POSITIONS[pos * 2 + 1];
+        }
+        return result;
+    }
+
+    private static synchronized float[] gradientSwirl(int width, int height) {
+        if (gradientPixelCache != null && gradientPixelCacheW == width && gradientPixelCacheH == height) {
+            return gradientPixelCache;
+        }
+        float[] cache = new float[width * height * 2];
+        for (int y = 0; y < height; y++) {
+            float centerDistanceY = (float) y / height - 0.5f;
+            float centerDistanceY2 = centerDistanceY * centerDistanceY;
+            for (int x = 0; x < width; x++) {
+                float centerDistanceX = (float) x / width - 0.5f;
+                float centerDistance = (float) Math.sqrt(centerDistanceX * centerDistanceX + centerDistanceY2);
+                float swirlFactor = 0.35f * centerDistance;
+                float theta = swirlFactor * swirlFactor * 0.8f * 8.0f;
+                float sinTheta = (float) Math.sin(theta);
+                float cosTheta = (float) Math.cos(theta);
+                cache[(y * width + x) * 2] = Math.max(0.0f, Math.min(1.0f, 0.5f + centerDistanceX * cosTheta - centerDistanceY * sinTheta));
+                cache[(y * width + x) * 2 + 1] = Math.max(0.0f, Math.min(1.0f, 0.5f + centerDistanceX * sinTheta + centerDistanceY * cosTheta));
+            }
+        }
+        gradientPixelCache = cache;
+        gradientPixelCacheW = width;
+        gradientPixelCacheH = height;
+        return cache;
+    }
+
+    /**
+     * Java port of the native dithered two-colour linear gradient (upstream jni/image.cpp):
+     * triangular-noise dithering hides the banding of slow gradients. Runs off the UI thread.
+     */
+    public static void drawDitheredGradient(Bitmap bitmap, int[] colors, int startX, int startY, int endX, int endY) {
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        float r0 = ((colors[0] >> 16) & 0xff) / 255f, g0 = ((colors[0] >> 8) & 0xff) / 255f, b0 = (colors[0] & 0xff) / 255f;
+        float r1 = ((colors[1] >> 16) & 0xff) / 255f, g1 = ((colors[1] >> 8) & 0xff) / 255f, b1 = (colors[1] & 0xff) / 255f;
+        int vx = endX - startX;
+        int vy = endY - startY;
+        float vSquaredMag = Math.max(1, vx * vx + vy * vy);
+        Random rnd = new Random();
+        int[] row = new int[width];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                float fraction = (vx * (x - startX) + vy * (y - startY)) / vSquaredMag;
+                float noise = (rnd.nextFloat() - rnd.nextFloat()) / 255f;
+                int r = Math.round(Math.max(0f, Math.min(1f, r0 + fraction * (r1 - r0) + noise)) * 255f);
+                int g = Math.round(Math.max(0f, Math.min(1f, g0 + fraction * (g1 - g0) + noise)) * 255f);
+                int b = Math.round(Math.max(0f, Math.min(1f, b0 + fraction * (b1 - b0) + noise)) * 255f);
+                row[x] = 0xff000000 | (r << 16) | (g << 8) | b;
+            }
+            bitmap.setPixels(row, 0, width, 0, y, width, 1);
+        }
+    }
+
+    /**
+     * Java port of the native four-colour "motion" gradient from upstream jni/image.cpp.
+     * It only ever runs on tiny bitmaps (60x80), so the cost is negligible.
+     */
+    public static void generateGradient(Bitmap bitmap, boolean unpin, int phase, float progress, int width, int height, int stride, int[] colors) {
+        if (bitmap == null || width == 0 || height == 0 || colors == null) {
+            return;
+        }
+        float[] swirl = gradientSwirl(width, height);
+        int previousPhase = phase + 1;
+        if (previousPhase > 7) {
+            previousPhase = 0;
+        }
+        float[] previous = gatherGradientPositions(previousPhase);
+        float[] current = gatherGradientPositions(phase);
+        int colorsCount = colors.length < 4 || colors[3] == 0 ? 3 : 4;
+        float[] cx = new float[colorsCount];
+        float[] cy = new float[colorsCount];
+        float[] cr = new float[colorsCount];
+        float[] cg = new float[colorsCount];
+        float[] cb = new float[colorsCount];
+        for (int i = 0; i < colorsCount; i++) {
+            cx[i] = previous[i * 2] + (current[i * 2] - previous[i * 2]) * progress;
+            cy[i] = previous[i * 2 + 1] + (current[i * 2 + 1] - previous[i * 2 + 1]) * progress;
+            cr[i] = ((colors[i] >> 16) & 0xff) / 255.0f;
+            cg[i] = ((colors[i] >> 8) & 0xff) / 255.0f;
+            cb[i] = (colors[i] & 0xff) / 255.0f;
+        }
+        int[] pixels = new int[width * height];
+        for (int p = 0, n = width * height; p < n; p++) {
+            float pixelX = swirl[p * 2];
+            float pixelY = swirl[p * 2 + 1];
+            float distanceSum = 0, r = 0, g = 0, b = 0;
+            for (int i = 0; i < colorsCount; i++) {
+                float dx = pixelX - cx[i];
+                float dy = pixelY - cy[i];
+                float distance = Math.max(0.0f, 0.9f - (float) Math.sqrt(dx * dx + dy * dy));
+                distance = distance * distance * distance * distance;
+                distanceSum += distance;
+                r += distance * cr[i];
+                g += distance * cg[i];
+                b += distance * cb[i];
+            }
+            pixels[p] = 0xff000000 | ((int) (r / distanceSum * 255.0f) & 0xff) << 16 | ((int) (g / distanceSum * 255.0f) & 0xff) << 8 | ((int) (b / distanceSum * 255.0f) & 0xff);
+        }
+        bitmap.setPixels(pixels, 0, width, 0, 0, width, height);
+    }
 
     // tgui: upstream uses native stack blur (libtmessages); this is a Java port of the same algorithm.
     public static void stackBlurBitmap(Bitmap bitmap, int radius) {

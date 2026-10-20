@@ -49,4 +49,6 @@
     <string name="WaitMore">Wait more</string>
     <string name="AccDescrMoreOptions">More options</string>
     <string name="Back">Back</string>
+    <string name="Send">Send</string>
+    <string name="TypeMessage">Message</string>
 </resources>
