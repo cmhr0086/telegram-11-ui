@@ -200,6 +200,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         // like ChatActivity: no list selector on message rows, clicks fire on finger up
         listView.setInstantClick(true);
         listView.setDisableHighlightState(true);
+        // setDisableHighlightState only stops setPressed(); the list selector would still ripple over the wallpaper
+        listView.setSelectorDrawableColor(0);
         // tap: context menu (createMenu(view, single = true)); in selection mode it toggles the row
         listView.setOnItemClickListener((RecyclerListView.OnItemClickListenerExtended) (view, position, x, y) -> {
             if (position < 0 || position >= messages.size()) {
