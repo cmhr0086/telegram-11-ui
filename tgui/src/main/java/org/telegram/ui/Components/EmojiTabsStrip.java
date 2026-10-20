@@ -451,6 +451,21 @@ public class EmojiTabsStrip extends ScrollableHorizontalScrollView {
         if (recentTab != null) {
             recentTab.updateColor();
         }
+        // tgui: upstream recolours only the recent tab here; recolour every tab so the animated theme switch reaches them
+        for (int i = 0; i < contentView.getChildCount(); ++i) {
+            View child = contentView.getChildAt(i);
+            if (child instanceof EmojiTabButton && child != recentTab) {
+                ((EmojiTabButton) child).updateColor();
+            } else if (child instanceof EmojiTabsView) {
+                LinearLayout tabs = ((EmojiTabsView) child).contentView;
+                for (int a = 0; a < tabs.getChildCount(); ++a) {
+                    if (tabs.getChildAt(a) instanceof EmojiTabButton) {
+                        ((EmojiTabButton) tabs.getChildAt(a)).updateColor();
+                    }
+                }
+            }
+        }
+        contentView.invalidate();
     }
 
     public void select(int index) {

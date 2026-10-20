@@ -7489,7 +7489,11 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 Theme.key_chat_messagePanelCancelInlineBot, Theme.key_chat_recordTime, Theme.key_chat_recordVoiceCancel, Theme.key_chat_recordedVoiceBackground,
                 Theme.key_chat_recordedVoiceDot, Theme.key_chat_recordedVoicePlayPause, Theme.key_chat_recordedVoiceProgress, Theme.key_chat_recordedVoiceProgressInner,
                 Theme.key_chat_emojiPanelBackground, Theme.key_chat_emojiPanelNewTrending, Theme.key_chat_messageLinkOut, Theme.key_chat_TextSelectionCursor,
-                Theme.key_chat_inTextSelectionHighlight, Theme.key_listSelector, Theme.key_windowBackgroundWhiteGrayText
+                Theme.key_chat_inTextSelectionHighlight, Theme.key_listSelector, Theme.key_windowBackgroundWhiteGrayText,
+                // upstream ChatActivity.getThemeDescriptions(): the emoji panel
+                Theme.key_chat_emojiPanelShadowLine, Theme.key_chat_emojiPanelEmptyText, Theme.key_chat_emojiPanelIcon, Theme.key_chat_emojiPanelIconSelected,
+                Theme.key_chat_emojiPanelStickerPackSelector, Theme.key_chat_emojiPanelBackspace, Theme.key_chat_emojiBottomPanelIcon,
+                Theme.key_chat_emojiPanelStickerSetName, Theme.key_chat_emojiPanelStickerSetNameIcon
         };
         for (int key : keys) {
             descriptions.add(new ThemeDescription(null, 0, null, null, null, delegate, key));

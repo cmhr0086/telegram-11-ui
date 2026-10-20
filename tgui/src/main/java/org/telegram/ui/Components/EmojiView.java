@@ -1482,12 +1482,16 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
             for (int i = 0; i < emojiGridView.getChildCount(); i++) {
                 View child = emojiGridView.getChildAt(i);
                 if (child instanceof StickerSetNameCell) {
+                    // upstream: StickerSetNameCell.createThemeDescriptions (textView colour by field name)
+                    ((StickerSetNameCell) child).setTitleColor(getThemedColor(Theme.key_chat_emojiPanelStickerSetName));
                     ((StickerSetNameCell) child).updateColors();
                 }
             }
         }
         if (backspaceButton != null) {
             backspaceButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_chat_emojiPanelBackspace), PorterDuff.Mode.MULTIPLY));
+            int color = getThemedColor(Theme.key_chat_emojiBottomPanelIcon);
+            Theme.setSelectorDrawableColor(backspaceButton.getBackground(), Color.argb(30, Color.red(color), Color.green(color), Color.blue(color)), true);
         }
         if (shadowLine != null) {
             shadowLine.setBackgroundColor(getThemedColor(Theme.key_chat_emojiPanelShadowLine));
@@ -1731,6 +1735,7 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
                     cell.position = position;
                     index = positionToSection.get(position);
                     cell.setText(emojiTitles[index], 0);
+                    cell.setTitleColor(getThemedColor(Theme.key_chat_emojiPanelStickerSetName));
                     break;
                 }
             }
