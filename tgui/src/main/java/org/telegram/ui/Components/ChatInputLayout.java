@@ -91,9 +91,10 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
                     if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) {
                         imeAnimating = false;
                         panelAtImeStart = 0;
-                        if (enterView != null && !enterView.panelAnimationInProgress()) {
-                            setKeyboardMotion(0);
-                        }
+                        // the layout may still have the old size (DrawerLayoutContainer applies the
+                        // grown IME inset only now): keep the input where it is on screen, the next
+                        // layout brings the translation to 0 without any visible movement
+                        settleOnIme();
                     }
                 }
             });
@@ -121,6 +122,27 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
         int panel = Math.max(enterView.isPopupShowing() ? enterView.getEmojiPadding() : 0, panelAtImeStart);
         float desiredBottom = windowHeight - Math.max(imeBottom, navBottom + panel);
         setKeyboardMotion(desiredBottom - laidBottom);
+    }
+
+    /**
+     * Android 11+, no IME animation running: the input belongs where the current insets put it.
+     * The translation covers only the gap until the layout catches up, so it is 0 at rest.
+     */
+    private void settleOnIme() {
+        if (enterView == null || enterView.panelAnimationInProgress()) {
+            return;
+        }
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
+        if (insets == null) {
+            setKeyboardMotion(0);
+            return;
+        }
+        imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
+        navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
+        followIme();
+        if (Math.abs(enterView.getTranslationY()) < 1) {
+            setKeyboardMotion(0);
+        }
     }
 
     private Theme.ResourcesProvider resourcesProvider;
@@ -392,6 +414,11 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
         int newInputBottom = enterView.getBottom();
         if (imeAnimating) {
             followIme();
+        } else if (Build.VERSION.SDK_INT >= 30) {
+            // the IME animation callback alone moves the input; a late resize only removes the gap
+            if (enterView.getTranslationY() != 0 && !enterView.panelAnimationInProgress()) {
+                settleOnIme();
+            }
         } else if (oldInputBottom > 0 && newInputBottom != oldInputBottom && !enterView.panelAnimationInProgress()) {
             AndroidUtilities.cancelRunOnUIThread(keyboardLiftTimeout);
             // the keyboard usually arrives while the lift is still running (~250 ms after the tap on
