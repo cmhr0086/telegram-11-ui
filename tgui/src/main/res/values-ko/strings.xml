@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="NotificationsOn">켬</string>
+    <string name="NotificationsOff">끔</string>
+    <string name="ProxyAddedSuccess">프록시 추가됨</string>
+    <string name="UseProxyAddress">서버</string>
+    <string name="UseProxyPassword">비밀번호</string>
+    <string name="UseProxyPort">포트</string>
+    <string name="UseProxySecret">비밀 키</string>
+    <string name="UseProxyUsername">사용자명</string>
+    <string name="UseProxyTelegramInfo2">이 프록시를 사용하시면 후원 채널이 대화방 목록에 표시될 수 있습니다. 회원님의 텔레그램 트래픽은 전혀 공개되지 않습니다.</string>
+    <string name="StopLoadingTitle">로딩을 중단할까요?</string>
+    <string name="StopLoading">불러오기를 중단할까요?</string>
+    <string name="NoHandleAppInstalled">\'%1$s\' 파일 유형을 처리할 수 있는 응용 프로그램이 없습니다. 계속하려면 프로그램을 설치해 주세요</string>
+</resources>

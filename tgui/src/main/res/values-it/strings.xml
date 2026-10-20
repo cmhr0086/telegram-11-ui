@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="NotificationsOn">Sì</string>
+    <string name="NotificationsOff">No</string>
+    <string name="ProxyAddedSuccess">Proxy aggiunto.</string>
+    <string name="UseProxyAddress">Server</string>
+    <string name="UseProxyPassword">Password</string>
+    <string name="UseProxyPort">Porta</string>
+    <string name="UseProxySecret">Segreto\n</string>
+    <string name="UseProxyUsername">Username</string>
+    <string name="UseProxyTelegramInfo2">Questo proxy potrebbe mostrare un canale sponsorizzato nella tua lista chat. Questo non rivela nulla del tuo traffico Telegram.</string>
+    <string name="ClearButton">Cancella tutto</string>
+    <string name="Cancel">Annulla</string>
+    <string name="OK">OK</string>
+    <string name="Stop">Arresta</string>
+    <string name="WaitMore">Aspetta di più</string>
+    <string name="Back">Indietro</string>
+    <string name="StopLoadingTitle">Interrompere il caricamento?</string>
+    <string name="StopLoading">Vuoi terminare il caricamento?</string>
+    <string name="NoHandleAppInstalled">Non hai applicazioni che possono gestire il tipo di file \"%1$s\": installane una per proseguire</string>
+</resources>

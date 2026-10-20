@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="NotificationsOn">مفعَّلة</string>
+    <string name="NotificationsOff">معطَّلة</string>
+    <string name="ProxyAddedSuccess">تمت إضافة البروكسي.</string>
+    <string name="UseProxyAddress">الخادم</string>
+    <string name="UseProxyPassword">كلمة المرور</string>
+    <string name="UseProxyPort">المنفذ</string>
+    <string name="UseProxySecret">السر</string>
+    <string name="UseProxyUsername">اسم المستخدم</string>
+    <string name="UseProxyTelegramInfo2">قد يعرض هذا البروكسي قناة إعلانية في قائمة محادثاتك.\nلن يكشف هذا عن نشاطك في تيليجرام.</string>
+    <string name="Cancel">إلغاء</string>
+    <string name="OK">حسنًا</string>
+    <string name="Stop">إيقاف</string>
+    <string name="WaitMore">الانتظار أكثر</string>
+    <string name="Back">رجوع</string>
+    <string name="StopLoadingTitle">إيقاف التحميل؟</string>
+    <string name="StopLoading">هل تريدون إلغاء التحميل؟</string>
+    <string name="NoHandleAppInstalled">لا تملك تطبيقًا يمكنه فتح صيغة الملفات \'%1$s\'، يرجى تنزيل تطبيق مناسب للاستمرار</string>
+</resources>

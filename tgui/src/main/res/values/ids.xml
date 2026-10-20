@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="fit_width_tag" type="id" />
+    <item name="object_tag" type="id" />
+    <item name="shake_animation" type="id" />
+    <item name="spring_tag" type="id" />
+    <item name="spring_was_translation_x_tag" type="id" />
+    <item name="width_tag" type="id" />
+    <item name="menu_bold" type="id" />
+    <item name="menu_italic" type="id" />
+    <item name="menu_link" type="id" />
+    <item name="menu_mono" type="id" />
+    <item name="menu_quote" type="id" />
+    <item name="menu_regular" type="id" />
+    <item name="menu_spoiler" type="id" />
+    <item name="menu_strike" type="id" />
+    <item name="menu_underline" type="id" />
+</resources>

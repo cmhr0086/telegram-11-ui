@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="NotificationsOn">Ativadas</string>
+    <string name="NotificationsOff">Desativadas</string>
+    <string name="ProxyAddedSuccess">Proxy adicionado.</string>
+    <string name="UseProxyAddress">Servidor</string>
+    <string name="UseProxyPassword">Senha</string>
+    <string name="UseProxyPort">Porta</string>
+    <string name="UseProxySecret">Segredo</string>
+    <string name="UseProxyUsername">Nome de Usuário</string>
+    <string name="UseProxyTelegramInfo2">Este proxy pode mostrar um canal patrocinado em sua lista de conversas. Isso não revela nada do seu tráfego no Telegram.</string>
+    <string name="Cancel">Cancelar</string>
+    <string name="OK">OK</string>
+    <string name="Stop">Parar</string>
+    <string name="WaitMore">Aguardar mais</string>
+    <string name="Back">Voltar</string>
+    <string name="StopLoadingTitle">Parar de carregar?</string>
+    <string name="StopLoading">Deseja cancelar o carregamento?</string>
+    <string name="NoHandleAppInstalled">Você não possui um aplicativo que suporte o tipo de arquivo \'%1$s\', por favor instale um para continuar</string>
+</resources>
