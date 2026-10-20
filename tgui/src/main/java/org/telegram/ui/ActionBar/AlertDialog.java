@@ -620,7 +620,9 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                 drawBackground = false;
             }
         }
-        containerView.setFitsSystemWindows(Build.VERSION.SDK_INT >= 21);
+        // Upstream sets fitsSystemWindows here; with edge-to-edge enforced (targetSdk 35+ on Android 15+)
+        // that replaces the shadow drawable's padding with the window insets and the content spills over the card.
+        containerView.setFitsSystemWindows(false);
         if (setContent) {
             if (customWidth > 0) {
                 FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);

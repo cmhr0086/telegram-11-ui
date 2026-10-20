@@ -7,7 +7,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "org.telegram.uidemo"
+        applicationId = "org.telegram.messenger.demo"
         minSdk = 21
         targetSdk = 36
         versionCode = 1
