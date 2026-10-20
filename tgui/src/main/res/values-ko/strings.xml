@@ -12,4 +12,5 @@
     <string name="StopLoadingTitle">로딩을 중단할까요?</string>
     <string name="StopLoading">불러오기를 중단할까요?</string>
     <string name="NoHandleAppInstalled">\'%1$s\' 파일 유형을 처리할 수 있는 응용 프로그램이 없습니다. 계속하려면 프로그램을 설치해 주세요</string>
+    <string name="Emoji">이모지</string>
 </resources>

@@ -4,6 +4,8 @@ import android.content.Context;
 import android.view.View;
 import android.widget.FrameLayout;
 
+import org.telegram.messenger.CompoundEmoji;
+import org.telegram.messenger.Emoji;
 import org.telegram.messenger.UserConfig;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.Theme;
@@ -194,4 +196,35 @@ public class EmojiView extends FrameLayout {
     public View getContentView() {
         return this;
     }
+
+    /** upstream, verbatim (used by EmojiColorPickerWindow) */
+    public static String addColorToCode(String code, String color) {
+        if (CompoundEmoji.isHandshake(code) != null) {
+            return CompoundEmoji.applyColor(code, color);
+        } else {
+            String end = null;
+            boolean invert = false;
+            if (Emoji.endsWithRightArrow(code)) {
+                code = code.substring(0, code.length() - 2);
+                invert = true;
+            }
+            int length = code.length();
+            if (length > 2 && code.charAt(code.length() - 2) == '\u200D') {
+                end = code.substring(code.length() - 2);
+                code = code.substring(0, code.length() - 2);
+            } else if (length > 3 && code.charAt(code.length() - 3) == '\u200D') {
+                end = code.substring(code.length() - 3);
+                code = code.substring(0, code.length() - 3);
+            }
+            code += color;
+            if (end != null) {
+                code += end;
+            }
+            if (invert) {
+                code += "\u200D➡";
+            }
+            return code;
+        }
+    }
+
 }

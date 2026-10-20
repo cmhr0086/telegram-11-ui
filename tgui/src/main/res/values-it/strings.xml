@@ -18,4 +18,5 @@
     <string name="StopLoadingTitle">Interrompere il caricamento?</string>
     <string name="StopLoading">Vuoi terminare il caricamento?</string>
     <string name="NoHandleAppInstalled">Non hai applicazioni che possono gestire il tipo di file \"%1$s\": installane una per proseguire</string>
+    <string name="Emoji">Emoji</string>
 </resources>

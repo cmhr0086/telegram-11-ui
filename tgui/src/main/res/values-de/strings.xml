@@ -13,4 +13,5 @@
     <string name="StopLoadingTitle">Laden stoppen?</string>
     <string name="StopLoading">Ladevorgang wirklich abbrechen?</string>
     <string name="NoHandleAppInstalled">Du hast keine Applikationen, die den Dateityp \'%1$s\' öffnen könnten. Bitte installiere eine entsprechende Anwendung um fortzufahren.</string>
+    <string name="Emoji">Emoji</string>
 </resources>

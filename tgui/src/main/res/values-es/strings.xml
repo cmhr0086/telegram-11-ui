@@ -17,4 +17,5 @@
     <string name="StopLoadingTitle">¿Detener la carga?</string>
     <string name="StopLoading">¿Quieres detener la carga?</string>
     <string name="NoHandleAppInstalled">No tienes aplicaciones que puedan manejar el tipo de archivo “%1$s”. Por favor, instala una para continuar.</string>
+    <string name="Emoji">Emojis</string>
 </resources>

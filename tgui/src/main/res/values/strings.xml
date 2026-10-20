@@ -153,4 +153,15 @@
     <string name="ReplyTo">Reply to %s</string>
     <string name="ReplyToQuote">Reply to quote by %s</string>
     <string name="Quote">Quote</string>
+    <string name="Emoji1">Smileys and people</string>
+    <string name="Emoji2">Animals and nature</string>
+    <string name="Emoji3">Food and drink</string>
+    <string name="Emoji4">Activity</string>
+    <string name="Emoji5">Travel and places</string>
+    <string name="Emoji6">Objects</string>
+    <string name="Emoji7">Symbols</string>
+    <string name="Emoji8">Flags</string>
+    <string name="RecentlyUsed">Recently Used</string>
+    <string name="AccDescrBackspace">Backspace</string>
+    <string name="Emoji">Emoji</string>
 </resources>

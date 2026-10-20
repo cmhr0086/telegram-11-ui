@@ -17,4 +17,5 @@
     <string name="StopLoadingTitle">إيقاف التحميل؟</string>
     <string name="StopLoading">هل تريدون إلغاء التحميل؟</string>
     <string name="NoHandleAppInstalled">لا تملك تطبيقًا يمكنه فتح صيغة الملفات \'%1$s\'، يرجى تنزيل تطبيق مناسب للاستمرار</string>
+    <string name="Emoji">الرموز التعبيرية</string>
 </resources>
