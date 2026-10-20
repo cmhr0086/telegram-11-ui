@@ -95,6 +95,7 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 | 聊天输入栏 | `ChatActivityEnterView`：上游 11.4.2 原版移植，保留原布局、图标和动画——`EditTextCaption`（多行增长、选中文字的格式菜单：引用 / 剧透 / 粗体 / 斜体 / 等宽 / 删除线 / 下划线 / 链接 / 清除格式）、表情↔键盘图标动画（`ChatActivityEnterViewAnimatedIconView`，Lottie）与表情面板（见下行）、附件按钮、`SendButton` 及出现动画、长按发送菜单（定时发送 / 上线时发送 / 静音发送，日期选择器 `AlertsCreator.createScheduleDatePickerDialog`）、编辑模式的完成按钮、频道静音铃铛、慢速模式倒计时；语音 / 圆形视频录制整套界面：`RecordCircle`（Blob/Wave 波纹）、`ControlsView`（上滑锁定、暂停、阅后即焚开关）、`SlideTextView`（左滑取消）、`RecordDot`、`TimerView`、录音预览（`SeekBarWaveform` 波形、播放 / 删除 / 继续录）。宿主可以用 `setRecordButtonVisible(false)` 隐藏语音 / 圆形视频录制按钮（没有文字时那一格留空，有文字时发送按钮照常带动画出现）。另有 `ChatInputLayout`（ChatActivity 根布局里与输入栏相关的测量 / 摆放：表情面板、录音圆圈、键盘高度）、`ChatInputTopPanel`（回复 / 编辑 / 转发 / 链接预览顶栏，即上游 ChatActivity 的 replyLayout） |
 | 表情面板 | `EmojiView`：上游表情页——Telegram 表情网格（最近使用 + 8 个分类，分类标题 `StickerSetNameCell`）、`EmojiTabsStrip` 分类标签（最近使用 + 8 个分类铺满整行，保留 Lottie 图标动画和选中指示；上游可收起的分类胶囊只在后面跟着表情包标签时才有意义，tgui 没有表情包所以不用；点标签滚动、滚动时选中标签跟随）、滚动时标签栏和底栏收起、长按带肤色的表情弹出 `EmojiColorPickerWindow`（肤色和最近使用由 `Emoji` 保存）、底栏退格（长按连删）；面板高度沿用输入栏记下的键盘高度（`kbd_height`；第一次弹出键盘前，上游固定用 200dp，tgui 改为按屏幕长边的 38% 估算）。面板弹出 / 收起时，`ChatInputLayout` 像上游 ChatActivity 的 `bottomPanelTranslationYChanged` 那样让输入栏和聊天列表跟着面板一起滑动；键盘弹出 / 收起用 tgui 自己的实现（上游 `AdjustPanLayoutHelper` 每帧改整条视图链高度并重绘壁纸，在 Mate 9 上掉帧严重）：点输入框时先按记下的键盘高度把输入栏和聊天列表抬起，窗口真正 resize 时保持屏幕位置、在抬起动画剩下的时间里到位，只改这两个 view 的 `translationY`；动画期间输入栏下方用表情面板底色填充，看起来是键盘区域升起，而不是输入栏悬在半空（以上是 Android 10 及以下）。Android 11+ 用 `WindowInsetsAnimationCompat` 让输入栏和聊天列表逐帧贴着输入法顶边走，表情面板和键盘互换时输入栏保持不动；`DrawerLayoutContainer` 在输入法动画期间先按较大的可用区域布局，结束时再应用新的 inset，避免跟随中的输入栏被裁掉。宿主需要 `androidx.viewpager:viewpager`（发布的 POM 已带上） |
 | 对话列表 | `DialogCell` + `DialogItem`（上游 `DialogCell` 的 `buildLayout` / `onDraw` 按原数值移植到纯模型：名字 + 时间、两行 / 三行预览（`SharedConfig.useThreeLinesLayout`）、发送者前缀、草稿、媒体预览配色、正在输入行（6 种状态图标，与消息行交叉淡入）、未读计数（数字变化动画）、@ 提及、置顶图标与置顶底色、静音、认证、私密聊天锁、发送中 / 已发送 / 已读勾（切换动画）、发送失败、在线圆点、分隔线；收到 `emojiLoaded` 自己重绘）、`AvatarDrawable`（上游原版：首字母 + 上游配色，收藏夹 / 归档（Lottie）/ 回复等特殊头像）、`DialogsListView`（列表 + 上游 `DialogsItemAnimator`：删除折叠、移动、新增；`setArchivePullDelegate` 开启上游隐藏归档：`SharedConfig.archiveHidden` 时归档行藏在列表上方，下拉出现 `PullForegroundDrawable` 提示条，超过 0.85 行高松手后收成归档头像，滚走后自动再藏起，惯性滑动停在第一个对话）、`DialogsViewPager`（上游 `DialogsActivity` 的两个 ViewPage + 左右拖动翻文件夹，`FilterTabsView.selectTabWithId(id, progress)` 跟随指示条，点标签也滑动切换；宿主在 `onBindPage` 里为文件夹填列表）、`DialogsSwipeController`（上游左滑：归档滑出；归档行左滑“隐藏 / 置顶”归档；置顶 / 已读 / 静音 / 删除回弹并回调，阈值 0.45、Lottie 图标、圆形揭露底色；多选时拖动置顶行排序）、`DialogsActionMode`（长按多选：计数 `NumberTextView`、54dp 图标纵向弹出、ActionBar 渐变成白底、返回键转成 ×、⋮ 溢出菜单；头像上的 `CheckBox2` 勾选）、`FilterTabsView`（上游文件夹标签原版：指示条动画、计数、编辑拖动）、`DialogsFloatingButton`（写消息圆形按钮，下滑隐藏 / 上拉出现）、`DrawerMenuView` + `DrawerProfileCell` + `DrawerActionCell`（侧边抽屉：头像、名字、电话、日 / 夜切换太阳月亮 Lottie → `TelegramUI.toggleDayNight`，菜单项由宿主提供）。用法见 demo 的 `DemoDialogsFragment` |
+| 消息长按菜单 | `MessageContextMenu`：上游 `ChatActivity.createMenu()` 的消息菜单按原数值移植到纯模型——全屏 0.2 黑色遮罩（`dimBehindView`，EASE_OUT_QUINT 320ms），被长按的气泡画在遮罩之上（裁到列表顶部以下）；`ActionBarPopupWindow` + `ActionBarMenuSubItem` 行（`popup_fixed_alert` 背景、200dp 最小宽度、220ms 收起），位置按上游算法以触点为锚、左右 / 上下夹在屏幕内；上方是 `ReactionsContainerLayout` 样式的反应条（药丸 + 阴影 + 两个小气泡圆点，250ms `OvershootInterpolator(0.5)` 从右向左展开，菜单随之放大淡入，表情按上游延迟依次弹出），表情是 `Emoji` 绘制的静态 Telegram 表情（默认 👍 👎 ❤ 🔥 🥰 👏）。用法：`new MessageContextMenu(context, resourcesProvider).addItem(icon, text, [destructive,] onClick)…setReactions(…).setDelegate(…).show(cell, touchX, touchY)`；颜色每次打开时按当前主题取，日夜都跟随。`TextBubbleMessage.reaction` 会在气泡里画一个上游 `ReactionsLayoutInBubble` 样式的已选反应小胶囊。demo 聊天页长按：回复、复制、编辑（仅自己的消息）、删除（带列表动画）、点反应加 / 取消胶囊 |
 | 主题 | `Theme`（内置 Classic / Dark / Arctic / Day / Night，从上游 `.attheme` 资源加载；强调色、自动夜间模式（定时 / 光线 / 跟随系统））、`ThemeDescription`、`ThemeColors`、`OKLCH` |
 | 宿主 | `TelegramUI`（初始化 + 主题切换入口）、`TelegramActivity`（生命周期转发、系统栏颜色、日夜切换动画） |
 
@@ -133,7 +134,7 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 
 ## 已知限制
 
-- 聊天部分只有纯文本气泡：没有头像、名字、回复引用、转发、媒体、表情反应、选择、链接点击；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
+- 聊天部分只有纯文本气泡：没有头像、名字、回复引用、转发、媒体、选择、链接点击；表情反应只有静态表情（每条消息一个、计数固定为 1），长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 输入栏：附件按钮只回调宿主（没有 `ChatAttachAlert`）；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；没有机器人键盘、命令菜单和 WebView 按钮；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 
 - 只支持主题自带的颜色/渐变壁纸和默认图案壁纸，不支持壁纸文件和视差（motion）效果；各强调色原本的不同图案都显示成同一个 `default_pattern`
@@ -154,7 +155,8 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 5. **阶段 C：动态表情 / 自定义表情**——`AnimatedEmojiDrawable` / `AnimatedEmojiSpan` 的真实渲染（rlottie 已就绪），文字里的自定义表情实体
 6. **阶段 D：贴纸和 GIF**——`EmojiView` 的贴纸 / GIF 页、`StickersAlert`、`TrendingStickersLayout`，数据由宿主提供（不接 Telegram 服务器）
 7. **对话列表（已完成）**：`DialogCell`、滑动动作、多选、列表动画、文件夹标签、抽屉、写消息按钮；下拉显示隐藏归档（`PullForegroundDrawable`）、文件夹左右翻页（`DialogsViewPager`）也已完成；后续：对话搜索、撤销条
-8. 之后可选：`SuggestEmojiView`、提及列表、`MessageSendPreview`（长按发送的消息预览与特效）、机器人键盘
+8. **消息长按菜单（已完成静态版）**：`MessageContextMenu`（遮罩、浮起气泡、弹出菜单、静态表情反应条）；后续：动态反应（上游 lottie 选中 / 飞入动画、`ReactionsLayoutInBubble` 计数与头像、展开全部反应、自定义表情反应），依赖阶段 C
+9. 之后可选：`SuggestEmojiView`、提及列表、`MessageSendPreview`（长按发送的消息预览与特效）、机器人键盘
 
 ## 抽取工具（`tools/`）
 

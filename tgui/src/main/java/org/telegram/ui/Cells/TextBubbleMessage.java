@@ -15,6 +15,8 @@ public class TextBubbleMessage {
     public boolean isOut;
     public String time;
     public int state;
+    /** Emoji of the reaction chosen by the user, shown as a chip under the text (null = none). */
+    public String reaction;
 
     public TextBubbleMessage(long id, CharSequence text, boolean isOut, String time, int state) {
         this.id = id;

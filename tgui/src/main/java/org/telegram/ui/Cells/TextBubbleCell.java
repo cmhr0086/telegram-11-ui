@@ -38,6 +38,14 @@ public class TextBubbleCell extends View {
     private StaticLayout timeLayout;
     private int layoutForWidth = -1;
     private CharSequence layoutForText;
+    private String layoutForReaction;
+    // chosen reaction chip (ReactionsLayoutInBubble.ReactionButton look: 26dp pill, 20dp emoji, 12dp counter)
+    private Drawable reactionDrawable;
+    private int reactionWidth;
+    private int reactionY;
+    private final RectF reactionRect = new RectF();
+    private static TextPaint reactionCounterPaint;
+    private static android.graphics.Paint reactionPaint;
 
     private int totalHeight;
     private int backgroundWidth;
@@ -73,7 +81,7 @@ public class TextBubbleCell extends View {
     public void setMessage(TextBubbleMessage message, boolean pinnedTop, boolean pinnedBottom) {
         boolean sameMessage = this.message != null && message != null && lastMessageId == message.id;
         boolean animateStatus = sameMessage && lastState == TextBubbleMessage.STATE_SENDING && message.state != TextBubbleMessage.STATE_SENDING && isAttachedToWindow();
-        if (this.message != message || this.pinnedTop != pinnedTop || this.pinnedBottom != pinnedBottom || layoutForText != (message == null ? null : message.text)) {
+        if (this.message != message || this.pinnedTop != pinnedTop || this.pinnedBottom != pinnedBottom || layoutForText != (message == null ? null : message.text) || !TextUtils.equals(layoutForReaction, message == null ? null : message.reaction)) {
             layoutForWidth = -1;
             requestLayout();
         }
@@ -122,7 +130,23 @@ public class TextBubbleCell extends View {
     private void buildLayout(int width) {
         layoutForWidth = width;
         layoutForText = message.text;
+        layoutForReaction = message.reaction;
         boolean out = message.isOut;
+        reactionDrawable = null;
+        reactionWidth = 0;
+        if (message.reaction != null) {
+            if (reactionCounterPaint == null) {
+                reactionCounterPaint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
+                reactionCounterPaint.setTextSize(AndroidUtilities.dp(12));
+                reactionCounterPaint.setTypeface(AndroidUtilities.bold());
+                reactionPaint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            }
+            reactionDrawable = Emoji.getEmojiDrawable(message.reaction);
+            if (reactionDrawable == null) {
+                reactionDrawable = Emoji.getEmojiDrawable(Emoji.fixEmoji(message.reaction));
+            }
+            reactionWidth = AndroidUtilities.dp(8 + 20 + 4 + 10) + (int) Math.ceil(reactionCounterPaint.measureText("1"));
+        }
 
         int maxWidth = Math.min(width, Math.max(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y)) - AndroidUtilities.dp(80);
         if (AndroidUtilities.isTablet()) {
@@ -170,6 +194,10 @@ public class TextBubbleCell extends View {
             backgroundWidth = maxChildWidth;
             textY = AndroidUtilities.dp(4);
             totalHeight = textY + textHeight + AndroidUtilities.dp(2 + 17 + 4);
+            if (reactionWidth > 0) {
+                reactionY = textY + textHeight + AndroidUtilities.dp(4);
+                totalHeight += AndroidUtilities.dp(26 + 4);
+            }
             return;
         }
         int namesOffset = pinnedTop ? -AndroidUtilities.dp(1) : 0;
@@ -189,6 +217,30 @@ public class TextBubbleCell extends View {
             }
         }
         textY = AndroidUtilities.dp(10) + namesOffset;
+        if (reactionWidth > 0) {
+            // the chip gets its own row, the time sits at the end of that row
+            reactionY = textY + textHeight + AndroidUtilities.dp(6);
+            totalHeight = reactionY + AndroidUtilities.dp(26 + 7);
+            backgroundWidth = Math.max(maxChildWidth + AndroidUtilities.dp(31), reactionWidth + AndroidUtilities.dp(8) + timeMore + AndroidUtilities.dp(31));
+        }
+    }
+
+    private void drawReaction(Canvas canvas, int x, boolean out) {
+        if (reactionWidth <= 0) {
+            return;
+        }
+        reactionRect.set(x, reactionY, x + reactionWidth, reactionY + AndroidUtilities.dp(26));
+        reactionPaint.setColor(getThemedColor(out ? Theme.key_chat_outReactionButtonBackground : Theme.key_chat_inReactionButtonBackground));
+        canvas.drawRoundRect(reactionRect, reactionRect.height() / 2f, reactionRect.height() / 2f, reactionPaint);
+        if (reactionDrawable != null) {
+            int size = AndroidUtilities.dp(20);
+            int left = x + AndroidUtilities.dp(8);
+            int top = (int) (reactionRect.centerY() - size / 2f);
+            reactionDrawable.setBounds(left, top, left + size, top + size);
+            reactionDrawable.draw(canvas);
+        }
+        reactionCounterPaint.setColor(getThemedColor(out ? Theme.key_chat_outReactionButtonTextSelected : Theme.key_chat_inReactionButtonTextSelected));
+        canvas.drawText("1", x + AndroidUtilities.dp(8 + 20 + 4), reactionRect.centerY() - (reactionCounterPaint.descent() + reactionCounterPaint.ascent()) / 2f, reactionCounterPaint);
     }
 
     /**
@@ -240,7 +292,7 @@ public class TextBubbleCell extends View {
             setMeasuredDimension(width, 0);
             return;
         }
-        if (layoutForWidth != width || layoutForText != message.text) {
+        if (layoutForWidth != width || layoutForText != message.text || !TextUtils.equals(layoutForReaction, message.reaction)) {
             buildLayout(width);
         }
         setMeasuredDimension(width, totalHeight);
@@ -336,6 +388,7 @@ public class TextBubbleCell extends View {
         canvas.translate(textX - textLeftOffset, textY);
         textLayout.draw(canvas);
         canvas.restore();
+        drawReaction(canvas, textX, out);
 
         // --- time
         if (out) {
@@ -371,6 +424,7 @@ public class TextBubbleCell extends View {
         canvas.translate(contentLeft - textLeftOffset, textY);
         textLayout.draw(canvas);
         canvas.restore();
+        drawReaction(canvas, out ? contentRight - reactionWidth : contentLeft, out);
 
         int pillBottom = layoutHeight - AndroidUtilities.dp(4);
         timeRect.set(contentRight - pillWidth, pillBottom - pillHeight, contentRight, pillBottom);

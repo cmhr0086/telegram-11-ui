@@ -22,7 +22,6 @@ import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
-import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
@@ -34,6 +33,7 @@ import org.telegram.ui.Components.ChatInputLayout;
 import org.telegram.ui.Components.ChatInputTopPanel;
 import org.telegram.ui.Components.ChatSounds;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.MessageContextMenu;
 import org.telegram.ui.Components.MotionBackgroundDrawable;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.TelegramUI;
@@ -54,7 +54,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             "Nice 👍",
             "The background just moved, did you see it?",
             "Hold the microphone to record, slide left to cancel, slide up to lock.",
-            "Long-press a message to reply or edit it.",
+            "Long-press a message for the menu and reactions.",
             "ok",
     };
 
@@ -166,8 +166,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 listView.invalidateViews();
             }
         });
-        listView.setOnItemLongClickListener((view, position) -> {
-            showMessageOptions(messages.get(position));
+        listView.setOnItemLongClickListener((RecyclerListView.OnItemLongClickListenerExtended) (view, position, x, y) -> {
+            showMessageOptions(view, messages.get(position), x, y);
             return true;
         });
         contentView.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
@@ -203,25 +203,57 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         return fragmentView;
     }
 
-    private void showMessageOptions(TextBubbleMessage message) {
-        ArrayList<CharSequence> items = new ArrayList<>();
-        ArrayList<Integer> icons = new ArrayList<>();
-        ArrayList<Runnable> actions = new ArrayList<>();
-        items.add("Reply");
-        icons.add(R.drawable.menu_reply);
-        actions.add(() -> startReply(message));
+    /** Long-press menu: upstream's scrim + popup + reactions bar (MessageContextMenu). */
+    private void showMessageOptions(View cell, TextBubbleMessage message, float x, float y) {
+        MessageContextMenu menu = new MessageContextMenu(getParentActivity(), getResourceProvider());
+        menu.addItem(R.drawable.menu_reply, "Reply", () -> startReply(message));
+        menu.addItem(R.drawable.msg_copy, "Copy", () -> {
+            if (AndroidUtilities.addToClipboard(message.text.toString())) {
+                Toast.makeText(getParentActivity(), "Copied to clipboard", Toast.LENGTH_SHORT).show();
+            }
+        });
         if (message.isOut) {
-            items.add("Edit");
-            icons.add(R.drawable.msg_edit);
-            actions.add(() -> startEdit(message));
+            menu.addItem(R.drawable.msg_edit, "Edit", () -> startEdit(message));
         }
-        int[] iconIds = new int[icons.size()];
-        for (int i = 0; i < iconIds.length; i++) {
-            iconIds[i] = icons.get(i);
+        menu.addItem(R.drawable.msg_delete, "Delete", () -> deleteMessage(message));
+        menu.setReactions(MessageContextMenu.DEFAULT_REACTIONS);
+        menu.setDelegate(new MessageContextMenu.Delegate() {
+            @Override
+            public void onReactionClick(String emoji) {
+                message.reaction = emoji.equals(message.reaction) ? null : emoji;
+                int index = messages.indexOf(message);
+                if (index >= 0 && listView.getAdapter() != null) {
+                    listView.getAdapter().notifyItemChanged(index);
+                }
+            }
+        });
+        menu.show(cell, x, y);
+    }
+
+    private void deleteMessage(TextBubbleMessage message) {
+        int index = messages.indexOf(message);
+        if (index < 0) {
+            return;
         }
-        showDialog(new AlertDialog.Builder(getParentActivity(), getResourceProvider())
-                .setItems(items.toArray(new CharSequence[0]), iconIds, (d, which) -> actions.get(which).run())
-                .create());
+        if (message == replyingTo || message == editing) {
+            topPanel.hide(true);
+            enterView.setReplyingMessageObject(null);
+            enterView.setEditingMessageObject(null, false);
+            replyingTo = null;
+            editing = null;
+        }
+        messages.remove(index);
+        RecyclerView.Adapter<?> adapter = listView.getAdapter();
+        if (adapter != null) {
+            adapter.notifyItemRemoved(index);
+            // neighbours may gain or lose their tail / grouped corners
+            if (index > 0) {
+                adapter.notifyItemChanged(index - 1);
+            }
+            if (index < messages.size()) {
+                adapter.notifyItemChanged(index);
+            }
+        }
     }
 
     private void startReply(TextBubbleMessage message) {
