@@ -6,3 +6,6 @@
 -keepclassmembers class ** {
     @androidx.annotation.Keep *;
 }
+
+# libtguilottie JNI symbols are bound by class + method name.
+-keepclasseswithmembernames class org.telegram.ui.Components.RLottieDrawable { native <methods>; }

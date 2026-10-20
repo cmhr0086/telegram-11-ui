@@ -4,12 +4,13 @@
 
 - 基线：[DrKLO/Telegram](https://github.com/DrKLO/Telegram) `release-11.4.2-5469`（不追上游）
 - 包名保持上游原样（`org.telegram.ui.*`、`org.telegram.messenger.*`），库 namespace 为 `org.telegram.messenger`，所以上游代码里的 `org.telegram.messenger.R` 不用改
-- 第一阶段：纯 Java，不含 NDK、不含 Lottie
+- 第一阶段：纯 Java 组件；第二阶段接入 Lottie（上游 rlottie 原生库，CMake 构建出 `libtguilottie.so`，含 armeabi-v7a / arm64-v8a / x86 / x86_64）
 
 ## 目录
 
 ```
 tgui/        库模块 → tgui/build/outputs/aar/tgui-release.aar
+  src/main/cpp/  rlottie + lottie.cpp（从上游 jni/ 搬来，只保留 Lottie 部分）
 demo/        演示应用（org.telegram.uidemo）
 tools/       抽取/裁剪用的脚本（见下文）
 upstream/    上游源码浅克隆，只读参考，已在 .gitignore 中
@@ -17,7 +18,11 @@ upstream/    上游源码浅克隆，只读参考，已在 .gitignore 中
 
 ## 构建
 
-需要 JDK 17 或 21（AGP 9.0.1 / Gradle 9.1.0，compileSdk 36，minSdk 21）。
+需要 JDK 17 或 21（AGP 9.0.1 / Gradle 9.1.0，compileSdk 36，minSdk 21），以及 NDK `28.2.13676358` 和 CMake `3.22.1`（编 rlottie）：
+
+```bash
+sdkmanager "ndk;28.2.13676358" "cmake;3.22.1"
+```
 
 ```bash
 JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew :tgui:assembleRelease
@@ -98,7 +103,7 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 | `LocaleController` | 直接读 Android 字符串资源（不再下载语言包），复数用 ICU 规则；`isRTL` 跟随系统语言 |
 | `SharedConfig`、`MessagesController`、`UserConfig`、`LiteMode`、`BuildVars`、`FileLog` | 只留 UI 用到的开关和偏好设置；单账号；日志写到 logcat（tag `tgui`） |
 | `Utilities` | 去掉 native 方法和加密相关代码，stack blur 改用纯 Java 实现 |
-| `RLottieDrawable` / `RLottieImageView` | **no-op stub**：API 保留，但不渲染（第一阶段不含 NDK） |
+| `RLottieDrawable` / `RLottieImageView` | 上游原版，native 库换成 `libtguilottie.so`；`addParentView` 改收 `View`（无 `ImageReceiver`），`RLottieImageView` 去掉了按 `TLRPC.Document` 加载贴纸的分支。`BitmapsCache` 缓存目录改为 `cacheDir/acache` |
 | `Emoji`、`AnimatedEmojiDrawable`、`AnimatedEmojiSpan` | 系统 emoji 原样显示；自定义 emoji 只保留常量和 `SwapAnimatedEmojiDrawable`，当普通 Drawable 容器用 |
 | `BackupImageView` | 改成本地 Drawable/Bitmap 视图，支持圆角，不再依赖 `ImageReceiver` 和网络加载 |
 | `EditTextEffects` | 去掉剧透（spoiler）、引用块和自定义 emoji 渲染 |
@@ -109,7 +114,9 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 
 ## 已知限制
 
-- Lottie 动画图标（比如 AlertDialog 的 `setTopAnimation`、列表里的动画图标）显示为空白，第二阶段接入 rlottie 再补
+- Lottie 只带了库内引用到的 `R.raw` JSON（对话列表的归档 / 滑动动作图标、骰子 / 飞镖等），外加上游自带的 11 只 Utya 小鸭子 `R.raw.utyan_*`（empty、newborn、saved_messages、private、passcode、call、cache、change_number、gigagroup、schedule、streaming，demo 里有展示页）；其它动画 JSON 由宿主放进自己的 `res/raw`，再 `setTopAnimation(R.raw.xxx, …)` / `new RLottieDrawable(R.raw.xxx, …)` 使用
+- rlottie 的 pixman NEON 汇编（`pixman-arm*-neon-asm.S`）需要 GNU as，新 NDK 只有 clang 汇编器，所以所有 ABI 都走 rlottie 的 C 填充路径，纯色填充比上游略慢
+- 不能播放 Telegram 贴纸 / TGS 文件的网络加载（没有 `ImageReceiver` / `FileLoader`）；本地文件可以用 `new RLottieDrawable(File, w, h, cacheOptions, limitFps)`
 - 字符串只带了库内实际用到的 49 条英文，加上游自带的部分翻译（ar / de / es / it / ko / nl / pt-BR）；其它语言需要宿主覆盖资源
 - 只在 Android 9 真机（Huawei MHA-AL00）上跑过 demo；平板布局和 Android 14+ 的边到边窗口还没验证
 - `Theme` 里仍留着对话列表、个人资料相关的 paint/drawable 字段，没用到但可以安全忽略；后续可以继续瘦身

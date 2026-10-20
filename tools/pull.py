@@ -30,7 +30,7 @@ FILE_TYPES = {"drawable", "mipmap", "anim", "animator", "raw", "layout", "xml", 
 VALUE_TYPES = {"string": "string", "plurals": "plurals", "color": "color", "dimen": "dimen",
                "style": "style", "array": "array", "integer": "integer", "bool": "bool",
                "attr": "attr", "id": "item"}
-SKIP_RAW = True  # first stage: no Lottie / raw assets
+SKIP_RAW = False  # raw = Lottie JSON assets (phase 2)
 
 
 def pull_class(fqcn):

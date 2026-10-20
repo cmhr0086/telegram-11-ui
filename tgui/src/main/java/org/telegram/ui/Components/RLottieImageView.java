@@ -1,31 +1,39 @@
 package org.telegram.ui.Components;
 
-import org.telegram.messenger.AndroidUtilities;
-
 import android.content.Context;
 import android.widget.ImageView;
+
+
+import org.telegram.messenger.AndroidUtilities;
 
 import java.util.HashMap;
 
 /**
- * tgui stub: ImageView with the RLottieImageView API. Lottie playback is not available in
- * phase 1 (no native rlottie), so setAnimation() keeps the drawable but renders nothing.
+ * tgui: upstream RLottieImageView minus the ImageReceiver / TLRPC.Document path (no sticker loading).
  */
 public class RLottieImageView extends ImageView {
 
+    private HashMap<String, Integer> layerColors;
     private RLottieDrawable drawable;
     private boolean autoRepeat;
+    private boolean attachedToWindow;
     private boolean playing;
-    private HashMap<String, Integer> layerColors;
+    private boolean startOnAttach;
+    private Integer layerNum;
+    private boolean onlyLastFrame;
+    public boolean cached;
+    private boolean reverse;
 
     public RLottieImageView(Context context) {
         super(context);
     }
 
     public void clearLayerColors() {
-        if (layerColors != null) {
-            layerColors.clear();
-        }
+        layerColors.clear();
+    }
+
+    public void setLayerNum(Integer layerNum) {
+        this.layerNum = layerNum;
     }
 
     public void setLayerColor(String layer, int color) {
@@ -39,6 +47,9 @@ public class RLottieImageView extends ImageView {
     }
 
     public void replaceColors(int[] colors) {
+        if (drawable != null) {
+            drawable.replaceColors(colors);
+        }
     }
 
     public void setAnimation(int resId, int w, int h) {
@@ -46,7 +57,7 @@ public class RLottieImageView extends ImageView {
     }
 
     public void setAnimation(int resId, int w, int h, int[] colorReplacement) {
-        setAnimation(new RLottieDrawable(resId, "" + resId, AndroidUtilitiesCompat.dp(w), AndroidUtilitiesCompat.dp(h), false, colorReplacement));
+        setAnimation(new RLottieDrawable(resId, "" + resId, AndroidUtilities.dp(w), AndroidUtilities.dp(h), false, colorReplacement));
     }
 
     public void setOnAnimationEndListener(Runnable r) {
@@ -60,18 +71,74 @@ public class RLottieImageView extends ImageView {
             return;
         }
         drawable = lottieDrawable;
-        if (drawable != null) {
-            drawable.setMasterParent(this);
-            if (autoRepeat) {
-                drawable.setAutoRepeat(1);
-            }
+        drawable.setMasterParent(this);
+        if (autoRepeat) {
+            drawable.setAutoRepeat(1);
         }
+        if (layerColors != null) {
+            drawable.beginApplyLayerColors();
+            for (HashMap.Entry<String, Integer> entry : layerColors.entrySet()) {
+                drawable.setLayerColor(entry.getKey(), entry.getValue());
+            }
+            drawable.commitApplyLayerColors();
+        }
+        drawable.setAllowDecodeSingleFrame(true);
         setImageDrawable(drawable);
     }
 
+
+    public void setOnlyLastFrame(boolean onlyLastFrame) {
+        this.onlyLastFrame = onlyLastFrame;
+    }
+
+    public void setReverse() {
+        if (drawable != null) {
+            drawable.setPlayInDirectionOfCustomEndFrame(true);
+            drawable.setCurrentFrame(drawable.getFramesCount());
+            drawable.setCustomEndFrame(0);
+        }
+    }
+
+
+    protected void onLoaded() {
+
+    }
+
     public void clearAnimationDrawable() {
+        if (drawable != null) {
+            drawable.stop();
+        }
         drawable = null;
         setImageDrawable(null);
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        attachedToWindow = true;
+        if (drawable != null) {
+            drawable.setCallback(this);
+            if (playing) {
+                drawable.start();
+            }
+        }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        attachedToWindow = false;
+        if (drawable != null) {
+            drawable.stop();
+        }
+    }
+
+    public boolean isPlaying() {
+        return drawable != null && drawable.isRunning();
+    }
+
+    public void setAutoRepeat(boolean repeat) {
+        autoRepeat = repeat;
     }
 
     public void setProgress(float progress) {
@@ -80,39 +147,41 @@ public class RLottieImageView extends ImageView {
         }
     }
 
-    public void setAutoRepeat(boolean repeat) {
-        autoRepeat = repeat;
-    }
-
-    public void setOnlyLastFrame(boolean value) {
-    }
-
-    public void setReverse() {
-    }
-
-    public RLottieDrawable getAnimatedDrawable() {
-        return drawable;
-    }
-
-    public boolean isPlaying() {
-        return drawable != null && drawable.isRunning();
+    @Override
+    public void setImageResource(int resId) {
+        super.setImageResource(resId);
+        drawable = null;
     }
 
     public void playAnimation() {
-        if (drawable != null) {
-            drawable.start();
+        if (drawable == null) {
+            return;
+        }
+        playing = true;
+        if (attachedToWindow) {
+            if (drawable != null) {
+                drawable.start();
+            }
+        } else {
+            startOnAttach = true;
         }
     }
 
     public void stopAnimation() {
-        if (drawable != null) {
-            drawable.stop();
+        if (drawable == null) {
+            return;
+        }
+        playing = false;
+        if (attachedToWindow) {
+            if (drawable != null) {
+                drawable.stop();
+            }
+        } else {
+            startOnAttach = false;
         }
     }
 
-    private static class AndroidUtilitiesCompat {
-        static int dp(float value) {
-            return org.telegram.messenger.AndroidUtilities.dp(value);
-        }
+    public RLottieDrawable getAnimatedDrawable() {
+        return drawable;
     }
 }

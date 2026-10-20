@@ -34,11 +34,13 @@ public class DemoMainFragment extends DemoListFragment {
     private static final int ROW_ALERT_INPUT = 12;
     private static final int ROW_ALERT_PROGRESS = 13;
     private static final int ROW_ALERT_DESTRUCTIVE = 14;
+    private static final int ROW_ALERT_LOTTIE = 15;
     private static final int ROW_SHEET_ITEMS = 20;
     private static final int ROW_SHEET_CUSTOM = 21;
     private static final int ROW_SHEET_FRAGMENT = 22;
     private static final int ROW_CELLS = 30;
     private static final int ROW_PUSH = 31;
+    private static final int ROW_DUCKS = 32;
 
     private static final int MENU_SEARCH = 1;
     private static final int MENU_NIGHT = 2;
@@ -105,6 +107,7 @@ public class DemoMainFragment extends DemoListFragment {
         items.add(text(ROW_ALERT_INPUT, "Text input", R.drawable.msg_edit));
         items.add(text(ROW_ALERT_PROGRESS, "Loading spinner", R.drawable.msg_retry));
         items.add(text(ROW_ALERT_DESTRUCTIVE, "Destructive action", R.drawable.msg_delete));
+        items.add(text(ROW_ALERT_LOTTIE, "Animated top icon (Lottie)", R.drawable.msg_folders_archive));
         items.add(shadow());
 
         items.add(header("BottomSheet"));
@@ -116,6 +119,7 @@ public class DemoMainFragment extends DemoListFragment {
         items.add(header("Navigation"));
         items.add(text(ROW_CELLS, "Settings cells gallery", R.drawable.msg_settings));
         items.add(text(ROW_PUSH, "Push another screen", R.drawable.msg_link));
+        items.add(text(ROW_DUCKS, "Utya ducks (Lottie)", R.drawable.msg_sticker));
         items.add(info("Swipe from the left edge to go back. The ⋮ menu and the Night mode switch play the circular day/night reveal."));
     }
 
@@ -147,6 +151,15 @@ public class DemoMainFragment extends DemoListFragment {
                 break;
             case ROW_ALERT_INPUT:
                 showInputDialog();
+                break;
+            case ROW_ALERT_LOTTIE:
+                showDialog(new AlertDialog.Builder(getParentActivity(), getResourceProvider())
+                        .setTopAnimation(R.raw.chats_archive, 72, false, Theme.getColor(Theme.key_dialogTopBackground))
+                        .setTitle("Archive chat?")
+                        .setMessage("The top icon is a Lottie animation rendered by the bundled rlottie (libtguilottie.so).")
+                        .setPositiveButton("Archive", (dialog, which) -> toast("Archived"))
+                        .setNegativeButton("Cancel", null)
+                        .create());
                 break;
             case ROW_ALERT_PROGRESS: {
                 AlertDialog progress = new AlertDialog(getParentActivity(), AlertDialog.ALERT_TYPE_SPINNER);
@@ -189,6 +202,9 @@ public class DemoMainFragment extends DemoListFragment {
                 break;
             case ROW_PUSH:
                 presentFragment(new DemoMainFragment());
+                break;
+            case ROW_DUCKS:
+                presentFragment(new DemoDucksFragment());
                 break;
         }
     }
