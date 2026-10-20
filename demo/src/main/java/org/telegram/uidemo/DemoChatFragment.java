@@ -1,11 +1,20 @@
 package org.telegram.uidemo;
 
+import android.animation.Animator;
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
 import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
 import android.text.SpannableStringBuilder;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -20,8 +29,10 @@ import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.ActionBarMenu;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
+import org.telegram.ui.ActionBar.BackDrawable;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
@@ -35,6 +46,7 @@ import org.telegram.ui.Components.ChatSounds;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.MessageContextMenu;
 import org.telegram.ui.Components.MotionBackgroundDrawable;
+import org.telegram.ui.Components.NumberTextView;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.TelegramUI;
 
@@ -54,12 +66,17 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             "Nice 👍",
             "The background just moved, did you see it?",
             "Hold the microphone to record, slide left to cancel, slide up to lock.",
-            "Long-press a message for the menu and reactions.",
+            "Tap a message for the menu, long-press to select.",
             "ok",
     };
 
     private static final int MENU_NIGHT = 1;
     private static final int MENU_RECORD_BUTTON = 2;
+    // action mode (ChatActivity.createActionMode ids)
+    private static final int ACTION_EDIT = 10;
+    private static final int ACTION_COPY = 11;
+    private static final int ACTION_FORWARD = 12;
+    private static final int ACTION_DELETE = 13;
 
     private ActionBarMenuItem nightItem;
     private ActionBarMenuSubItem recordButtonItem;
@@ -73,6 +90,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private int replyIndex;
     private TextBubbleMessage replyingTo;
     private TextBubbleMessage editing;
+    // multi-select (ChatActivity selectedMessagesIds / actionModeViews / bottomMessagesActionContainer)
+    private final ArrayList<TextBubbleMessage> selectedMessages = new ArrayList<>();
+    private final ArrayList<View> actionModeViews = new ArrayList<>();
+    private NumberTextView selectedMessagesCountTextView;
+    private FrameLayout bottomMessagesActionContainer;
+    private TextView replyButton;
+    private TextView forwardButton;
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.US);
 
     // simulated round video recording (the camera belongs to the host app)
@@ -88,7 +112,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         addSample("Bubbles are Theme.MessageDrawable", true, "10:03", TextBubbleMessage.STATE_READ);
         addSample("with time and check marks drawn like ChatMessageCell 🙂", true, "10:04", TextBubbleMessage.STATE_READ);
         addSample("Hold the microphone to record a voice message, slide left to cancel or up to lock.", false, "10:05", TextBubbleMessage.STATE_NONE);
-        addSample("Long-press a message to reply to it, or to edit your own.", false, "10:05", TextBubbleMessage.STATE_NONE);
+        addSample("Tap a message for the menu and reactions, long-press to select messages.", false, "10:05", TextBubbleMessage.STATE_NONE);
         addSample("Emoji use Telegram's own set 😎🔥🎉 in bubbles and in the input field", false, "10:06", TextBubbleMessage.STATE_NONE);
         addSample("👋", false, "10:06", TextBubbleMessage.STATE_NONE);
         addSample("😂❤️👍", true, "10:07", TextBubbleMessage.STATE_READ);
@@ -114,7 +138,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     @Override
     public View createView(Context context) {
-        actionBar.setBackButtonImage(R.drawable.ic_ab_back);
+        // BackDrawable like ChatActivity: the arrow turns into × in selection mode
+        actionBar.setBackButtonDrawable(new BackDrawable(false));
         actionBar.setAllowOverlayTitle(true);
         actionBar.setTitle("Chat");
         actionBar.setSubtitle("ChatActivityEnterView");
@@ -123,7 +148,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             @Override
             public void onItemClick(int id) {
                 if (id == -1) {
-                    finishFragment();
+                    if (actionBar.isActionModeShowed()) {
+                        clearSelection();
+                    } else {
+                        finishFragment();
+                    }
+                } else if (id >= ACTION_EDIT) {
+                    processActionModeItem(id);
                 } else if (id == MENU_NIGHT) {
                     TelegramUI.toggleDayNight(nightItem);
                 } else if (id == MENU_RECORD_BUTTON) {
@@ -166,8 +197,31 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 listView.invalidateViews();
             }
         });
+        // like ChatActivity: no list selector on message rows, clicks fire on finger up
+        listView.setInstantClick(true);
+        listView.setDisableHighlightState(true);
+        // tap: context menu (createMenu(view, single = true)); in selection mode it toggles the row
+        listView.setOnItemClickListener((RecyclerListView.OnItemClickListenerExtended) (view, position, x, y) -> {
+            if (position < 0 || position >= messages.size()) {
+                return;
+            }
+            if (actionBar.isActionModeShowed()) {
+                processRowSelect(messages.get(position));
+            } else {
+                showMessageOptions(view, messages.get(position), x, y);
+            }
+        });
+        // long press: selection mode (createMenu(view, single = false) + startMultiselect)
         listView.setOnItemLongClickListener((RecyclerListView.OnItemLongClickListenerExtended) (view, position, x, y) -> {
-            showMessageOptions(view, messages.get(position), x, y);
+            if (position < 0 || position >= messages.size()) {
+                return false;
+            }
+            if (!actionBar.isActionModeShowed()) {
+                showActionMode(messages.get(position));
+            } else {
+                processRowSelect(messages.get(position));
+            }
+            startMultiselect(position);
             return true;
         });
         contentView.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
@@ -198,12 +252,247 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             }
         });
 
+        bottomMessagesActionContainer = new FrameLayout(context) {
+            @Override
+            protected void onDraw(Canvas canvas) {
+                int bottom = Theme.chat_composeShadowDrawable.getIntrinsicHeight();
+                Theme.chat_composeShadowDrawable.setBounds(0, 0, getMeasuredWidth(), bottom);
+                Theme.chat_composeShadowDrawable.draw(canvas);
+                canvas.drawRect(0, bottom, getMeasuredWidth(), getMeasuredHeight(), Theme.getThemePaint(Theme.key_paint_chatComposeBackground));
+            }
+        };
+        bottomMessagesActionContainer.setVisibility(View.INVISIBLE);
+        bottomMessagesActionContainer.setWillNotDraw(false);
+        bottomMessagesActionContainer.setPadding(0, AndroidUtilities.dp(2), 0, 0);
+        bottomMessagesActionContainer.setOnTouchListener((v, event) -> true);
+        contentView.addView(bottomMessagesActionContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 51, Gravity.BOTTOM));
+
         contentView.addView(actionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
         contentView.setActionBar(actionBar);
         return fragmentView;
     }
 
-    /** Long-press menu: upstream's scrim + popup + reactions bar (MessageContextMenu). */
+    // ---- selection mode (ChatActivity.createActionMode / createBottomMessagesActionButtons / createMenu's
+    // action-mode branch / processRowSelect / addToSelectedMessages / startMultiselect / hideActionMode)
+
+    private void createActionMode() {
+        if (selectedMessagesCountTextView != null) {
+            return;
+        }
+        final ActionBarMenu actionMode = actionBar.createActionMode();
+
+        selectedMessagesCountTextView = new NumberTextView(actionMode.getContext());
+        selectedMessagesCountTextView.setTextSize(18);
+        selectedMessagesCountTextView.setTypeface(AndroidUtilities.bold());
+        selectedMessagesCountTextView.setTextColor(Theme.getColor(Theme.key_actionBarActionModeDefaultIcon));
+        selectedMessagesCountTextView.setOnTouchListener((v, event) -> true);
+        actionMode.addView(selectedMessagesCountTextView, LayoutHelper.createLinear(0, LayoutHelper.MATCH_PARENT, 1.0f, 65, 0, 0, 0));
+
+        actionModeViews.add(actionMode.addItemWithWidth(ACTION_EDIT, R.drawable.msg_edit, AndroidUtilities.dp(54), "Edit"));
+        actionModeViews.add(actionMode.addItemWithWidth(ACTION_COPY, R.drawable.msg_copy, AndroidUtilities.dp(54), "Copy"));
+        actionModeViews.add(actionMode.addItemWithWidth(ACTION_FORWARD, R.drawable.msg_forward, AndroidUtilities.dp(54), "Forward"));
+        actionModeViews.add(actionMode.addItemWithWidth(ACTION_DELETE, R.drawable.msg_delete, AndroidUtilities.dp(54), "Delete"));
+
+        Context context = getParentActivity();
+        replyButton = new TextView(context);
+        replyButton.setText("Reply");
+        replyButton.setGravity(Gravity.CENTER_VERTICAL);
+        replyButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+        replyButton.setPadding(AndroidUtilities.dp(14), 0, AndroidUtilities.dp(21), 0);
+        replyButton.setCompoundDrawablePadding(AndroidUtilities.dp(7));
+        replyButton.setTypeface(AndroidUtilities.bold());
+        replyButton.setOnClickListener(v -> {
+            TextBubbleMessage message = selectedMessages.isEmpty() ? null : selectedMessages.get(0);
+            clearSelection();
+            if (message != null) {
+                startReply(message);
+            }
+        });
+        bottomMessagesActionContainer.addView(replyButton, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.LEFT | Gravity.TOP));
+
+        forwardButton = new TextView(context);
+        forwardButton.setText("Forward");
+        forwardButton.setGravity(Gravity.CENTER_VERTICAL);
+        forwardButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+        forwardButton.setPadding(AndroidUtilities.dp(21), 0, AndroidUtilities.dp(21), 0);
+        forwardButton.setCompoundDrawablePadding(AndroidUtilities.dp(6));
+        forwardButton.setTypeface(AndroidUtilities.bold());
+        forwardButton.setOnClickListener(v -> processActionModeItem(ACTION_FORWARD));
+        bottomMessagesActionContainer.addView(forwardButton, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.RIGHT | Gravity.TOP));
+        updateActionModeColors();
+    }
+
+    private void updateActionModeColors() {
+        if (selectedMessagesCountTextView == null) {
+            return;
+        }
+        int iconColor = Theme.getColor(Theme.key_actionBarActionModeDefaultIcon);
+        selectedMessagesCountTextView.setTextColor(iconColor);
+        TextView[] buttons = {replyButton, forwardButton};
+        int[] icons = {R.drawable.input_reply, R.drawable.input_forward};
+        for (int i = 0; i < buttons.length; i++) {
+            buttons[i].setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_actionBarActionModeDefaultSelector), 3));
+            buttons[i].setTextColor(iconColor);
+            Drawable image = getParentActivity().getResources().getDrawable(icons[i]).mutate();
+            image.setColorFilter(new PorterDuffColorFilter(iconColor, PorterDuff.Mode.MULTIPLY));
+            buttons[i].setCompoundDrawablesWithIntrinsicBounds(image, null, null, null);
+        }
+        bottomMessagesActionContainer.invalidate();
+    }
+
+    private void showActionMode(TextBubbleMessage message) {
+        createActionMode();
+        updateActionModeColors();
+        if (enterView.isPopupShowing()) {
+            enterView.hidePopup(true);
+        }
+        AndroidUtilities.hideKeyboard(enterView);
+        bottomMessagesActionContainer.setVisibility(View.VISIBLE);
+        bottomMessagesActionContainer.setTranslationY(AndroidUtilities.dp(51));
+        int translationY = enterView.getMeasuredHeight() - AndroidUtilities.dp(51);
+        actionBar.showActionMode(true, bottomMessagesActionContainer, null, new View[]{enterView}, new boolean[]{false}, listView, translationY);
+
+        AnimatorSet animatorSet = new AnimatorSet();
+        ArrayList<Animator> animators = new ArrayList<>();
+        for (int a = 0; a < actionModeViews.size(); a++) {
+            View view = actionModeViews.get(a);
+            view.setPivotY(ActionBar.getCurrentActionBarHeight() / 2);
+            AndroidUtilities.clearDrawableAnimation(view);
+            animators.add(ObjectAnimator.ofFloat(view, View.SCALE_Y, 0.1f, 1.0f));
+        }
+        animatorSet.playTogether(animators);
+        animatorSet.setDuration(250);
+        animatorSet.start();
+
+        selectedMessages.add(message);
+        updateActionModeTitle(false);
+        updateVisibleRows();
+    }
+
+    private void processRowSelect(TextBubbleMessage message) {
+        if (selectedMessages.contains(message)) {
+            selectedMessages.remove(message);
+        } else {
+            selectedMessages.add(message);
+        }
+        if (selectedMessages.isEmpty()) {
+            clearSelection();
+            return;
+        }
+        updateActionModeTitle(true);
+        updateVisibleRows();
+    }
+
+    private void updateActionModeTitle(boolean animated) {
+        selectedMessagesCountTextView.setNumber(selectedMessages.size(), animated);
+        boolean canEdit = selectedMessages.size() == 1 && selectedMessages.get(0).isOut;
+        actionBar.createActionMode().setItemVisibility(ACTION_EDIT, canEdit ? View.VISIBLE : View.GONE);
+    }
+
+    private void clearSelection() {
+        selectedMessages.clear();
+        if (actionBar.isActionModeShowed()) {
+            actionBar.hideActionMode();
+        }
+        updateVisibleRows();
+    }
+
+    private void updateVisibleRows() {
+        boolean selectionMode = actionBar.isActionModeShowed();
+        for (int i = 0; i < listView.getChildCount(); i++) {
+            View child = listView.getChildAt(i);
+            int position = listView.getChildAdapterPosition(child);
+            if (child instanceof TextBubbleCell && position >= 0 && position < messages.size()) {
+                TextBubbleCell cell = (TextBubbleCell) child;
+                cell.setCheckBoxVisible(selectionMode, true);
+                cell.setChecked(selectedMessages.contains(messages.get(position)), true);
+            }
+        }
+    }
+
+    private void processActionModeItem(int id) {
+        ArrayList<TextBubbleMessage> selected = new ArrayList<>(selectedMessages);
+        selected.sort((a, b) -> Integer.compare(messages.indexOf(a), messages.indexOf(b)));
+        if (id == ACTION_EDIT) {
+            clearSelection();
+            if (!selected.isEmpty()) {
+                startEdit(selected.get(0));
+            }
+        } else if (id == ACTION_COPY) {
+            StringBuilder text = new StringBuilder();
+            for (TextBubbleMessage message : selected) {
+                if (text.length() > 0) {
+                    text.append("\n\n");
+                }
+                text.append(message.text);
+            }
+            clearSelection();
+            if (AndroidUtilities.addToClipboard(text)) {
+                Toast.makeText(getParentActivity(), selected.size() == 1 ? "Message copied to clipboard" : "Messages copied to clipboard", Toast.LENGTH_SHORT).show();
+            }
+        } else if (id == ACTION_FORWARD) {
+            clearSelection();
+            Toast.makeText(getParentActivity(), "Forward: the host opens its own chat picker here", Toast.LENGTH_SHORT).show();
+        } else if (id == ACTION_DELETE) {
+            clearSelection();
+            for (TextBubbleMessage message : selected) {
+                deleteMessage(message);
+            }
+        }
+    }
+
+    private void startMultiselect(int position) {
+        final boolean unselect = !selectedMessages.contains(messages.get(position));
+        final ArrayList<TextBubbleMessage> alreadySelected = new ArrayList<>(selectedMessages);
+        listView.startMultiselect(position, false, new RecyclerListView.onMultiSelectionChanged() {
+            @Override
+            public void onSelectionChanged(int position, boolean selected, float x, float y) {
+                if (unselect) {
+                    selected = !selected;
+                }
+                if (position < 0 || position >= messages.size()) {
+                    return;
+                }
+                TextBubbleMessage message = messages.get(position);
+                if (selected == selectedMessages.contains(message)) {
+                    return;
+                }
+                processRowSelect(message);
+            }
+
+            @Override
+            public boolean canSelect(int position) {
+                if (position < 0 || position >= messages.size()) {
+                    return false;
+                }
+                boolean already = alreadySelected.contains(messages.get(position));
+                return unselect == already;
+            }
+
+            @Override
+            public int checkPosition(int position, boolean selectionFromTop) {
+                return position;
+            }
+
+            @Override
+            public boolean limitReached() {
+                return false;
+            }
+
+            @Override
+            public void getPaddings(int[] paddings) {
+                paddings[0] = listView.getPaddingTop();
+                paddings[1] = 0;
+            }
+
+            @Override
+            public void scrollBy(int dy) {
+                listView.scrollBy(0, dy);
+            }
+        });
+    }
+
+    /** Tap menu: upstream's scrim + popup + reactions bar (MessageContextMenu). */
     private void showMessageOptions(View cell, TextBubbleMessage message, float x, float y) {
         MessageContextMenu menu = new MessageContextMenu(getParentActivity(), getResourceProvider());
         menu.addItem(R.drawable.menu_reply, "Reply", () -> startReply(message));
@@ -235,6 +524,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         if (index < 0) {
             return;
         }
+        selectedMessages.remove(message);
         if (message == replyingTo || message == editing) {
             topPanel.hide(true);
             enterView.setReplyingMessageObject(null);
@@ -453,6 +743,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     @Override
     public boolean onBackPressed() {
+        if (actionBar.isActionModeShowed()) {
+            clearSelection();
+            return false;
+        }
         if (enterView != null && enterView.isPopupShowing()) {
             enterView.hidePopup(true);
             return false;
@@ -492,12 +786,17 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             if (contentView != null) {
                 contentView.invalidateBackground();
             }
+            updateActionModeColors();
         };
         descriptions.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_BACKGROUND, null, null, null, null, Theme.key_actionBarDefault));
         descriptions.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_ITEMSCOLOR, null, null, null, null, Theme.key_actionBarDefaultIcon));
         descriptions.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_TITLECOLOR, null, null, null, null, Theme.key_actionBarDefaultTitle));
         descriptions.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_SUBTITLECOLOR, null, null, null, null, Theme.key_actionBarDefaultSubtitle));
         descriptions.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_SELECTORCOLOR, null, null, null, null, Theme.key_actionBarDefaultSelector));
+        descriptions.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_AM_BACKGROUND, null, null, null, null, Theme.key_actionBarActionModeDefault));
+        descriptions.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_AM_TOPBACKGROUND, null, null, null, null, Theme.key_actionBarActionModeDefaultTop));
+        descriptions.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_AM_ITEMSCOLOR, null, null, null, null, Theme.key_actionBarActionModeDefaultIcon));
+        descriptions.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_AM_SELECTORCOLOR, null, null, null, null, Theme.key_actionBarActionModeDefaultSelector));
         int[] keys = {
                 Theme.key_chat_wallpaper,
                 Theme.key_chat_inBubble, Theme.key_chat_inBubbleSelected, Theme.key_chat_inBubbleShadow,
@@ -506,6 +805,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 Theme.key_chat_messageLinkIn, Theme.key_chat_messageLinkOut,
                 Theme.key_chat_inTimeText, Theme.key_chat_outTimeText,
                 Theme.key_chat_outSentCheck, Theme.key_chat_outSentCheckRead, Theme.key_chat_outSentClock,
+                Theme.key_chat_selectedBackground, Theme.key_chat_inTimeSelectedText, Theme.key_chat_outTimeSelectedText,
+                Theme.key_chat_serviceBackground, Theme.key_checkbox, Theme.key_checkboxCheck,
+                Theme.key_chat_outReactionButtonBackground, Theme.key_chat_inReactionButtonBackground,
+                Theme.key_actionBarActionModeDefaultIcon, Theme.key_actionBarActionModeDefaultSelector, Theme.key_chat_messagePanelBackground,
         };
         for (int key : keys) {
             descriptions.add(new ThemeDescription(null, 0, null, null, null, redraw, key));
@@ -550,7 +853,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             TextBubbleMessage message = messages.get(position);
             boolean pinnedTop = position > 0 && messages.get(position - 1).isOut == message.isOut;
             boolean pinnedBottom = position < messages.size() - 1 && messages.get(position + 1).isOut == message.isOut;
-            ((TextBubbleCell) holder.itemView).setMessage(message, pinnedTop, pinnedBottom);
+            TextBubbleCell cell = (TextBubbleCell) holder.itemView;
+            cell.setMessage(message, pinnedTop, pinnedBottom);
+            cell.setCheckBoxVisible(actionBar.isActionModeShowed(), false);
+            cell.setChecked(selectedMessages.contains(message), false);
         }
 
         @Override

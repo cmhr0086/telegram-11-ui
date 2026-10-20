@@ -58,7 +58,12 @@ import java.util.ArrayList;
  *       and the expand-to-all-reactions button are not ported.</li>
  * </ul>
  * Usage: create, {@link #addItem} rows, optionally {@link #setReactions}, then {@link #show(View, float, float)}
- * with the long-pressed cell and the touch point inside it.
+ * with the tapped cell and the touch point inside it.
+ * <p>
+ * Like ChatActivity, the host opens this menu on a <b>tap</b> (onItemClickListener → createMenu(single = true));
+ * a long press starts multi-select instead (createMenu(single = false) → action mode, see the demo's
+ * DemoChatFragment). Upstream also calls {@code listView.setInstantClick(true)} and
+ * {@code listView.setDisableHighlightState(true)} so message rows never show the list selector ripple.
  */
 public class MessageContextMenu {
 
@@ -131,7 +136,7 @@ public class MessageContextMenu {
     }
 
     /**
-     * @param anchor the long-pressed cell; it is drawn above the scrim while the menu is open
+     * @param anchor the tapped cell; it is drawn above the scrim while the menu is open
      * @param x      touch x inside the anchor
      * @param y      touch y inside the anchor
      */

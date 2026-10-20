@@ -10,12 +10,15 @@ import android.text.Spanned;
 import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.text.TextUtils;
+import android.os.SystemClock;
 import android.view.View;
+import android.view.animation.Interpolator;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Components.CheckBoxBase;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.MsgClockDrawable;
 
@@ -46,6 +49,19 @@ public class TextBubbleCell extends View {
     private final RectF reactionRect = new RectF();
     private static TextPaint reactionCounterPaint;
     private static android.graphics.Paint reactionPaint;
+
+    // selection mode (ChatMessageCell.setCheckBoxVisible / setChecked / animateCheckboxTranslation / setDrawSelectionBackground)
+    private CheckBoxBase checkBox;
+    private boolean checkBoxVisible;
+    private boolean checkBoxAnimationInProgress;
+    private float checkBoxAnimationProgress;
+    private long lastCheckBoxAnimationTime;
+    private int checkBoxTranslation;
+    private boolean drawSelectionBackground;
+    private float selectionProgress;
+    private long lastSelectionAnimationTime;
+    private int bubbleBottom;
+    private static android.graphics.Paint selectionPaint;
 
     private int totalHeight;
     private int backgroundWidth;
@@ -301,10 +317,88 @@ public class TextBubbleCell extends View {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        if (checkBox != null) {
+            checkBox.onDetachedFromWindow();
+        }
         if (statusAnimator != null) {
             statusAnimator.cancel();
             statusAnimator = null;
             statusProgress = 1f;
+        }
+    }
+
+    /** Upstream ChatMessageCell.setCheckBoxVisible: a 21dp CheckBoxBase slides in from the left, incoming bubbles move 35dp right. */
+    public void setCheckBoxVisible(boolean visible, boolean animated) {
+        if (visible && checkBox == null) {
+            checkBox = new CheckBoxBase(this, 21, resourcesProvider);
+            if (isAttachedToWindow()) {
+                checkBox.onAttachedToWindow();
+            }
+        }
+        if (checkBoxVisible == visible) {
+            if (animated != checkBoxAnimationInProgress && !animated) {
+                checkBoxAnimationProgress = visible ? 1.0f : 0.0f;
+                invalidate();
+            }
+            return;
+        }
+        checkBoxAnimationInProgress = animated;
+        checkBoxVisible = visible;
+        if (animated) {
+            lastCheckBoxAnimationTime = SystemClock.elapsedRealtime();
+        } else {
+            checkBoxAnimationProgress = visible ? 1.0f : 0.0f;
+        }
+        invalidate();
+    }
+
+    public boolean isCheckBoxVisible() {
+        return checkBoxVisible || checkBoxAnimationInProgress;
+    }
+
+    /** Upstream setChecked + setDrawSelectionBackground: check mark, selected bubble colors and the row highlight. */
+    public void setChecked(boolean checked, boolean animated) {
+        if (checkBox != null) {
+            checkBox.setChecked(checked, animated);
+        }
+        if (drawSelectionBackground != checked) {
+            drawSelectionBackground = checked;
+            lastSelectionAnimationTime = SystemClock.elapsedRealtime();
+            if (!animated) {
+                selectionProgress = checked ? 1f : 0f;
+            }
+            invalidate();
+        }
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (checkBox != null) {
+            checkBox.onAttachedToWindow();
+        }
+    }
+
+    private void animateCheckboxTranslation() {
+        if (checkBoxVisible || checkBoxAnimationInProgress) {
+            if (checkBoxVisible && checkBoxAnimationProgress == 1.0f || !checkBoxVisible && checkBoxAnimationProgress == 0.0f) {
+                checkBoxAnimationInProgress = false;
+            }
+            Interpolator interpolator = checkBoxVisible ? CubicBezierInterpolator.EASE_OUT : CubicBezierInterpolator.EASE_IN;
+            checkBoxTranslation = (int) Math.ceil(interpolator.getInterpolation(checkBoxAnimationProgress) * AndroidUtilities.dp(35));
+            if (checkBoxAnimationInProgress) {
+                long newTime = SystemClock.elapsedRealtime();
+                long dt = newTime - lastCheckBoxAnimationTime;
+                lastCheckBoxAnimationTime = newTime;
+                if (checkBoxVisible) {
+                    checkBoxAnimationProgress = Math.min(1f, checkBoxAnimationProgress + dt / 200.0f);
+                } else {
+                    checkBoxAnimationProgress = Math.max(0f, checkBoxAnimationProgress - dt / 200.0f);
+                }
+                invalidate();
+            }
+        } else {
+            checkBoxTranslation = 0;
         }
     }
 
@@ -313,18 +407,58 @@ public class TextBubbleCell extends View {
         if (message == null || textLayout == null) {
             return;
         }
+        animateCheckboxTranslation();
+        // row highlight (ChatActivity's ChatListView: MessageBackgroundDrawable with key_chat_selectedBackground)
+        float target = drawSelectionBackground ? 1f : 0f;
+        if (selectionProgress != target) {
+            long newTime = SystemClock.elapsedRealtime();
+            float step = (newTime - lastSelectionAnimationTime) / 200f;
+            lastSelectionAnimationTime = newTime;
+            selectionProgress = target > selectionProgress ? Math.min(target, selectionProgress + step) : Math.max(target, selectionProgress - step);
+            invalidate();
+        }
+        if (selectionProgress > 0) {
+            if (selectionPaint == null) {
+                selectionPaint = new android.graphics.Paint();
+            }
+            int color = getThemedColor(Theme.key_chat_selectedBackground);
+            selectionPaint.setColor(color);
+            selectionPaint.setAlpha((int) (android.graphics.Color.alpha(color) * selectionProgress));
+            canvas.drawRect(0, 0, getMeasuredWidth(), getMeasuredHeight(), selectionPaint);
+        }
+        int restore = canvas.save();
+        if (!message.isOut) {
+            canvas.translate(checkBoxTranslation, 0);
+        }
+        drawContent(canvas);
+        canvas.restoreToCount(restore);
+        if (checkBox != null && (checkBoxVisible || checkBoxAnimationInProgress)) {
+            int size = AndroidUtilities.dp(21);
+            checkBox.setBounds(AndroidUtilities.dp(8 - 35) + checkBoxTranslation, bubbleBottom - AndroidUtilities.dp(8) - size, size, size);
+            checkBox.draw(canvas);
+        }
+    }
+
+    private void drawContent(Canvas canvas) {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
         final int layoutHeight = getMeasuredHeight();
 
         if (emojiOnlyMode) {
+            bubbleBottom = layoutHeight - AndroidUtilities.dp(4);
             drawEmojiOnly(canvas, out, layoutWidth, layoutHeight);
             return;
         }
 
         // --- background (ChatMessageCell.drawBackground for !mediaBackground)
         Theme.MessageDrawable drawable;
-        if (pinnedBottom) {
+        if (drawSelectionBackground) {
+            if (pinnedBottom) {
+                drawable = out ? Theme.chat_msgOutMediaSelectedDrawable : Theme.chat_msgInMediaSelectedDrawable;
+            } else {
+                drawable = out ? Theme.chat_msgOutSelectedDrawable : Theme.chat_msgInSelectedDrawable;
+            }
+        } else if (pinnedBottom) {
             drawable = out ? Theme.chat_msgOutMediaDrawable : Theme.chat_msgInMediaDrawable;
         } else {
             drawable = out ? Theme.chat_msgOutDrawable : Theme.chat_msgInDrawable;
@@ -370,6 +504,7 @@ public class TextBubbleCell extends View {
         // getShadowDrawable() may render its cache through this drawable and change its bounds, so set them afterwards
         Drawable shadow = drawable.getShadowDrawable();
         drawable.setBounds(backgroundLeft, backgroundTop, backgroundLeft + backgroundRight, backgroundTop + backgroundHeight);
+        bubbleBottom = backgroundTop + backgroundHeight;
         if (shadow != null) {
             shadow.setBounds(drawable.getBounds());
             shadow.draw(canvas);
@@ -396,7 +531,7 @@ public class TextBubbleCell extends View {
         } else {
             timeX = backgroundWidth - AndroidUtilities.dp(9) - timeWidth;
         }
-        Theme.chat_timePaint.setColor(getThemedColor(out ? Theme.key_chat_outTimeText : Theme.key_chat_inTimeText));
+        Theme.chat_timePaint.setColor(getThemedColor(out ? (drawSelectionBackground ? Theme.key_chat_outTimeSelectedText : Theme.key_chat_outTimeText) : (drawSelectionBackground ? Theme.key_chat_inTimeSelectedText : Theme.key_chat_inTimeText)));
         canvas.save();
         canvas.translate(timeX, layoutHeight - AndroidUtilities.dp(pinnedBottom || pinnedTop ? 7.5f : 6.5f) - timeLayout.getHeight());
         timeLayout.draw(canvas);
