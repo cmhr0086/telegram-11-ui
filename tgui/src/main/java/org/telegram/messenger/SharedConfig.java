@@ -16,6 +16,7 @@ public class SharedConfig {
     public static final boolean noStatusBar = true;
     public static int fontSize = 16;
     public static int bubbleRadius = 17;
+    public static int lockRecordAudioVideoHint;
     public static boolean drawActionBarShadow = true;
     public static boolean useNewBlur = true;
     public static boolean forceDisableTabletMode;
@@ -35,6 +36,7 @@ public class SharedConfig {
         SharedPreferences preferences = MessagesController.getGlobalMainSettings();
         fontSize = preferences.getInt("fons_size", AndroidUtilities.isTablet() ? 18 : 16);
         bubbleRadius = preferences.getInt("bubbleRadius", 17);
+        lockRecordAudioVideoHint = preferences.getInt("lockRecordAudioVideoHint", 0);
         overrideDevicePerformanceClass = preferences.getInt("overrideDevicePerformanceClass", -1);
         configLoaded = true;
     }
@@ -154,5 +156,14 @@ public class SharedConfig {
 
     public static boolean deviceIsAverage() {
         return getDevicePerformanceClass() <= PERFORMANCE_CLASS_AVERAGE;
+    }
+
+    public static void increaseLockRecordAudioVideoHintShowed() {
+        MessagesController.getGlobalMainSettings().edit().putInt("lockRecordAudioVideoHint", ++lockRecordAudioVideoHint).apply();
+    }
+
+    public static void removeLockRecordAudioVideoHint() {
+        lockRecordAudioVideoHint = 3;
+        MessagesController.getGlobalMainSettings().edit().putInt("lockRecordAudioVideoHint", 3).apply();
     }
 }

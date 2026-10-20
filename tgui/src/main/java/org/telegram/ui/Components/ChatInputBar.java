@@ -31,11 +31,15 @@ import org.telegram.ui.ActionBar.ThemeDescription;
 import java.util.ArrayList;
 
 /**
+ * @deprecated use {@link ChatActivityEnterView}, the port of the original input; this simple
+ * panel is kept for hosts that only need a text field and a send button.
+ *
  * tgui: a small message input panel in the style of upstream ChatActivityEnterView — the
  * multi-line message field, the send button with its 150 ms scale/alpha appear animation,
  * the panel background and compose shadow. No emoji panel, voice, attachments or bot keyboard.
  * Put it at the bottom of a {@link SizeNotifierFrameLayout} in an adjustResize window.
  */
+@Deprecated
 public class ChatInputBar extends FrameLayout {
 
     public interface Delegate {

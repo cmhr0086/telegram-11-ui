@@ -62,6 +62,7 @@ dependencies {
     implementation("androidx.dynamicanimation:dynamicanimation:1.0.0")
     implementation("androidx.customview:customview:1.1.0")
     implementation("androidx.collection:collection:1.4.0")
+    implementation("androidx.interpolator:interpolator:1.0.0")
 }
 
 // ./gradlew :tgui:publishToMavenLocal  ->  org.telegram.ui:tgui:11.4.2-ui1 (pulls androidx deps transitively)

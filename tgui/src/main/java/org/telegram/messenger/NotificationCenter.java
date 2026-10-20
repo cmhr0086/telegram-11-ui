@@ -188,6 +188,8 @@ public class NotificationCenter {
     public static final int albumsDidLoad = totalEvents++;
     public static final int audioDidSent = totalEvents++;
     public static final int audioRecordTooShort = totalEvents++;
+    /** tgui: a voice message was recorded and sent without preview: (guid, MediaController.RecordedAudio, notify, scheduleDate, once) */
+    public static final int voiceRecordedForSend = totalEvents++;
     public static final int audioRouteChanged = totalEvents++;
 
     public static final int didStartedCall = totalEvents++;

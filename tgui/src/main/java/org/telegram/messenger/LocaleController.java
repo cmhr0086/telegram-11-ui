@@ -194,4 +194,70 @@ public class LocaleController {
     public static boolean isRTLCharacter(char ch) {
         return Character.getDirectionality(ch) == Character.DIRECTIONALITY_RIGHT_TO_LEFT || Character.getDirectionality(ch) == Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC || Character.getDirectionality(ch) == Character.DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING || Character.getDirectionality(ch) == Character.DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE;
     }
+
+    // tgui: schedule-picker formatters (upstream uses FastDateFormat; java.text formats are enough on the UI thread)
+    private java.text.DateFormat formatterWeek, formatterScheduleDay, formatterScheduleYear;
+    private final java.text.DateFormat[] formatterScheduleSend = new java.text.DateFormat[15];
+
+    private java.text.DateFormat createFormatter(Locale locale, int res, String defaultFormat) {
+        String format;
+        try {
+            format = ApplicationLoader.applicationContext.getString(res);
+        } catch (Exception e) {
+            format = defaultFormat;
+        }
+        try {
+            return new java.text.SimpleDateFormat(format, locale);
+        } catch (Exception e) {
+            return new java.text.SimpleDateFormat(defaultFormat, locale);
+        }
+    }
+
+    public java.text.DateFormat getFormatterWeek() {
+        if (formatterWeek == null) {
+            formatterWeek = createFormatter(currentLocale, R.string.formatterWeek, "EEE");
+        }
+        return formatterWeek;
+    }
+
+    public java.text.DateFormat getFormatterScheduleDay() {
+        if (formatterScheduleDay == null) {
+            formatterScheduleDay = createFormatter(currentLocale, R.string.formatDateSchedule, "MMM d");
+        }
+        return formatterScheduleDay;
+    }
+
+    public java.text.DateFormat getFormatterScheduleYear() {
+        if (formatterScheduleYear == null) {
+            formatterScheduleYear = createFormatter(currentLocale, R.string.formatDateScheduleYear, "MMM d yyyy");
+        }
+        return formatterScheduleYear;
+    }
+
+    public java.text.DateFormat getFormatterScheduleSend(int n) {
+        if (n < 0 || n >= formatterScheduleSend.length) {
+            return null;
+        }
+        if (formatterScheduleSend[n] == null) {
+            final Locale locale = currentLocale == null ? Locale.getDefault() : currentLocale;
+            switch (n) {
+                case 0: formatterScheduleSend[n] = createFormatter(locale, R.string.SendTodayAt, "'Send today at' HH:mm"); break;
+                case 1: formatterScheduleSend[n] = createFormatter(locale, R.string.SendDayAt, "'Send on' MMM d 'at' HH:mm"); break;
+                case 2: formatterScheduleSend[n] = createFormatter(locale, R.string.SendDayYearAt, "'Send on' MMM d yyyy 'at' HH:mm"); break;
+                case 3: formatterScheduleSend[n] = createFormatter(locale, R.string.RemindTodayAt, "'Remind today at' HH:mm"); break;
+                case 4: formatterScheduleSend[n] = createFormatter(locale, R.string.RemindDayAt, "'Remind on' MMM d 'at' HH:mm"); break;
+                case 5: formatterScheduleSend[n] = createFormatter(locale, R.string.RemindDayYearAt, "'Remind on' MMM d yyyy 'at' HH:mm"); break;
+                case 6: formatterScheduleSend[n] = createFormatter(locale, R.string.StartTodayAt, "'Start today at' HH:mm"); break;
+                case 7: formatterScheduleSend[n] = createFormatter(locale, R.string.StartDayAt, "'Start on' MMM d 'at' HH:mm"); break;
+                case 8: formatterScheduleSend[n] = createFormatter(locale, R.string.StartDayYearAt, "'Start on' MMM d yyyy 'at' HH:mm"); break;
+                case 9: formatterScheduleSend[n] = createFormatter(locale, R.string.StartShortTodayAt, "'Today,' HH:mm"); break;
+                case 10: formatterScheduleSend[n] = createFormatter(locale, R.string.StartShortDayAt, "MMM d',' HH:mm"); break;
+                case 11: formatterScheduleSend[n] = createFormatter(locale, R.string.StartShortDayYearAt, "MMM d yyyy, HH:mm"); break;
+                case 12: formatterScheduleSend[n] = createFormatter(locale, R.string.StartsTodayAt, "'Starts today at' HH:mm"); break;
+                case 13: formatterScheduleSend[n] = createFormatter(locale, R.string.StartsDayAt, "'Starts on' MMM d 'at' HH:mm"); break;
+                case 14: formatterScheduleSend[n] = createFormatter(locale, R.string.StartsDayYearAt, "'Starts on' MMM d yyyy 'at' HH:mm"); break;
+            }
+        }
+        return formatterScheduleSend[n];
+    }
 }

@@ -21,6 +21,7 @@ public class LiteMode {
     public static final int FLAG_CHAT_SCALE = 32768;
     public static final int FLAG_CHAT_THANOS = 65536;
     public static final int FLAG_CHAT_SPOILER = 128;
+    public static final int FLAGS_CHAT = FLAG_CHAT_BACKGROUND | FLAG_CHAT_FORUM_TWOCOLUMN | FLAG_CHAT_SPOILER | FLAG_CHAT_BLUR | FLAG_CHAT_SCALE | FLAG_CHAT_THANOS;
 
     private static int disabledFlags = FLAG_CHAT_BLUR;
 

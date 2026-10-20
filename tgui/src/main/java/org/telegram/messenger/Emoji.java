@@ -29,4 +29,15 @@ public class Emoji {
     public static CharSequence replaceWithRestrictedEmoji(CharSequence cs, Paint.FontMetricsInt fontMetrics, Runnable update) {
         return cs;
     }
+
+    /**
+     * tgui: upstream parses emoji ranges with its emoji tables; the input only uses the emoji-only
+     * count to decide whether to trim whitespace, so this reports "not emoji-only".
+     */
+    public static java.util.ArrayList<Object> parseEmojis(CharSequence cs, int[] emojiOnly) {
+        if (emojiOnly != null && emojiOnly.length > 0) {
+            emojiOnly[0] = 0;
+        }
+        return new java.util.ArrayList<>();
+    }
 }

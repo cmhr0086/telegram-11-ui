@@ -17,4 +17,12 @@ public class MessagesController {
     public static SharedPreferences getGlobalNotificationsSettings() {
         return ApplicationLoader.applicationContext.getSharedPreferences("Notifications", Activity.MODE_PRIVATE);
     }
+
+    public static SharedPreferences getGlobalEmojiSettings() {
+        return ApplicationLoader.applicationContext.getSharedPreferences("emoji", Activity.MODE_PRIVATE);
+    }
+
+    public static SharedPreferences getNotificationsSettings(int account) {
+        return getGlobalNotificationsSettings();
+    }
 }

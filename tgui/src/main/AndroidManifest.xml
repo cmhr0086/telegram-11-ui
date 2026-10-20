@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ChatActivityEnterView keeps the screen on while recording a voice / round video message.
+         RECORD_AUDIO (and CAMERA for round videos) are requested at runtime and declared by the host. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+</manifest>
