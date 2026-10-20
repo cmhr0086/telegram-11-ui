@@ -358,8 +358,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         }
 
         /**
-         * tgui: called once the emoji panel exists. Until the EmojiView phase lands it is an empty
-         * placeholder of keyboard height; hosts may add their own content to it.
+         * tgui: called once the emoji panel (upstream EmojiView, emoji page only) exists.
          */
         default void onEmojiPanelCreated(EmojiView panel) {
 
@@ -7860,7 +7859,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         if (emojiView != null) {
             return;
         }
-        // tgui: EmojiView is a placeholder panel until the emoji keyboard phase (see README roadmap)
+        // tgui: EmojiView has only the emoji page; stickers / GIFs are on the README roadmap
         emojiView = new EmojiView(getContext(), shouldDrawBackground, resourcesProvider) {
             @Override
             public void setTranslationY(float translationY) {
