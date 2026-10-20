@@ -127,6 +127,14 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 - 聊天部分只有纯文本气泡：没有头像、名字、回复引用、转发、媒体、表情反应、选择、链接点击；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 输入栏：附件按钮只回调宿主（没有 `ChatAttachAlert`）；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；没有机器人键盘、命令菜单和 WebView 按钮；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 
+- 只支持主题自带的颜色/渐变壁纸和默认图案壁纸，不支持壁纸文件和视差（motion）效果；各强调色原本的不同图案都显示成同一个 `default_pattern`
+- Lottie 只带了库内引用到的 `R.raw` JSON（对话列表的归档 / 滑动动作图标、骰子 / 飞镖等），外加上游 APK 自带的 46 个大幅插画：11 只 Utya 小鸭子 `R.raw.utyan_*`、两步验证猴子 `tsv_setup_monkey_*` / `tsv_monkey_close`、设置和邮箱引导（`tsv_setup_*`、`email_*`）、钱包 `wallet_*`、`qr_login`、`filter_new` 等，以及一批白色线条图标（`passcode_lock`、`stats`、`fragment*`、`boosts` 等，上游画在彩色圆形上，可配合 `AlertDialog.Builder.setTopAnimationIsNew(true)` 使用），demo 的 "Lottie illustrations" 页分组展示全部动画。客户端里另一些鸭子（搜索无结果等空状态）和动态表情、贴纸是运行时从服务器贴纸包下载的，不在 APK 里；其它动画 JSON 由宿主放进自己的 `res/raw`，再 `setTopAnimation(R.raw.xxx, …)` / `new RLottieDrawable(R.raw.xxx, …)` 使用
+- rlottie 的 pixman NEON 汇编（`pixman-arm*-neon-asm.S`）需要 GNU as，新 NDK 只有 clang 汇编器，所以所有 ABI 都走 rlottie 的 C 填充路径，纯色填充比上游略慢
+- 不能播放 Telegram 贴纸 / TGS 文件的网络加载（没有 `ImageReceiver` / `FileLoader`）；本地文件可以用 `new RLottieDrawable(File, w, h, cacheOptions, limitFps)`
+- 字符串只带了库内实际用到的 49 条英文，加上游自带的部分翻译（ar / de / es / it / ko / nl / pt-BR）；其它语言需要宿主覆盖资源
+- demo 在 Android 9 真机（Huawei MHA-AL00）上完整验证过；Android 16（OnePlus，targetSdk 36 强制边到边）上验证过聊天背景、气泡和键盘调整布局，但 `ChatActivityEnterView` 还没在 Android 15+ 真机上验证；平板布局没验证
+- `Theme` 里仍留着对话列表、个人资料相关的 paint/drawable 字段，没用到但可以安全忽略；后续可以继续瘦身
+
 ## 路线图（分阶段恢复，均不放弃）
 
 1. **阶段 A（已完成）**：`ChatActivityEnterView` 原版输入栏——输入、格式菜单、表情↔键盘切换（占位面板）、发送动画与长按菜单、语音录制（按住 / 左滑取消 / 上滑锁定 / 暂停预览 / 播放）、圆形视频录制界面（相机由宿主提供）、回复 / 编辑顶栏
@@ -134,14 +142,6 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 3. **阶段 C：动态表情 / 自定义表情**——`AnimatedEmojiDrawable` / `AnimatedEmojiSpan` 的真实渲染（rlottie 已就绪），文字里的自定义表情实体
 4. **阶段 D：贴纸和 GIF**——`EmojiView` 的贴纸 / GIF 页、`StickersAlert`、`TrendingStickersLayout`，数据由宿主提供（不接 Telegram 服务器）
 5. 之后可选：`SuggestEmojiView`、提及列表、`MessageSendPreview`（长按发送的消息预览与特效）、机器人键盘
-- 只支持主题自带的颜色/渐变壁纸和默认图案壁纸，不支持壁纸文件和视差（motion）效果；各强调色原本的不同图案都显示成同一个 `default_pattern`
-
-- Lottie 只带了库内引用到的 `R.raw` JSON（对话列表的归档 / 滑动动作图标、骰子 / 飞镖等），外加上游自带的 11 只 Utya 小鸭子 `R.raw.utyan_*`（empty、newborn、saved_messages、private、passcode、call、cache、change_number、gigagroup、schedule、streaming，demo 里有展示页）；其它动画 JSON 由宿主放进自己的 `res/raw`，再 `setTopAnimation(R.raw.xxx, …)` / `new RLottieDrawable(R.raw.xxx, …)` 使用
-- rlottie 的 pixman NEON 汇编（`pixman-arm*-neon-asm.S`）需要 GNU as，新 NDK 只有 clang 汇编器，所以所有 ABI 都走 rlottie 的 C 填充路径，纯色填充比上游略慢
-- 不能播放 Telegram 贴纸 / TGS 文件的网络加载（没有 `ImageReceiver` / `FileLoader`）；本地文件可以用 `new RLottieDrawable(File, w, h, cacheOptions, limitFps)`
-- 字符串只带了库内实际用到的 49 条英文，加上游自带的部分翻译（ar / de / es / it / ko / nl / pt-BR）；其它语言需要宿主覆盖资源
-- demo 在 Android 9 真机（Huawei MHA-AL00）上完整验证过；Android 16（OnePlus，targetSdk 36 强制边到边）上验证过聊天背景、气泡和键盘调整布局，但 `ChatActivityEnterView` 还没在 Android 15+ 真机上验证；平板布局没验证
-- `Theme` 里仍留着对话列表、个人资料相关的 paint/drawable 字段，没用到但可以安全忽略；后续可以继续瘦身
 
 ## 抽取工具（`tools/`）
 
