@@ -11,53 +11,78 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
-import org.telegram.messenger.Emoji;
-import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenu;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
+import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
+import org.telegram.ui.ActionBar.AlertDialog;
+import org.telegram.ui.ActionBar.BackDrawable;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Cells.DialogCell;
 import org.telegram.ui.Cells.DialogItem;
+import org.telegram.ui.Components.DialogsActionMode;
+import org.telegram.ui.Components.DialogsListView;
+import org.telegram.ui.Components.DialogsSwipeController;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RLottieDrawable;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.TelegramUI;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 
 /**
- * Chat list demo: upstream DialogCell rows bound to plain {@link DialogItem}s.
+ * Chat list demo: upstream DialogCell rows bound to plain {@link DialogItem}s, with the upstream
+ * swipe actions, long-press selection mode and DialogsItemAnimator.
  */
 public class DemoDialogsFragment extends BaseFragment {
 
     private static final int MENU_LINES = 1;
     private static final int MENU_SIMULATE = 2;
     private static final int MENU_NIGHT = 3;
+    private static final int MENU_SWIPE = 4;
 
-    private RecyclerListView listView;
+    private static final int ACTION_PIN = 100;
+    private static final int ACTION_MUTE = 101;
+    private static final int ACTION_ARCHIVE = 102;
+    private static final int ACTION_DELETE = 103;
+    private static final int ACTION_READ = 104;
+
+    private static final int[] SWIPE_ACTIONS = {DialogCell.SWIPE_ACTION_ARCHIVE, DialogCell.SWIPE_ACTION_MUTE, DialogCell.SWIPE_ACTION_READ, DialogCell.SWIPE_ACTION_PIN, DialogCell.SWIPE_ACTION_DELETE};
+    private static final String[] SWIPE_NAMES = {"Archive", "Mute", "Read", "Pin", "Delete"};
+
+    private DialogsListView listView;
     private Adapter adapter;
+    private DialogsActionMode actionMode;
+    private ActionBarMenuItem swipeMenuItem;
+    private ActionBarMenuSubItem swipeSubItem;
     private final ArrayList<DialogItem> dialogs = new ArrayList<>();
+    private final HashSet<Long> selected = new HashSet<>();
     private int simulateStep;
+    private int swipeIndex;
+    private int archivedCount = 4;
 
     @Override
     public View createView(Context context) {
-        actionBar.setBackButtonImage(R.drawable.ic_ab_back);
+        actionBar.setBackButtonDrawable(new BackDrawable(false));
         actionBar.setAllowOverlayTitle(true);
         actionBar.setTitle("Telegram");
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
             public void onItemClick(int id) {
                 if (id == -1) {
-                    finishFragment();
+                    if (actionMode.isShowing()) {
+                        clearSelection();
+                    } else {
+                        finishFragment();
+                    }
                 } else if (id == MENU_LINES) {
                     SharedConfig.useThreeLinesLayout = !SharedConfig.useThreeLinesLayout;
                     adapter.notifyDataSetChanged();
@@ -65,14 +90,29 @@ public class DemoDialogsFragment extends BaseFragment {
                     simulateUpdate();
                 } else if (id == MENU_NIGHT) {
                     TelegramUI.toggleDayNight(actionBar);
+                } else if (id == MENU_SWIPE) {
+                    swipeIndex = (swipeIndex + 1) % SWIPE_ACTIONS.length;
+                    updateSwipeMenuText();
+                } else {
+                    onActionModeItem(id);
                 }
             }
         });
         ActionBarMenu menu = actionBar.createMenu();
-        ActionBarMenuItem other = menu.addItem(0, R.drawable.ic_ab_other);
-        other.addSubItem(MENU_SIMULATE, R.drawable.msg_msgbubble2, "Simulate update");
-        other.addSubItem(MENU_LINES, R.drawable.msg_list, "Two / three lines");
-        other.addSubItem(MENU_NIGHT, R.drawable.msg_theme, "Day / night");
+        swipeMenuItem = menu.addItem(0, R.drawable.ic_ab_other);
+        swipeMenuItem.addSubItem(MENU_SIMULATE, R.drawable.msg_msgbubble2, "Simulate update");
+        swipeSubItem = swipeMenuItem.addSubItem(MENU_SWIPE, R.drawable.msg_archive, "");
+        swipeMenuItem.addSubItem(MENU_LINES, R.drawable.msg_list, "Two / three lines");
+        swipeMenuItem.addSubItem(MENU_NIGHT, R.drawable.msg_theme, "Day / night");
+        updateSwipeMenuText();
+
+        // upstream DialogsActivity.createActionMode items
+        actionMode = new DialogsActionMode(actionBar);
+        actionMode.addItem(ACTION_PIN, R.drawable.msg_pin, "Pin");
+        actionMode.addItem(ACTION_MUTE, R.drawable.msg_mute, "Mute");
+        actionMode.addItem(ACTION_ARCHIVE, R.drawable.msg_archive, "Archive");
+        actionMode.addItem(ACTION_DELETE, R.drawable.msg_delete, "Delete");
+        actionMode.addOverflowItem(ACTION_READ, R.drawable.msg_markread, "Mark as read");
 
         fillDialogs();
 
@@ -80,53 +120,286 @@ public class DemoDialogsFragment extends BaseFragment {
         fragmentView = frameLayout;
         frameLayout.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
 
-        listView = new RecyclerListView(context);
-        NotificationCenter.getGlobalInstance().listenGlobal(listView, NotificationCenter.emojiLoaded, args -> Emoji.invalidateAll(listView));
-        listView.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false));
-        listView.setVerticalScrollBarEnabled(true);
+        listView = new DialogsListView(context);
         listView.setAdapter(adapter = new Adapter(context));
         listView.setOnItemClickListener((view, position) -> {
-            if (view instanceof DialogCell && ((DialogCell) view).getDialog().isFolder) {
-                ((DialogCell) view).animateArchiveAvatar();
+            if (!(view instanceof DialogCell)) {
+                return;
+            }
+            DialogCell cell = (DialogCell) view;
+            if (actionMode.isShowing()) {
+                if (!cell.getDialog().isFolder) {
+                    toggleSelection(cell);
+                }
+            } else if (cell.getDialog().isFolder) {
+                cell.animateArchiveAvatar();
+            }
+        });
+        listView.setOnItemLongClickListener((view, position) -> {
+            if (!(view instanceof DialogCell) || ((DialogCell) view).getDialog().isFolder) {
+                return false;
+            }
+            toggleSelection((DialogCell) view);
+            return true;
+        });
+        listView.setSwipeDelegate(new DialogsSwipeController.Delegate() {
+            @Override
+            public int getSwipeAction(DialogCell cell) {
+                if (cell.getDialog().isFolder) {
+                    return -1;
+                }
+                return SWIPE_ACTIONS[swipeIndex];
+            }
+
+            @Override
+            public void onSwipeAction(DialogCell cell, int action) {
+                DialogItem d = cell.getDialog();
+                if (action == DialogCell.SWIPE_ACTION_MUTE) {
+                    d.muted = !d.muted;
+                    cell.setDialog(d, true);
+                } else if (action == DialogCell.SWIPE_ACTION_READ) {
+                    if (d.unreadCount > 0 || d.markUnread) {
+                        d.unreadCount = 0;
+                        d.markUnread = false;
+                        d.mention = false;
+                    } else {
+                        d.markUnread = true;
+                    }
+                    cell.setDialog(d, true);
+                } else if (action == DialogCell.SWIPE_ACTION_PIN) {
+                    togglePinned(d);
+                } else if (action == DialogCell.SWIPE_ACTION_DELETE) {
+                    confirmDelete(d);
+                }
+            }
+
+            @Override
+            public void onSwiped(DialogCell cell, int action) {
+                removeDialog(cell.getDialog(), true);
+            }
+
+            @Override
+            public boolean isSelectionMode() {
+                return actionMode.isShowing();
+            }
+
+            @Override
+            public boolean canReorder(DialogCell cell) {
+                return cell.getDialog().pinned;
+            }
+
+            @Override
+            public boolean onReorder(int fromPosition, int toPosition) {
+                DialogItem item = dialogs.remove(fromPosition);
+                dialogs.add(toPosition, item);
+                adapter.notifyItemMoved(fromPosition, toPosition);
+                return true;
             }
         });
         frameLayout.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         return fragmentView;
     }
 
-    private void simulateUpdate() {
-        // cycles through the upstream animated transitions: counter, typing, check status
-        DialogItem d = dialogs.get(3);
-        switch (simulateStep++ % 4) {
-            case 0:
-                d.unreadCount++;
-                d.message = "One more message " + d.unreadCount;
-                d.time = "now";
-                break;
-            case 1:
-                d.typing = "typing";
-                d.typingType = 0;
-                break;
-            case 2:
-                d.typing = null;
-                d.message = "Done typing 👋";
-                d.unreadCount++;
-                break;
-            case 3:
-                d.unreadCount = 0;
-                break;
+    private void updateSwipeMenuText() {
+        swipeSubItem.setText("Swipe action: " + SWIPE_NAMES[swipeIndex]);
+    }
+
+    @Override
+    public boolean onBackPressed() {
+        if (actionMode != null && actionMode.isShowing()) {
+            clearSelection();
+            return false;
         }
-        DialogItem out = dialogs.get(4);
-        out.sentState = out.sentState == DialogItem.SENT_READ ? DialogItem.SENT_SENDING : out.sentState + 1;
+        return super.onBackPressed();
+    }
+
+    // ---- selection (upstream showOrUpdateActionMode / hideActionMode) ----
+
+    private int pinnedCount() {
+        int n = 0;
+        for (DialogItem d : dialogs) {
+            if (d.pinned) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    private void toggleSelection(DialogCell cell) {
+        long id = cell.getDialog().id;
+        boolean wasShowing = actionMode.isShowing();
+        boolean checked = !selected.remove(id);
+        if (checked) {
+            selected.add(id);
+        }
+        cell.setChecked(checked, true);
+        actionMode.setCount(selected.size());
+        if (wasShowing != actionMode.isShowing()) {
+            updateReorderState(actionMode.isShowing());
+        }
+    }
+
+    private void clearSelection() {
+        selected.clear();
+        actionMode.hide();
+        for (int i = 0; i < listView.getChildCount(); i++) {
+            View child = listView.getChildAt(i);
+            if (child instanceof DialogCell) {
+                ((DialogCell) child).setChecked(false, true);
+            }
+        }
+        updateReorderState(false);
+    }
+
+    private void updateReorderState(boolean reordering) {
+        boolean show = reordering && pinnedCount() > 1;
+        for (int i = 0; i < listView.getChildCount(); i++) {
+            View child = listView.getChildAt(i);
+            if (child instanceof DialogCell) {
+                ((DialogCell) child).onReorderStateChanged(show, true);
+            }
+        }
+    }
+
+    private void onActionModeItem(int id) {
+        ArrayList<DialogItem> items = new ArrayList<>();
+        for (DialogItem d : dialogs) {
+            if (selected.contains(d.id)) {
+                items.add(d);
+            }
+        }
+        if (id == ACTION_DELETE) {
+            clearSelection();
+            for (DialogItem d : items) {
+                removeDialog(d, false);
+            }
+            return;
+        }
+        if (id == ACTION_ARCHIVE) {
+            clearSelection();
+            for (DialogItem d : items) {
+                removeDialog(d, true);
+            }
+            return;
+        }
+        for (DialogItem d : items) {
+            if (id == ACTION_PIN) {
+                togglePinned(d);
+            } else if (id == ACTION_MUTE) {
+                d.muted = !d.muted;
+            } else if (id == ACTION_READ) {
+                d.unreadCount = 0;
+                d.markUnread = false;
+                d.mention = false;
+            }
+        }
+        clearSelection();
+        rebindVisible(true);
+    }
+
+    // ---- list changes (animated by DialogsItemAnimator) ----
+
+    private void rebindVisible(boolean animated) {
         for (int i = 0; i < listView.getChildCount(); i++) {
             View child = listView.getChildAt(i);
             if (child instanceof DialogCell) {
                 DialogCell cell = (DialogCell) child;
-                if (cell.getDialog() == d || cell.getDialog() == out) {
-                    cell.setDialog(cell.getDialog(), true);
+                cell.setDialog(cell.getDialog(), animated);
+            }
+        }
+    }
+
+    private void togglePinned(DialogItem d) {
+        int from = dialogs.indexOf(d);
+        dialogs.remove(from);
+        d.pinned = !d.pinned;
+        int to = 0;
+        if (d.pinned) {
+            // after the archive row, on top of the pinned block (upstream pins go first)
+            while (to < dialogs.size() && dialogs.get(to).isFolder) {
+                to++;
+            }
+        } else {
+            to = pinnedCount() + (dialogs.size() > 0 && dialogs.get(0).isFolder ? 1 : 0);
+        }
+        dialogs.add(to, d);
+        adapter.notifyItemMoved(from, to);
+        listView.post(() -> {
+            rebindVisible(true);
+            adapter.notifyItemRangeChanged(0, dialogs.size());
+        });
+    }
+
+    private void confirmDelete(DialogItem d) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+        builder.setTitle("Delete chat");
+        builder.setMessage("Are you sure you want to delete the chat with " + d.title + "?");
+        builder.setPositiveButton("Delete", (dialog, which) -> removeDialog(d, false));
+        builder.setNegativeButton("Cancel", null);
+        builder.makeRed(AlertDialog.BUTTON_POSITIVE);
+        showDialog(builder.create());
+    }
+
+    private void removeDialog(DialogItem d, boolean archive) {
+        int position = dialogs.indexOf(d);
+        if (position < 0) {
+            return;
+        }
+        listView.getDialogsItemAnimator().prepareForRemove();
+        dialogs.remove(position);
+        adapter.notifyItemRemoved(position);
+        if (archive) {
+            archivedCount++;
+            if (!dialogs.isEmpty() && dialogs.get(0).isFolder) {
+                DialogItem folder = dialogs.get(0);
+                folder.message = d.title + ", " + folder.message;
+                RecyclerView.ViewHolder holder = listView.findViewHolderForAdapterPosition(0);
+                if (holder != null && holder.itemView instanceof DialogCell) {
+                    ((DialogCell) holder.itemView).setDialog(folder, true);
+                    ((DialogCell) holder.itemView).animateArchiveAvatar();
                 }
             }
         }
+    }
+
+    private DialogItem findDialog(long id) {
+        for (DialogItem d : dialogs) {
+            if (d.id == id) {
+                return d;
+            }
+        }
+        return null;
+    }
+
+    private void simulateUpdate() {
+        // cycles through the upstream animated transitions: counter, typing, check status
+        DialogItem d = findDialog(3);
+        DialogItem out = findDialog(4);
+        if (d != null) {
+            switch (simulateStep++ % 4) {
+                case 0:
+                    d.unreadCount++;
+                    d.message = "One more message " + d.unreadCount;
+                    d.time = "now";
+                    break;
+                case 1:
+                    d.typing = "typing";
+                    d.typingType = 0;
+                    break;
+                case 2:
+                    d.typing = null;
+                    d.message = "Done typing 👋";
+                    d.unreadCount++;
+                    break;
+                case 3:
+                    d.unreadCount = 0;
+                    break;
+            }
+        }
+        if (out != null) {
+            out.sentState = out.sentState == DialogItem.SENT_READ ? DialogItem.SENT_SENDING : out.sentState + 1;
+        }
+        rebindVisible(true);
     }
 
     private void fillDialogs() {
@@ -274,6 +547,12 @@ public class DemoDialogsFragment extends BaseFragment {
 
         Adapter(Context context) {
             this.context = context;
+            setHasStableIds(true);
+        }
+
+        @Override
+        public long getItemId(int position) {
+            return dialogs.get(position).id;
         }
 
         @Override
@@ -297,6 +576,8 @@ public class DemoDialogsFragment extends BaseFragment {
             cell.useSeparator = position != getItemCount() - 1;
             cell.fullSeparator = (item.pinned || item.isFolder) && next != null && !next.pinned;
             cell.setDialog(item, false);
+            cell.setChecked(selected.contains(item.id), false);
+            cell.onReorderStateChanged(actionMode.isShowing() && pinnedCount() > 1, false);
         }
 
         @Override
@@ -319,6 +600,7 @@ public class DemoDialogsFragment extends BaseFragment {
         arrayList.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_SUBMENUBACKGROUND, null, null, null, null, Theme.key_actionBarDefaultSubmenuBackground));
         arrayList.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_SUBMENUITEM, null, null, null, null, Theme.key_actionBarDefaultSubmenuItem));
         arrayList.add(new ThemeDescription(list, ThemeDescription.FLAG_SELECTOR, null, null, null, null, Theme.key_listSelector));
+        arrayList.addAll(actionMode.getThemeDescriptions());
         arrayList.add(new ThemeDescription(list, 0, new Class[]{View.class}, Theme.dividerPaint, null, null, Theme.key_divider));
 
         arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, Theme.avatarDrawables, null, Theme.key_avatar_text));

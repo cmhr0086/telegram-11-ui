@@ -24,6 +24,7 @@ import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.text.Layout;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
@@ -231,6 +232,12 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
 
     private boolean updateLayout;
     private int lastSize;
+
+    // DialogsItemAnimator support
+    private boolean moving;
+    private float clipProgress;
+    private int topClip;
+    private int bottomClip;
 
     public DialogCell(Context context) {
         this(context, false, null);
@@ -450,6 +457,33 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
             );
         }
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), getCollapsedHeight());
+        topClip = 0;
+        bottomClip = getMeasuredHeight();
+    }
+
+    public void setMoving(boolean moving) {
+        this.moving = moving;
+    }
+
+    public boolean isMoving() {
+        return moving;
+    }
+
+    public void setClipProgress(float value) {
+        clipProgress = value;
+        invalidate();
+    }
+
+    public float getClipProgress() {
+        return clipProgress;
+    }
+
+    public void setTopClip(int value) {
+        topClip = value;
+    }
+
+    public void setBottomClip(int value) {
+        bottomClip = value;
     }
 
     private int getCollapsedHeight() {
@@ -1342,6 +1376,11 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
         final boolean threeLines = isThreeLines();
         boolean needInvalidate = false;
 
+        if (clipProgress != 0.0f && Build.VERSION.SDK_INT != 24) {
+            canvas.save();
+            canvas.clipRect(0, topClip * clipProgress, getMeasuredWidth(), getMeasuredHeight() - (int) (bottomClip * clipProgress));
+        }
+
         int backgroundColor = 0;
         if (translationX != 0 || cornerProgress != 0.0f) {
             canvas.save();
@@ -1792,6 +1831,16 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
                 canvas.drawLine(0, y, getMeasuredWidth() - left, y, Theme.dividerPaint);
             } else {
                 canvas.drawLine(left, y, getMeasuredWidth(), y, Theme.dividerPaint);
+            }
+        }
+
+        if (clipProgress != 0.0f) {
+            if (Build.VERSION.SDK_INT != 24) {
+                canvas.restore();
+            } else {
+                Theme.dialogs_pinnedPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
+                canvas.drawRect(0, 0, getMeasuredWidth(), topClip * clipProgress, Theme.dialogs_pinnedPaint);
+                canvas.drawRect(0, getMeasuredHeight() - (int) (bottomClip * clipProgress), getMeasuredWidth(), getMeasuredHeight(), Theme.dialogs_pinnedPaint);
             }
         }
 

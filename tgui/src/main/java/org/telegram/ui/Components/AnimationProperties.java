@@ -4,6 +4,8 @@ import android.graphics.Paint;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.ShapeDrawable;
 import android.util.Property;
+
+import org.telegram.ui.Cells.DialogCell;
 import android.view.animation.OvershootInterpolator;
 
 public class AnimationProperties {
@@ -83,6 +85,18 @@ public class AnimationProperties {
         @Override
         public Integer get(ShapeDrawable object) {
             return object.getPaint().getAlpha();
+        }
+    };
+
+    public static final Property<DialogCell, Float> CLIP_DIALOG_CELL_PROGRESS = new FloatProperty<DialogCell>("clipProgress") {
+        @Override
+        public void setValue(DialogCell object, float value) {
+            object.setClipProgress(value);
+        }
+
+        @Override
+        public Float get(DialogCell object) {
+            return object.getClipProgress();
         }
     };
 }
