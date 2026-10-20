@@ -52,6 +52,7 @@ import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.CheckBox2;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.EmptyStubSpan;
+import org.telegram.ui.Components.PullForegroundDrawable;
 import org.telegram.ui.Components.ForegroundColorSpanThemable;
 import org.telegram.ui.Components.RLottieDrawable;
 import org.telegram.ui.Components.StaticLayoutEx;
@@ -229,6 +230,9 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
     private float cornerProgress;
     private int swipeAction = SWIPE_ACTION_ARCHIVE;
     private boolean archiveHidden;
+    private float archiveBackgroundProgress;
+    /** Upstream: the pull-to-reveal header drawn by the archive row while the archive is hidden. */
+    protected PullForegroundDrawable archivedChatsDrawable;
 
     private boolean updateLayout;
     private int lastSize;
@@ -335,7 +339,10 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
         } else if (dialog.avatarType != DialogItem.AVATAR_NORMAL) {
             avatarDrawable.setAvatarType(dialog.avatarType);
         }
-        archiveHidden = false;
+        if (dialog.isFolder && archivedChatsDrawable != null) {
+            archivedChatsDrawable.setCell(this);
+        }
+        resetPinnedArchiveState();
 
         // typing (DialogUpdateHelper.update)
         Integer printingType = dialog.typing != null ? dialog.typingType : null;
@@ -1256,6 +1263,36 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
         isSelected = value;
     }
 
+    /** Upstream: snaps the archive row's pinned/hidden look to {@link SharedConfig#archiveHidden}. */
+    public void resetPinnedArchiveState() {
+        archiveHidden = SharedConfig.archiveHidden;
+        archiveBackgroundProgress = archiveHidden ? 0.0f : 1.0f;
+        avatarDrawable.setArchivedAvatarHiddenProgress(archiveBackgroundProgress);
+    }
+
+    /** Upstream: the list's pull header, drawn by the archive row (see {@link org.telegram.ui.Components.DialogsListView}). */
+    public void setArchivedPullAnimation(PullForegroundDrawable drawable) {
+        archivedChatsDrawable = drawable;
+        if (drawable != null && isFolder()) {
+            drawable.setCell(this);
+        }
+    }
+
+    /** Upstream: the pull header collapses into the archive avatar once the archive is revealed. */
+    public void startOutAnimation() {
+        if (archivedChatsDrawable != null) {
+            archivedChatsDrawable.outCy = avatarRect.centerY();
+            archivedChatsDrawable.outCx = avatarRect.centerX();
+            archivedChatsDrawable.outRadius = avatarRect.width() / 2.0f;
+            archivedChatsDrawable.outImageSize = avatarRect.width();
+            archivedChatsDrawable.startOutAnimation();
+        }
+    }
+
+    public boolean isFolderCell() {
+        return isFolder();
+    }
+
     public void animateArchiveAvatar() {
         if (avatarDrawable.getAvatarType() != AvatarDrawable.AVATAR_TYPE_ARCHIVED) {
             return;
@@ -1346,6 +1383,7 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
         if (translationDrawable != null && translationX == 0) {
             translationDrawable.setProgress(0.0f);
             translationAnimationStarted = false;
+            archiveHidden = SharedConfig.archiveHidden;
             currentRevealProgress = 0;
             isSliding = false;
         }
@@ -1359,7 +1397,7 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
         if (isSliding && !swipeCanceled) {
             boolean prevValue = drawRevealBackground;
             drawRevealBackground = Math.abs(translationX) >= getMeasuredWidth() * 0.45f;
-            if (prevValue != drawRevealBackground) {
+            if (prevValue != drawRevealBackground && archiveHidden == SharedConfig.archiveHidden) {
                 try {
                     performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
                 } catch (Exception ignore) {}
@@ -1375,6 +1413,14 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
         }
         final boolean threeLines = isThreeLines();
         boolean needInvalidate = false;
+
+        if (isFolder() && archivedChatsDrawable != null && archivedChatsDrawable.outProgress == 0.0f && translationX == 0.0f) {
+            canvas.save();
+            canvas.clipRect(0, 0, getMeasuredWidth(), getMeasuredHeight());
+            archivedChatsDrawable.draw(canvas);
+            canvas.restore();
+            return;
+        }
 
         if (clipProgress != 0.0f && Build.VERSION.SDK_INT != 24) {
             canvas.save();
@@ -1539,7 +1585,10 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
             canvas.drawRoundRect(rect, cornersRadius, cornersRadius, Theme.dialogs_tabletSeletedPaint);
         }
 
-        if (isFolder() && !archiveHidden || getIsPinned()) {
+        if (isFolder() && (!SharedConfig.archiveHidden || archiveBackgroundProgress != 0)) {
+            Theme.dialogs_pinnedPaint.setColor(AndroidUtilities.getOffsetColor(0, Theme.getColor(Theme.key_chats_pinnedOverlay, resourcesProvider), archiveBackgroundProgress, 1.0f));
+            canvas.drawRect(0, 0, getMeasuredWidth(), getMeasuredHeight(), Theme.dialogs_pinnedPaint);
+        } else if (getIsPinned()) {
             Theme.dialogs_pinnedPaint.setColor(Theme.getColor(Theme.key_chats_pinnedOverlay, resourcesProvider));
             canvas.drawRect(0, 0, getMeasuredWidth(), getMeasuredHeight(), Theme.dialogs_pinnedPaint);
         }
@@ -1557,7 +1606,10 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
                 canvas.drawRoundRect(rect, cornersRadius, cornersRadius, Theme.dialogs_tabletSeletedPaint);
             }
 
-            if (isFolder() && !archiveHidden || getIsPinned()) {
+            if (isFolder() && (!SharedConfig.archiveHidden || archiveBackgroundProgress != 0)) {
+                Theme.dialogs_pinnedPaint.setColor(AndroidUtilities.getOffsetColor(0, Theme.getColor(Theme.key_chats_pinnedOverlay, resourcesProvider), archiveBackgroundProgress, 1.0f));
+                canvas.drawRoundRect(rect, cornersRadius, cornersRadius, Theme.dialogs_pinnedPaint);
+            } else if (getIsPinned()) {
                 Theme.dialogs_pinnedPaint.setColor(Theme.getColor(Theme.key_chats_pinnedOverlay, resourcesProvider));
                 canvas.drawRoundRect(rect, cornersRadius, cornersRadius, Theme.dialogs_pinnedPaint);
             }
@@ -1818,10 +1870,16 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
         if (translationX != 0) {
             canvas.restore();
         }
+        if (isFolder() && translationX == 0 && archivedChatsDrawable != null) {
+            canvas.save();
+            canvas.clipRect(0, 0, getMeasuredWidth(), getMeasuredHeight());
+            archivedChatsDrawable.draw(canvas);
+            canvas.restore();
+        }
 
         if (useSeparator) {
             int left;
-            if (fullSeparator) {
+            if (fullSeparator || isFolder() && archiveHidden) {
                 left = 0;
             } else {
                 left = dp(messagePaddingStart);
@@ -1861,6 +1919,30 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
                     }
                     needInvalidate = true;
                 }
+            }
+        }
+
+        if (archiveHidden) {
+            if (archiveBackgroundProgress > 0.0f) {
+                archiveBackgroundProgress -= 16f / 230.0f;
+                if (archiveBackgroundProgress < 0.0f) {
+                    archiveBackgroundProgress = 0.0f;
+                }
+                if (avatarDrawable.getAvatarType() == AvatarDrawable.AVATAR_TYPE_ARCHIVED) {
+                    avatarDrawable.setArchivedAvatarHiddenProgress(CubicBezierInterpolator.EASE_OUT_QUINT.getInterpolation(archiveBackgroundProgress));
+                }
+                needInvalidate = true;
+            }
+        } else {
+            if (archiveBackgroundProgress < 1.0f) {
+                archiveBackgroundProgress += 16f / 230.0f;
+                if (archiveBackgroundProgress > 1.0f) {
+                    archiveBackgroundProgress = 1.0f;
+                }
+                if (avatarDrawable.getAvatarType() == AvatarDrawable.AVATAR_TYPE_ARCHIVED) {
+                    avatarDrawable.setArchivedAvatarHiddenProgress(CubicBezierInterpolator.EASE_OUT_QUINT.getInterpolation(archiveBackgroundProgress));
+                }
+                needInvalidate = true;
             }
         }
 

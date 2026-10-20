@@ -35,6 +35,7 @@ import org.telegram.ui.Components.DrawerMenuView;
 import org.telegram.ui.Components.FilterTabsView;
 import org.telegram.ui.Components.DialogsListView;
 import org.telegram.ui.Components.DialogsSwipeController;
+import org.telegram.ui.Components.DialogsViewPager;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RLottieDrawable;
 import org.telegram.ui.Components.RecyclerListView;
@@ -45,7 +46,8 @@ import java.util.HashSet;
 
 /**
  * Chat list demo: upstream DialogCell rows bound to plain {@link DialogItem}s, with the upstream
- * swipe actions, long-press selection mode and DialogsItemAnimator.
+ * swipe actions, long-press selection mode, DialogsItemAnimator, the hidden archive (pull down on
+ * "All Chats") and sideways swipes between folder pages ({@link DialogsViewPager}).
  */
 public class DemoDialogsFragment extends BaseFragment {
 
@@ -60,15 +62,26 @@ public class DemoDialogsFragment extends BaseFragment {
     private static final int ACTION_DELETE = 103;
     private static final int ACTION_READ = 104;
 
-    private static final int[] SWIPE_ACTIONS = {DialogCell.SWIPE_ACTION_ARCHIVE, DialogCell.SWIPE_ACTION_MUTE, DialogCell.SWIPE_ACTION_READ, DialogCell.SWIPE_ACTION_PIN, DialogCell.SWIPE_ACTION_DELETE};
-    private static final String[] SWIPE_NAMES = {"Archive", "Mute", "Read", "Pin", "Delete"};
+    /** -1: upstream SWIPE_GESTURE_FOLDERS (the default when folders exist): sideways swipes switch folders. */
+    private static final int[] SWIPE_ACTIONS = {-1, DialogCell.SWIPE_ACTION_ARCHIVE, DialogCell.SWIPE_ACTION_MUTE, DialogCell.SWIPE_ACTION_READ, DialogCell.SWIPE_ACTION_PIN, DialogCell.SWIPE_ACTION_DELETE};
+    private static final String[] SWIPE_NAMES = {"Switch folders", "Archive", "Mute", "Read", "Pin", "Delete"};
 
+    /** One folder page (upstream DialogsActivity.ViewPage). */
+    private static class Page {
+        DialogsListView listView;
+        Adapter adapter;
+        final ArrayList<DialogItem> dialogs = new ArrayList<>();
+    }
+
+    private final Page[] pages = new Page[2];
+    private DialogsViewPager viewPager;
+    // the visible page's views and items
     private DialogsListView listView;
     private Adapter adapter;
+    private ArrayList<DialogItem> dialogs;
     private DialogsActionMode actionMode;
     private ActionBarMenuItem swipeMenuItem;
     private ActionBarMenuSubItem swipeSubItem;
-    private final ArrayList<DialogItem> dialogs = new ArrayList<>();
     private final ArrayList<DialogItem> allDialogs = new ArrayList<>();
     private FilterTabsView filterTabsView;
     private DialogsFloatingButton floatingButton;
@@ -97,7 +110,9 @@ public class DemoDialogsFragment extends BaseFragment {
                     }
                 } else if (id == MENU_LINES) {
                     SharedConfig.useThreeLinesLayout = !SharedConfig.useThreeLinesLayout;
-                    adapter.notifyDataSetChanged();
+                    for (Page page : pages) {
+                        page.adapter.notifyDataSetChanged();
+                    }
                 } else if (id == MENU_SIMULATE) {
                     simulateUpdate();
                 } else if (id == MENU_NIGHT) {
@@ -126,8 +141,9 @@ public class DemoDialogsFragment extends BaseFragment {
         actionMode.addItem(ACTION_DELETE, R.drawable.msg_delete, "Delete");
         actionMode.addOverflowItem(ACTION_READ, R.drawable.msg_markread, "Mark as read");
 
+        // upstream: the archive starts pinned; the demo starts with it hidden to show the pull-down
+        SharedConfig.archiveHidden = true;
         fillDialogs();
-        applyFilter();
         createFilterTabs(context);
         actionMode.setFilterTabsView(filterTabsView);
         createDrawer(context);
@@ -136,8 +152,61 @@ public class DemoDialogsFragment extends BaseFragment {
         fragmentView = frameLayout;
         frameLayout.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
 
-        listView = new DialogsListView(context);
-        listView.setAdapter(adapter = new Adapter(context));
+        for (int a = 0; a < pages.length; a++) {
+            pages[a] = createPage(context);
+        }
+        setCurrentPage(pages[0]);
+        viewPager = new DialogsViewPager(context, pages[0].listView, pages[1].listView, filterTabsView, new DialogsViewPager.Delegate() {
+            @Override
+            public void onBindPage(View view, int tabId) {
+                fillPage(pageFor(view), tabId);
+            }
+
+            @Override
+            public void onPageChanged(View view, int tabId) {
+                currentTab = tabId;
+                setCurrentPage(pageFor(view));
+                updateDrawerSwipe();
+            }
+
+            @Override
+            public boolean canSwipe() {
+                DrawerLayoutContainer drawer = getParentLayout() != null ? getParentLayout().getDrawerLayoutContainer() : null;
+                return SWIPE_ACTIONS[swipeIndex] < 0 && !actionMode.isShowing() && (drawer == null || !drawer.isDrawerOpened());
+            }
+        });
+        frameLayout.addView(viewPager, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+
+        floatingButton = new DialogsFloatingButton(context);
+        floatingButton.setOnClickListener(v -> {
+            AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+            builder.setTitle("New message");
+            builder.setMessage("The host opens its own compose screen here.");
+            builder.setPositiveButton("OK", null);
+            showDialog(builder.create());
+        });
+        frameLayout.addView(floatingButton, DialogsFloatingButton.createLayoutParams());
+        for (Page page : pages) {
+            floatingButton.attachToList(page.listView);
+        }
+        return fragmentView;
+    }
+
+    private Page pageFor(View view) {
+        return pages[0].listView == view ? pages[0] : pages[1];
+    }
+
+    private void setCurrentPage(Page page) {
+        listView = page.listView;
+        adapter = page.adapter;
+        dialogs = page.dialogs;
+    }
+
+    private Page createPage(Context context) {
+        Page page = new Page();
+        DialogsListView listView;
+        page.listView = listView = new DialogsListView(context);
+        listView.setAdapter(page.adapter = new Adapter(context, page.dialogs));
         listView.setOnItemClickListener((view, position) -> {
             if (!(view instanceof DialogCell)) {
                 return;
@@ -162,7 +231,8 @@ public class DemoDialogsFragment extends BaseFragment {
             @Override
             public int getSwipeAction(DialogCell cell) {
                 if (cell.getDialog().isFolder) {
-                    return -1;
+                    // upstream: the archive row swipes to hide (or, when hidden, pin) the archive
+                    return DialogCell.SWIPE_ACTION_FOLDER;
                 }
                 return SWIPE_ACTIONS[swipeIndex];
             }
@@ -214,19 +284,8 @@ public class DemoDialogsFragment extends BaseFragment {
                 return true;
             }
         });
-        frameLayout.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
-
-        floatingButton = new DialogsFloatingButton(context);
-        floatingButton.setOnClickListener(v -> {
-            AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-            builder.setTitle("New message");
-            builder.setMessage("The host opens its own compose screen here.");
-            builder.setPositiveButton("OK", null);
-            showDialog(builder.create());
-        });
-        frameLayout.addView(floatingButton, DialogsFloatingButton.createLayoutParams());
-        floatingButton.attachToList(listView);
-        return fragmentView;
+        listView.setArchivePullDelegate(() -> !page.dialogs.isEmpty() && page.dialogs.get(0).isFolder);
+        return page;
     }
 
     // ---- folder tabs (upstream DialogsActivity filterTabsView) ----
@@ -238,20 +297,20 @@ public class DemoDialogsFragment extends BaseFragment {
         filterTabsView.setDelegate(new FilterTabsView.FilterTabsViewDelegate() {
             @Override
             public void onPageSelected(FilterTabsView.Tab tab, boolean forward) {
-                currentTab = tab.id;
                 if (actionMode.isShowing()) {
                     clearSelection();
                 }
-                applyFilter();
+                viewPager.onTabSelected(tab, forward);
             }
 
             @Override
             public void onPageScrolled(float progress) {
+                viewPager.onTabScrolled(progress);
             }
 
             @Override
             public void onSamePageSelected() {
-                listView.smoothScrollToPosition(0);
+                listView.scrollToTop(true);
             }
 
             @Override
@@ -310,19 +369,27 @@ public class DemoDialogsFragment extends BaseFragment {
         }
     }
 
-    private void applyFilter() {
-        dialogs.clear();
+    /** Upstream switchToCurrentSelectedMode: fills a page with a folder's chats, scrolled to the top. */
+    private void fillPage(Page page, int tab) {
+        page.dialogs.clear();
         for (DialogItem d : allDialogs) {
-            if (matches(currentTab, d) && (currentTab == 0 || !d.isFolder)) {
-                dialogs.add(d);
+            if (matches(tab, d) && (tab == 0 || !d.isFolder)) {
+                page.dialogs.add(d);
             }
         }
-        if (adapter != null) {
-            // a new folder is a new page upstream: no item animations for the swap
-            listView.setItemAnimator(null);
-            adapter.notifyDataSetChanged();
-            listView.scrollToPosition(0);
-            listView.post(() -> listView.setItemAnimator(listView.getDialogsItemAnimator()));
+        DialogsListView list = page.listView;
+        // a new folder is a new page upstream: no item animations for the swap
+        list.setItemAnimator(null);
+        page.adapter.notifyDataSetChanged();
+        list.updatePullState();
+        list.scrollToTop(false);
+        list.post(() -> list.setItemAnimator(list.getDialogsItemAnimator()));
+    }
+
+    /** Upstream updateDrawerSwipeEnabled: a right swipe opens the drawer on the first folder only. */
+    private void updateDrawerSwipe() {
+        if (getParentLayout() != null && getParentLayout().getDrawerLayoutContainer() != null) {
+            getParentLayout().getDrawerLayoutContainer().setAllowOpenDrawerBySwipe(currentTab == filterTabsView.getFirstTabId());
         }
     }
 
@@ -381,6 +448,9 @@ public class DemoDialogsFragment extends BaseFragment {
         if (getParentLayout() != null && getParentLayout().getDrawerLayoutContainer() != null) {
             getParentLayout().getDrawerLayoutContainer().setAllowOpenDrawer(true, false);
         }
+        if (filterTabsView != null) {
+            updateDrawerSwipe();
+        }
     }
 
     @Override
@@ -388,6 +458,7 @@ public class DemoDialogsFragment extends BaseFragment {
         super.onPause();
         if (getParentLayout() != null && getParentLayout().getDrawerLayoutContainer() != null) {
             getParentLayout().getDrawerLayoutContainer().setAllowOpenDrawer(false, false);
+            getParentLayout().getDrawerLayoutContainer().setAllowOpenDrawerBySwipe(true);
         }
     }
 
@@ -748,9 +819,11 @@ public class DemoDialogsFragment extends BaseFragment {
     private class Adapter extends RecyclerListView.SelectionAdapter {
 
         private final Context context;
+        private final ArrayList<DialogItem> dialogs;
 
-        Adapter(Context context) {
+        Adapter(Context context, ArrayList<DialogItem> dialogs) {
             this.context = context;
+            this.dialogs = dialogs;
             setHasStableIds(true);
         }
 
@@ -794,16 +867,13 @@ public class DemoDialogsFragment extends BaseFragment {
     public ArrayList<ThemeDescription> getThemeDescriptions() {
         // upstream DialogsActivity.getThemeDescriptions (DialogCell part)
         ArrayList<ThemeDescription> arrayList = new ArrayList<>();
-        RecyclerListView list = listView;
         arrayList.add(new ThemeDescription(fragmentView, ThemeDescription.FLAG_BACKGROUND, null, null, null, null, Theme.key_windowBackgroundWhite));
         arrayList.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_BACKGROUND, null, null, null, null, Theme.key_actionBarDefault));
-        arrayList.add(new ThemeDescription(list, ThemeDescription.FLAG_LISTGLOWCOLOR, null, null, null, null, Theme.key_actionBarDefault));
         arrayList.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_ITEMSCOLOR, null, null, null, null, Theme.key_actionBarDefaultIcon));
         arrayList.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_TITLECOLOR, null, null, null, null, Theme.key_actionBarDefaultTitle));
         arrayList.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_SELECTORCOLOR, null, null, null, null, Theme.key_actionBarDefaultSelector));
         arrayList.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_SUBMENUBACKGROUND, null, null, null, null, Theme.key_actionBarDefaultSubmenuBackground));
         arrayList.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_SUBMENUITEM, null, null, null, null, Theme.key_actionBarDefaultSubmenuItem));
-        arrayList.add(new ThemeDescription(list, ThemeDescription.FLAG_SELECTOR, null, null, null, null, Theme.key_listSelector));
         arrayList.addAll(actionMode.getThemeDescriptions());
         arrayList.addAll(floatingButton.getThemeDescriptions());
         if (drawerMenu != null) {
@@ -817,54 +887,68 @@ public class DemoDialogsFragment extends BaseFragment {
         arrayList.add(new ThemeDescription(null, 0, null, null, null, tabsDelegate, Theme.key_actionBarTabActiveText));
         arrayList.add(new ThemeDescription(null, 0, null, null, null, tabsDelegate, Theme.key_actionBarTabUnactiveText));
         arrayList.add(new ThemeDescription(null, 0, null, null, null, tabsDelegate, Theme.key_actionBarTabSelector));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{View.class}, Theme.dividerPaint, null, null, Theme.key_divider));
 
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, Theme.avatarDrawables, null, Theme.key_avatar_text));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_countPaint, null, null, Theme.key_chats_unreadCounter));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_countGrayPaint, null, null, Theme.key_chats_unreadCounterMuted));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_countTextPaint, null, null, Theme.key_chats_unreadCounterText));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_lockDrawable}, null, Theme.key_chats_secretIcon));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_pinnedDrawable, Theme.dialogs_reorderDrawable}, null, Theme.key_chats_pinnedIcon));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Paint[]{Theme.dialogs_namePaint[0], Theme.dialogs_namePaint[1], Theme.dialogs_searchNamePaint}, null, null, Theme.key_chats_name));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Paint[]{Theme.dialogs_nameEncryptedPaint[0], Theme.dialogs_nameEncryptedPaint[1], Theme.dialogs_searchNameEncryptedPaint}, null, null, Theme.key_chats_secretName));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_messagePaint[1], null, null, Theme.key_chats_message_threeLines));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_messagePaint[0], null, null, Theme.key_chats_message));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_messageNamePaint, null, null, Theme.key_chats_nameMessage_threeLines));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, null, null, Theme.key_chats_draft));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, Theme.dialogs_messagePrintingPaint, null, null, Theme.key_chats_actionMessage));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_timePaint, null, null, Theme.key_chats_date));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_pinnedPaint, null, null, Theme.key_chats_pinnedOverlay));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_tabletSeletedPaint, null, null, Theme.key_chats_tabletSelectedOverlay));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_checkDrawable}, null, Theme.key_chats_sentCheck));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_checkReadDrawable, Theme.dialogs_halfCheckDrawable}, null, Theme.key_chats_sentReadCheck));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_clockDrawable}, null, Theme.key_chats_sentClock));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_errorPaint, null, null, Theme.key_chats_sentError));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_errorDrawable}, null, Theme.key_chats_sentErrorIcon));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_verifiedCheckDrawable}, null, Theme.key_chats_verifiedCheck));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_verifiedDrawable}, null, Theme.key_chats_verifiedBackground));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_muteDrawable}, null, Theme.key_chats_muteIcon));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_mentionDrawable}, null, Theme.key_chats_mentionIcon));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, null, null, Theme.key_chats_archivePinBackground));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, null, null, Theme.key_chats_archiveBackground));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, null, null, Theme.key_chats_onlineCircle));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, null, null, Theme.key_windowBackgroundWhite));
-        arrayList.add(new ThemeDescription(list, ThemeDescription.FLAG_CHECKBOX, new Class[]{DialogCell.class}, new String[]{"checkBox"}, null, null, null, Theme.key_windowBackgroundWhite));
-        arrayList.add(new ThemeDescription(list, ThemeDescription.FLAG_CHECKBOXCHECK, new Class[]{DialogCell.class}, new String[]{"checkBox"}, null, null, null, Theme.key_checkboxCheck));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_archiveAvatarDrawable}, "Arrow1", Theme.key_avatar_backgroundArchived));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_archiveAvatarDrawable}, "Arrow2", Theme.key_avatar_backgroundArchived));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_archiveAvatarDrawable}, "Box2", Theme.key_avatar_text));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_archiveAvatarDrawable}, "Box1", Theme.key_avatar_text));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_pinArchiveDrawable}, "Arrow", Theme.key_chats_archiveIcon));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_pinArchiveDrawable}, "Line", Theme.key_chats_archiveIcon));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_unpinArchiveDrawable}, "Arrow", Theme.key_chats_archiveIcon));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_unpinArchiveDrawable}, "Line", Theme.key_chats_archiveIcon));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_archiveDrawable}, "Arrow", Theme.key_chats_archiveBackground));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_archiveDrawable}, "Box2", Theme.key_chats_archiveIcon));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_archiveDrawable}, "Box1", Theme.key_chats_archiveIcon));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_unarchiveDrawable}, "Arrow1", Theme.key_chats_archiveIcon));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_unarchiveDrawable}, "Arrow2", Theme.key_chats_archivePinBackground));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_unarchiveDrawable}, "Box2", Theme.key_chats_archiveIcon));
-        arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_unarchiveDrawable}, "Box1", Theme.key_chats_archiveIcon));
+        for (Page page : pages) {
+            RecyclerListView list = page.listView;
+            arrayList.add(new ThemeDescription(list, ThemeDescription.FLAG_LISTGLOWCOLOR, null, null, null, null, Theme.key_actionBarDefault));
+            arrayList.add(new ThemeDescription(list, ThemeDescription.FLAG_SELECTOR, null, null, null, null, Theme.key_listSelector));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{View.class}, Theme.dividerPaint, null, null, Theme.key_divider));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, Theme.avatarDrawables, null, Theme.key_avatar_text));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_countPaint, null, null, Theme.key_chats_unreadCounter));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_countGrayPaint, null, null, Theme.key_chats_unreadCounterMuted));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_countTextPaint, null, null, Theme.key_chats_unreadCounterText));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_lockDrawable}, null, Theme.key_chats_secretIcon));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_pinnedDrawable, Theme.dialogs_reorderDrawable}, null, Theme.key_chats_pinnedIcon));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Paint[]{Theme.dialogs_namePaint[0], Theme.dialogs_namePaint[1], Theme.dialogs_searchNamePaint}, null, null, Theme.key_chats_name));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Paint[]{Theme.dialogs_nameEncryptedPaint[0], Theme.dialogs_nameEncryptedPaint[1], Theme.dialogs_searchNameEncryptedPaint}, null, null, Theme.key_chats_secretName));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_messagePaint[1], null, null, Theme.key_chats_message_threeLines));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_messagePaint[0], null, null, Theme.key_chats_message));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_messageNamePaint, null, null, Theme.key_chats_nameMessage_threeLines));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, null, null, Theme.key_chats_draft));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, Theme.dialogs_messagePrintingPaint, null, null, Theme.key_chats_actionMessage));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_timePaint, null, null, Theme.key_chats_date));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_pinnedPaint, null, null, Theme.key_chats_pinnedOverlay));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_tabletSeletedPaint, null, null, Theme.key_chats_tabletSelectedOverlay));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_checkDrawable}, null, Theme.key_chats_sentCheck));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_checkReadDrawable, Theme.dialogs_halfCheckDrawable}, null, Theme.key_chats_sentReadCheck));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_clockDrawable}, null, Theme.key_chats_sentClock));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, Theme.dialogs_errorPaint, null, null, Theme.key_chats_sentError));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_errorDrawable}, null, Theme.key_chats_sentErrorIcon));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_verifiedCheckDrawable}, null, Theme.key_chats_verifiedCheck));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_verifiedDrawable}, null, Theme.key_chats_verifiedBackground));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_muteDrawable}, null, Theme.key_chats_muteIcon));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, new Drawable[]{Theme.dialogs_mentionDrawable}, null, Theme.key_chats_mentionIcon));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, null, null, Theme.key_chats_archivePinBackground));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, null, null, Theme.key_chats_archiveBackground));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, null, null, Theme.key_chats_onlineCircle));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, null, null, Theme.key_windowBackgroundWhite));
+            arrayList.add(new ThemeDescription(list, ThemeDescription.FLAG_CHECKBOX, new Class[]{DialogCell.class}, new String[]{"checkBox"}, null, null, null, Theme.key_windowBackgroundWhite));
+            arrayList.add(new ThemeDescription(list, ThemeDescription.FLAG_CHECKBOXCHECK, new Class[]{DialogCell.class}, new String[]{"checkBox"}, null, null, null, Theme.key_checkboxCheck));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_archiveAvatarDrawable}, "Arrow1", Theme.key_avatar_backgroundArchived));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_archiveAvatarDrawable}, "Arrow2", Theme.key_avatar_backgroundArchived));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_archiveAvatarDrawable}, "Box2", Theme.key_avatar_text));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_archiveAvatarDrawable}, "Box1", Theme.key_avatar_text));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_pinArchiveDrawable}, "Arrow", Theme.key_chats_archiveIcon));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_pinArchiveDrawable}, "Line", Theme.key_chats_archiveIcon));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_unpinArchiveDrawable}, "Arrow", Theme.key_chats_archiveIcon));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_unpinArchiveDrawable}, "Line", Theme.key_chats_archiveIcon));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_archiveDrawable}, "Arrow", Theme.key_chats_archiveBackground));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_archiveDrawable}, "Box2", Theme.key_chats_archiveIcon));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_archiveDrawable}, "Box1", Theme.key_chats_archiveIcon));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_unarchiveDrawable}, "Arrow1", Theme.key_chats_archiveIcon));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_unarchiveDrawable}, "Arrow2", Theme.key_chats_archivePinBackground));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_unarchiveDrawable}, "Box2", Theme.key_chats_archiveIcon));
+            arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, new RLottieDrawable[]{Theme.dialogs_unarchiveDrawable}, "Box1", Theme.key_chats_archiveIcon));
+        }
+        ThemeDescription.ThemeDescriptionDelegate pullDelegate = () -> {
+            for (Page page : pages) {
+                page.listView.updatePullColors();
+                page.listView.invalidate();
+            }
+        };
+        arrayList.add(new ThemeDescription(null, 0, null, null, null, pullDelegate, Theme.key_chats_archivePullDownBackground));
+        arrayList.add(new ThemeDescription(null, 0, null, null, null, pullDelegate, Theme.key_chats_archivePullDownBackgroundActive));
+        arrayList.add(new ThemeDescription(null, 0, null, null, null, pullDelegate, Theme.key_avatar_backgroundArchivedHidden));
         return arrayList;
     }
 }

@@ -18,6 +18,12 @@ public class SharedConfig {
     public static boolean allowBigEmoji = true;
     /** Chat list preview: false = upstream "two lines" (72dp rows), true = "three lines" (78dp rows). */
     public static boolean useThreeLinesLayout;
+    /** Chat list: the archive row is hidden above the list and revealed by pulling down (upstream setting). */
+    public static boolean archiveHidden;
+
+    public static void toggleArchiveHidden() {
+        archiveHidden = !archiveHidden;
+    }
 
     public static final boolean noStatusBar = true;
     public static int fontSize = 16;

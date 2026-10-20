@@ -6,6 +6,7 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.DialogCell;
 
@@ -18,6 +19,8 @@ import org.telegram.ui.Cells.DialogCell;
  * <li>{@link DialogCell#SWIPE_ACTION_ARCHIVE}, {@link DialogCell#SWIPE_ACTION_UNARCHIVE} and
  *     {@link DialogCell#SWIPE_ACTION_FOLDER} slide the row out ({@link Delegate#onSwiped}); the host
  *     removes it (call {@link DialogsItemAnimator#prepareForRemove()} first, as upstream does);</li>
+ * <li>{@link DialogCell#SWIPE_ACTION_FOLDER} on the archive row hides it ({@link DialogsListView#toggleArchiveHidden});
+ *     on a hidden archive it springs back and pins it again (upstream);</li>
  * <li>pin / read / mute / delete spring back ({@code swipeFolderBack}) and report
  *     {@link Delegate#onSwipeAction} so the host toggles the state.</li>
  * </ul>
@@ -70,6 +73,10 @@ public class DialogsSwipeController extends ItemTouchHelper.Callback {
     }
 
     private static boolean springsBack(int action) {
+        // upstream: the archive row's "Pin" (archive hidden) springs back, its "Hide" slides out
+        if (action == DialogCell.SWIPE_ACTION_FOLDER) {
+            return SharedConfig.archiveHidden;
+        }
         return action == DialogCell.SWIPE_ACTION_MUTE || action == DialogCell.SWIPE_ACTION_READ
                 || action == DialogCell.SWIPE_ACTION_PIN || action == DialogCell.SWIPE_ACTION_DELETE;
     }
@@ -136,6 +143,10 @@ public class DialogsSwipeController extends ItemTouchHelper.Callback {
     public void onSwiped(RecyclerView.ViewHolder viewHolder, int direction) {
         if (viewHolder != null && viewHolder.itemView instanceof DialogCell) {
             DialogCell dialogCell = (DialogCell) viewHolder.itemView;
+            if (dialogCell.getSwipeAction() == DialogCell.SWIPE_ACTION_FOLDER) {
+                listView.toggleArchiveHidden(false, dialogCell);
+                return;
+            }
             delegate.onSwiped(dialogCell, dialogCell.getSwipeAction());
         }
     }
@@ -147,7 +158,11 @@ public class DialogsSwipeController extends ItemTouchHelper.Callback {
             if (itemTouchHelper.checkHorizontalSwipe(null, ItemTouchHelper.LEFT) != 0) {
                 if (currentItemViewHolder != null && currentItemViewHolder.itemView instanceof DialogCell) {
                     DialogCell dialogCell = (DialogCell) currentItemViewHolder.itemView;
-                    delegate.onSwipeAction(dialogCell, dialogCell.getSwipeAction());
+                    if (dialogCell.getSwipeAction() == DialogCell.SWIPE_ACTION_FOLDER) {
+                        listView.toggleArchiveHidden(false, dialogCell);
+                    } else {
+                        delegate.onSwipeAction(dialogCell, dialogCell.getSwipeAction());
+                    }
                 }
             }
         }
