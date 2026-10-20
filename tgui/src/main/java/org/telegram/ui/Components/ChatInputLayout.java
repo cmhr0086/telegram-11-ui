@@ -7,6 +7,7 @@ import android.widget.FrameLayout;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.AdjustPanLayoutHelper;
 import org.telegram.ui.ActionBar.INavigationLayout;
 
 /**
@@ -20,7 +21,10 @@ import org.telegram.ui.ActionBar.INavigationLayout;
  *     <li>while the emoji panel slides in or out, the input and the content follow it (upstream
  *     ChatActivity's {@code bottomPanelTranslationYChanged}): the content keeps its height for the
  *     larger panel padding, extends upwards by the panel height and is translated with it;</li>
- *     <li>the chat background (wallpaper) is drawn behind everything, as SizeNotifierFrameLayout does.</li>
+ *     <li>the chat background (wallpaper) is drawn behind everything, as SizeNotifierFrameLayout does;</li>
+ *     <li>when the keyboard opens or closes, the window resize is animated with the keyboard
+ *     ({@link AdjustPanLayoutHelper}, as upstream ChatActivityFragmentView): the layout slides while
+ *     the action bar and the wallpaper stay in place.</li>
  * </ul>
  * Add the action bar last so it stays on top.
  */
@@ -29,14 +33,83 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
     private ChatActivityEnterView enterView;
     private View contentView;
     private ActionBar actionBar;
+    private final INavigationLayout navigationLayout;
     private int emojiViewPadding;
 
     public ChatInputLayout(Context context, INavigationLayout parentLayout) {
         super(context, parentLayout);
+        navigationLayout = parentLayout;
     }
 
     public void setEnterView(ChatActivityEnterView enterView) {
         this.enterView = enterView;
+        if (enterView != null && adjustPanLayoutHelper != null) {
+            enterView.setAdjustPanLayoutHelper(adjustPanLayoutHelper);
+        }
+    }
+
+    /** upstream ChatActivityFragmentView's keyboard animation, minus the chat-only views. */
+    @Override
+    protected AdjustPanLayoutHelper createAdjustPanLayoutHelper() {
+        return new AdjustPanLayoutHelper(this) {
+            @Override
+            protected void onTransitionStart(boolean keyboardVisible, int contentHeight) {
+                if (enterView != null) {
+                    enterView.onAdjustPanTransitionStart(keyboardVisible, contentHeight);
+                }
+            }
+
+            @Override
+            protected void onTransitionEnd() {
+                if (enterView != null) {
+                    enterView.onAdjustPanTransitionEnd();
+                }
+            }
+
+            @Override
+            protected void onPanTranslationUpdate(float y, float progress, boolean keyboardVisible) {
+                if (navigationLayout != null && navigationLayout.isPreviewOpenAnimationInProgress()) {
+                    return;
+                }
+                if (actionBar != null) {
+                    actionBar.setTranslationY(y);
+                }
+                setBackgroundTranslation((int) y);
+                if (contentView != null) {
+                    contentView.invalidate();
+                }
+                if (enterView != null) {
+                    enterView.onAdjustPanTransitionUpdate(y, progress, keyboardVisible);
+                }
+            }
+
+            @Override
+            protected boolean heightAnimationEnabled() {
+                if (AndroidUtilities.isInMultiwindow || navigationLayout == null || enterView == null) {
+                    return false;
+                }
+                return !navigationLayout.isTransitionAnimationInProgress() && !navigationLayout.isPreviewOpenAnimationInProgress();
+            }
+        };
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (adjustPanLayoutHelper != null) {
+            adjustPanLayoutHelper.onAttach();
+            if (enterView != null) {
+                enterView.setAdjustPanLayoutHelper(adjustPanLayoutHelper);
+            }
+        }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        if (adjustPanLayoutHelper != null) {
+            adjustPanLayoutHelper.onDetach();
+        }
     }
 
     /** The chat list (or any content) that should end where the input begins. */
