@@ -4,6 +4,8 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -12,6 +14,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.AdjustPanLayoutHelper;
 import org.telegram.ui.ActionBar.INavigationLayout;
+import org.telegram.ui.ActionBar.Theme;
 
 /**
  * tgui: root layout for a screen with a {@link ChatActivityEnterView}, carrying over the parts of
@@ -45,6 +48,13 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
         super(context, parentLayout);
     }
 
+    private Theme.ResourcesProvider resourcesProvider;
+
+    /** Colours for the keyboard-area fill; the same provider as the input. */
+    public void setResourcesProvider(Theme.ResourcesProvider resourcesProvider) {
+        this.resourcesProvider = resourcesProvider;
+    }
+
     public void setEnterView(ChatActivityEnterView enterView) {
         this.enterView = enterView;
     }
@@ -69,6 +79,9 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
     }
 
     private ValueAnimator keyboardMotionAnimator;
+    // the keyboard motion is running: the space under the raised input is filled like a keyboard area
+    private boolean keyboardMotionActive;
+    private final Paint keyboardFillPaint = new Paint();
     private final Runnable keyboardLiftTimeout = () -> animateKeyboardMotion(currentKeyboardMotion(), 0);
 
     private float currentKeyboardMotion() {
@@ -80,9 +93,30 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
         if (contentView != null) {
             contentView.setTranslationY(translation);
         }
+        invalidate();
     }
 
+    @Override
+    protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        if (child == enterView && keyboardMotionActive && enterView.getTranslationY() < 0) {
+            // tgui: instead of the input hovering over the wallpaper while the IME is still fading
+            // in (or already gone), show the keyboard area in the emoji panel colour, as upstream
+            // does when it keeps the emoji panel as the keyboard placeholder
+            keyboardFillPaint.setColor(Theme.getColor(Theme.key_chat_emojiPanelBackground, resourcesProvider));
+            float top = enterView.getBottom() + enterView.getTranslationY();
+            canvas.drawRect(0, top, getMeasuredWidth(), getMeasuredHeight(), keyboardFillPaint);
+        }
+        return super.drawChild(canvas, child, drawingTime);
+    }
+
+    // uptime when the current lift (tap → keyboard expected) started, 0 when none runs
+    private long keyboardLiftStart;
+
     private void animateKeyboardMotion(float from, float to) {
+        animateKeyboardMotion(from, to, AdjustPanLayoutHelper.keyboardDuration);
+    }
+
+    private void animateKeyboardMotion(float from, float to, long duration) {
         if (keyboardMotionAnimator != null) {
             keyboardMotionAnimator.cancel();
             keyboardMotionAnimator = null;
@@ -91,9 +125,11 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
             return;
         }
         if (Math.abs(from - to) < 1) {
+            keyboardMotionActive = to != 0;
             setKeyboardMotion(to);
             return;
         }
+        keyboardMotionActive = true;
         setKeyboardMotion(from);
         keyboardMotionAnimator = ValueAnimator.ofFloat(from, to);
         keyboardMotionAnimator.addUpdateListener(a -> setKeyboardMotion((float) a.getAnimatedValue()));
@@ -102,10 +138,14 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
             public void onAnimationEnd(Animator animation) {
                 if (keyboardMotionAnimator == animation) {
                     keyboardMotionAnimator = null;
+                    if (enterView != null && enterView.getTranslationY() == 0) {
+                        keyboardMotionActive = false;
+                        invalidate();
+                    }
                 }
             }
         });
-        keyboardMotionAnimator.setDuration(AdjustPanLayoutHelper.keyboardDuration);
+        keyboardMotionAnimator.setDuration(duration);
         keyboardMotionAnimator.setInterpolator(AdjustPanLayoutHelper.keyboardInterpolator);
         keyboardMotionAnimator.start();
     }
@@ -121,6 +161,7 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
             return;
         }
         animateKeyboardMotion(currentKeyboardMotion(), -expectedKeyboardHeight);
+        keyboardLiftStart = android.os.SystemClock.uptimeMillis();
         AndroidUtilities.cancelRunOnUIThread(keyboardLiftTimeout);
         AndroidUtilities.runOnUIThread(keyboardLiftTimeout, 1000);
     }
@@ -273,7 +314,16 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
         int newInputBottom = enterView.getBottom();
         if (oldInputBottom > 0 && newInputBottom != oldInputBottom && !enterView.panelAnimationInProgress()) {
             AndroidUtilities.cancelRunOnUIThread(keyboardLiftTimeout);
-            animateKeyboardMotion(currentKeyboardMotion() + oldInputBottom - newInputBottom, 0);
+            // the keyboard usually arrives while the lift is still running (~250 ms after the tap on
+            // a Mate 9): finish in the lift's remaining time instead of starting a new ease, so the
+            // input is not left behind the keyboard
+            long duration = AdjustPanLayoutHelper.keyboardDuration;
+            if (keyboardLiftStart != 0 && keyboardMotionAnimator != null) {
+                long elapsed = android.os.SystemClock.uptimeMillis() - keyboardLiftStart;
+                duration = Math.max(80, AdjustPanLayoutHelper.keyboardDuration - elapsed);
+            }
+            keyboardLiftStart = 0;
+            animateKeyboardMotion(currentKeyboardMotion() + oldInputBottom - newInputBottom, 0, duration);
         }
         notifyHeightChanged();
     }
