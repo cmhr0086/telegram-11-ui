@@ -3225,7 +3225,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         });
 
         SharedPreferences sharedPreferences = MessagesController.getGlobalMainSettings();
-        keyboardHeight = sharedPreferences.getInt("kbd_height", dp(200));
+        keyboardHeight = sharedPreferences.getInt("kbd_height", defaultKeyboardHeight());
         keyboardHeightLand = sharedPreferences.getInt("kbd_height_land3", dp(200));
 
         setRecordVideoButtonVisible(false, false);
@@ -7869,7 +7869,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             public void setTranslationY(float translationY) {
                 super.setTranslationY(translationY);
                 if (panelAnimation != null && animatingContentType == 0) {
-                    delegate.bottomPanelTranslationYChanged(translationY);
+                    dispatchBottomPanelTranslation(translationY);
                 }
             }
         };
@@ -8160,7 +8160,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             currentPopupContentType = contentType;
 
             if (keyboardHeight <= 0) {
-                keyboardHeight = MessagesController.getGlobalEmojiSettings().getInt("kbd_height", dp(200));
+                keyboardHeight = MessagesController.getGlobalEmojiSettings().getInt("kbd_height", defaultKeyboardHeight());
             }
             if (keyboardHeightLand <= 0) {
                 keyboardHeightLand = MessagesController.getGlobalEmojiSettings().getInt("kbd_height_land3", dp(200));
@@ -8188,7 +8188,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 if (smoothKeyboard && !keyboardVisible && currentHeight != previousHeight && allowAnimation) {
                     Runnable onAnimationEndRunnuble = () -> {
                         if (delegate != null) {
-                            delegate.bottomPanelTranslationYChanged(0);
+                            dispatchBottomPanelTranslation(0);
                         }
                         requestLayout();
                     };
@@ -8241,7 +8241,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                                 }
                             }
                             if (delegate != null) {
-                                delegate.bottomPanelTranslationYChanged(0);
+                                dispatchBottomPanelTranslation(0);
                             }
                             requestLayout();
                         };
@@ -8265,7 +8265,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                         requestLayout();
                     } else {
                         if (delegate != null) {
-                            delegate.bottomPanelTranslationYChanged(0);
+                            dispatchBottomPanelTranslation(0);
                         }
                         emojiPadding = 0;
                         sizeNotifierLayout.removeView(emojiView);
@@ -8275,7 +8275,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 } else {
                     removeEmojiViewAfterAnimation = false;
                     if (delegate != null) {
-                        delegate.bottomPanelTranslationYChanged(0);
+                        dispatchBottomPanelTranslation(0);
                     }
                     sizeNotifierLayout.removeView(emojiView);
                     emojiView = null;
@@ -8573,7 +8573,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                                 public void onAnimationEnd(Animator animation) {
                                     panelAnimation = null;
                                     if (delegate != null) {
-                                        delegate.bottomPanelTranslationYChanged(0);
+                                        dispatchBottomPanelTranslation(0);
                                     }
                                     requestLayout();
                                     notificationsLocker.unlock();
@@ -9081,6 +9081,29 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
     public AdjustPanLayoutHelper getAdjustPanLayoutHelper() {
         return adjustPanLayoutHelper;
+    }
+
+    /**
+     * tgui: upstream ChatActivity moves the input and the chat list with the sliding emoji panel in
+     * {@code bottomPanelTranslationYChanged}; {@link ChatInputLayout} does that part here, then the
+     * host delegate is told as before.
+     */
+    /**
+     * tgui: upstream falls back to 200dp for the emoji panel until the keyboard has been measured
+     * once ("kbd_height"), which looks short on phones; estimate a typical portrait keyboard instead.
+     */
+    private static int defaultKeyboardHeight() {
+        int longSide = Math.max(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y);
+        return Math.max(dp(200), (int) (longSide * 0.38f));
+    }
+
+    private void dispatchBottomPanelTranslation(float translation) {
+        if (sizeNotifierLayout instanceof ChatInputLayout) {
+            ((ChatInputLayout) sizeNotifierLayout).onBottomPanelTranslationYChanged(translation);
+        }
+        if (delegate != null) {
+            delegate.bottomPanelTranslationYChanged(translation);
+        }
     }
 
     public boolean panelAnimationInProgress() {
