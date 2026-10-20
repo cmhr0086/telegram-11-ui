@@ -77,6 +77,8 @@ public class DrawerLayoutContainer extends FrameLayout {
     private boolean hasCutout;
 
     private Object lastInsets;
+    private boolean imeAnimationRunning;
+    private WindowInsets deferredInsets;
     private boolean inLayout;
     private int minDrawerMargin;
     private float scrimOpacity;
@@ -106,7 +108,43 @@ public class DrawerLayoutContainer extends FrameLayout {
 
         if (Build.VERSION.SDK_INT >= 21) {
             setFitsSystemWindows(true);
+            if (Build.VERSION.SDK_INT >= 30) {
+                // tgui: while the IME animates, keep the larger content area (apply the smaller of
+                // the start / end IME insets) so views following the keyboard frame by frame are
+                // never laid out — and clipped — inside the final, smaller area too early
+                setWindowInsetsAnimationCallback(new android.view.WindowInsetsAnimation.Callback(android.view.WindowInsetsAnimation.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                    @Override
+                    public void onPrepare(@androidx.annotation.NonNull android.view.WindowInsetsAnimation animation) {
+                        if ((animation.getTypeMask() & WindowInsets.Type.ime()) != 0) {
+                            imeAnimationRunning = true;
+                        }
+                    }
+
+                    @androidx.annotation.NonNull
+                    @Override
+                    public WindowInsets onProgress(@androidx.annotation.NonNull WindowInsets insets, @androidx.annotation.NonNull java.util.List<android.view.WindowInsetsAnimation> runningAnimations) {
+                        return insets;
+                    }
+
+                    @Override
+                    public void onEnd(@androidx.annotation.NonNull android.view.WindowInsetsAnimation animation) {
+                        if ((animation.getTypeMask() & WindowInsets.Type.ime()) != 0) {
+                            imeAnimationRunning = false;
+                            WindowInsets pending = deferredInsets;
+                            deferredInsets = null;
+                            if (pending != null) {
+                                dispatchApplyWindowInsets(pending);
+                            }
+                        }
+                    }
+                });
+            }
             setOnApplyWindowInsetsListener((v, insets) -> {
+                if (Build.VERSION.SDK_INT >= 30 && imeAnimationRunning && lastInsets != null
+                        && insets.getInsets(WindowInsets.Type.ime()).bottom > ((WindowInsets) lastInsets).getInsets(WindowInsets.Type.ime()).bottom) {
+                    deferredInsets = insets;
+                    return WindowInsets.CONSUMED;
+                }
                 if (Build.VERSION.SDK_INT >= 30) {
                     boolean newKeyboardVisibility = insets.isVisible(WindowInsets.Type.ime());
                     int imeHeight = insets.getInsets(WindowInsets.Type.ime()).bottom;

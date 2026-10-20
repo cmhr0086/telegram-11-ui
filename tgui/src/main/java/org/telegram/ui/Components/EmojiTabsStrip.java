@@ -293,8 +293,11 @@ public class EmojiTabsStrip extends ScrollableHorizontalScrollView {
             recentTab.id = (long) "recent".hashCode();
         }
         if (!includeAnimated) {
+            // tgui: no pack tabs follow the categories, so they are spread over the full width
+            // (upstream's non-animated layout) but keep the animated Lottie icons
+            forceTabsShow = false;
             for (int i = 0; i < emojiTabsDrawableIds.length; ++i) {
-                contentView.addView(new EmojiTabButton(context, emojiTabsDrawableIds[i], false, i == 0));
+                contentView.addView(new EmojiTabButton(context, emojiTabsDrawableIds[i], emojiTabsAnimatedDrawableIds[i], false, false));
             }
             updateClickListeners();
         } else {
@@ -390,10 +393,10 @@ public class EmojiTabsStrip extends ScrollableHorizontalScrollView {
      * the initial (non-animated) state and shows the settings tab, as upstream does once packs load.
      */
     public void updateEmojiPacks(ArrayList<?> emojiPacks) {
+        first = false;
         if (!includeAnimated) {
             return;
         }
-        first = false;
         if (settingsTab != null) {
             settingsTab.bringToFront();
             if (settingsTab.getAlpha() < 1) {

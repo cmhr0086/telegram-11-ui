@@ -542,9 +542,10 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
             }
         });
 
-        // tgui: includeAnimated = true gives upstream's look for non-premium users (recent + the
-        // animated category pill); there are no custom emoji pack tabs and no settings tab
-        emojiTabs = new EmojiTabsStrip(context, resourcesProvider, true, true, true, 0, null) {
+        // tgui: without custom emoji packs the collapsible category pill has nothing to make room
+        // for, so recent + the 8 categories fill the width (includeAnimated = false; the strip still
+        // uses the animated category icons)
+        emojiTabs = new EmojiTabsStrip(context, resourcesProvider, true, true, false, 0, null) {
             @Override
             public void setTranslationY(float translationY) {
                 if (getTranslationY() != translationY) {

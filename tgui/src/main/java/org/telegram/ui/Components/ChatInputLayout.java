@@ -6,9 +6,16 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.os.Build;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
+
+import androidx.annotation.NonNull;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsAnimationCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.ActionBar;
@@ -33,7 +40,10 @@ import org.telegram.ui.ActionBar.Theme;
  *     frame and is too heavy on older phones): when the field is tapped the input and the content
  *     are lifted right away to the remembered keyboard height, and whenever the window resizes for
  *     the keyboard they keep their on-screen position and ease into the new layout. Only
- *     {@code translationY} of those two views changes, so there is no relayout per frame.</li>
+ *     {@code translationY} of those two views changes, so there is no relayout per frame. On
+ *     Android 11+ the input instead follows the IME frame by frame through
+ *     {@link WindowInsetsAnimationCompat}, staying on the keyboard's top edge (or on the emoji
+ *     panel while the two swap).</li>
  * </ul>
  * Add the action bar last so it stays on top.
  */
@@ -46,6 +56,71 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
 
     public ChatInputLayout(Context context, INavigationLayout parentLayout) {
         super(context, parentLayout);
+        if (Build.VERSION.SDK_INT >= 30) {
+            ViewCompat.setWindowInsetsAnimationCallback(this, new WindowInsetsAnimationCompat.Callback(WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                @Override
+                public void onPrepare(@NonNull WindowInsetsAnimationCompat animation) {
+                    if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) {
+                        imeAnimating = true;
+                        // the emoji panel and the keyboard swap: the input keeps the panel height
+                        panelAtImeStart = enterView != null && enterView.isPopupShowing() ? enterView.getEmojiPadding() : 0;
+                        AndroidUtilities.cancelRunOnUIThread(keyboardLiftTimeout);
+                        if (keyboardMotionAnimator != null) {
+                            keyboardMotionAnimator.cancel();
+                            keyboardMotionAnimator = null;
+                        }
+                        keyboardMotionActive = false;
+                    }
+                }
+
+                @NonNull
+                @Override
+                public WindowInsetsCompat onProgress(@NonNull WindowInsetsCompat insets, @NonNull java.util.List<WindowInsetsAnimationCompat> runningAnimations) {
+                    if (imeAnimating) {
+                        Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+                        Insets nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars());
+                        imeBottom = ime.bottom;
+                        navBottom = nav.bottom;
+                        followIme();
+                    }
+                    return insets;
+                }
+
+                @Override
+                public void onEnd(@NonNull WindowInsetsAnimationCompat animation) {
+                    if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) {
+                        imeAnimating = false;
+                        panelAtImeStart = 0;
+                        if (enterView != null && !enterView.panelAnimationInProgress()) {
+                            setKeyboardMotion(0);
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    // Android 11+: an IME show / hide animation is running, the input follows its current inset
+    private boolean imeAnimating;
+    private int imeBottom, navBottom;
+    private int panelAtImeStart;
+    private final int[] tmpLocation = new int[2];
+    /**
+     * Puts the input on the IME's current top edge: the translation is the difference between
+     * where the last layout put it and where the keyboard (or, while the emoji panel and the
+     * keyboard swap, the panel) is right now. The layout itself catches up whenever the window
+     * resizes; {@link #onLayout} re-applies this so there is no jump.
+     */
+    private void followIme() {
+        if (enterView == null || enterView.panelAnimationInProgress() || enterView.getHeight() == 0) {
+            return;
+        }
+        enterView.getLocationInWindow(tmpLocation);
+        float laidBottom = tmpLocation[1] - enterView.getTranslationY() + enterView.getHeight();
+        int windowHeight = getRootView().getHeight();
+        int panel = Math.max(enterView.isPopupShowing() ? enterView.getEmojiPadding() : 0, panelAtImeStart);
+        float desiredBottom = windowHeight - Math.max(imeBottom, navBottom + panel);
+        setKeyboardMotion(desiredBottom - laidBottom);
     }
 
     private Theme.ResourcesProvider resourcesProvider;
@@ -98,7 +173,7 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
 
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
-        if (child == enterView && keyboardMotionActive && enterView.getTranslationY() < 0) {
+        if (child == enterView && (keyboardMotionActive || imeAnimating && panelAtImeStart > 0) && enterView.getTranslationY() < 0) {
             // tgui: instead of the input hovering over the wallpaper while the IME is still fading
             // in (or already gone), show the keyboard area in the emoji panel colour, as upstream
             // does when it keeps the emoji panel as the keyboard placeholder
@@ -156,6 +231,9 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
      * has not resized within a second (hardware keyboard, IME refused), they go back down.
      */
     public void onKeyboardRequested(int expectedKeyboardHeight) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            return; // the IME animation callback moves the input
+        }
         if (enterView == null || expectedKeyboardHeight <= 0 || measureKeyboardHeight() > AndroidUtilities.dp(20)
                 || enterView.isPopupShowing() || enterView.panelAnimationInProgress() || AndroidUtilities.isInMultiwindow) {
             return;
@@ -312,7 +390,9 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
         }
         // keyboard opened or closed: keep the input where it is on screen and ease it into place
         int newInputBottom = enterView.getBottom();
-        if (oldInputBottom > 0 && newInputBottom != oldInputBottom && !enterView.panelAnimationInProgress()) {
+        if (imeAnimating) {
+            followIme();
+        } else if (oldInputBottom > 0 && newInputBottom != oldInputBottom && !enterView.panelAnimationInProgress()) {
             AndroidUtilities.cancelRunOnUIThread(keyboardLiftTimeout);
             // the keyboard usually arrives while the lift is still running (~250 ms after the tap on
             // a Mate 9): finish in the lift's remaining time instead of starting a new ease, so the
