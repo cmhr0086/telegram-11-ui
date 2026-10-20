@@ -13,6 +13,10 @@ import android.content.SharedPreferences;
 // tgui: trimmed upstream SharedConfig, only the UI-related settings remain.
 public class SharedConfig {
 
+    /** Draw emoji with the system font instead of the bundled bitmaps (upstream setting). */
+    public static boolean useSystemEmoji;
+    public static boolean allowBigEmoji = true;
+
     public static final boolean noStatusBar = true;
     public static int fontSize = 16;
     public static int bubbleRadius = 17;

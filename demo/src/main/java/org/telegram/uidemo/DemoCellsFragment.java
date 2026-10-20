@@ -27,6 +27,7 @@ public class DemoCellsFragment extends DemoListFragment {
     private static final int ROW_DETAIL = 30;
     private static final int ROW_VALUE = 31;
     private static final int ROW_ICON_VALUE = 32;
+    private static final int ROW_BIO = 33;
 
     private static final String[] SIZES = {"Small", "Medium", "Large"};
 
@@ -58,6 +59,7 @@ public class DemoCellsFragment extends DemoListFragment {
 
         items.add(header("Values"));
         items.add(new Item(TYPE_DETAIL, ROW_DETAIL, "Username").value("@telegram_ui_demo"));
+        items.add(new Item(TYPE_DETAIL, ROW_BIO, "Building Telegram-style UIs \uD83D\uDE80\u2728\uD83D\uDC4D").value("Bio"));
         items.add(new Item(TYPE_SETTINGS, ROW_VALUE, "Text size").value(SIZES[selectedSize]));
         items.add(text(ROW_ICON_VALUE, "Language", R.drawable.msg_language).value("English"));
         items.add(text(0, "Notifications and Sounds", R.drawable.msg_notifications));

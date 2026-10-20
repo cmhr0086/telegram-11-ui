@@ -90,8 +90,9 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 | 弹窗 | `AlertDialog`（`AlertDialogDecor`、`DarkAlertDialog`）、`BottomSheet` |
 | 设置项 | `HeaderCell`、`TextCell`、`TextSettingsCell`、`TextCheckCell`、`TextDetailSettingsCell`、`TextInfoPrivacyCell`、`ShadowSectionCell`、`NotificationsCheckCell`、`RadioCell`、`TextRadioCell`、`CheckBoxCell`、`DividerCell`、`EmptyCell` |
 | 列表与控件 | `RecyclerListView` + 上游 RecyclerView fork、`Switch`、`CheckBox2`、`CheckBoxSquare`、`RadioButton`、`EditTextBoldCursor`、`AnimatedTextView`、`LinkSpanDrawable`、`RadialProgressView`、`LineProgressView`、`EmptyTextProgressView`、`SizeNotifierFrameLayout`、`LayoutHelper`、`CubicBezierInterpolator` 等 |
-| 聊天 | `TextBubbleCell` + `TextBubbleMessage`（纯文本气泡：时间、发送中/已发送/已读勾、同侧连续消息合并圆角与尾巴）、`Theme.MessageDrawable`（含渐变/动态渐变出站气泡）、`ChatInputBar`（已弃用的简易输入框，保留作轻量选项）、`ChatBubbleItemAnimator`（新消息从输入栏下方滑入、上方气泡同步上移）、`ChatSounds`（上游的发送 / 接收提示音 `sound_out` / `sound_in`，静音模式下不播放）、聊天背景 `MotionBackgroundDrawable` / `BackgroundGradientDrawable`（由 `SizeNotifierFrameLayout.setBackgroundImage(Theme.getCachedWallpaper(), …)` 绘制，发送时 `switchToNextPosition()` 旋转） |
-| 聊天输入栏 | `ChatActivityEnterView`：上游 11.4.2 原版移植，保留原布局、图标和动画——`EditTextCaption`（多行增长、选中文字的格式菜单：引用 / 剧透 / 粗体 / 斜体 / 等宽 / 删除线 / 下划线 / 链接 / 清除格式）、表情↔键盘图标动画（`ChatActivityEnterViewAnimatedIconView`，Lottie）、附件按钮、`SendButton` 及出现动画、长按发送菜单（定时发送 / 上线时发送 / 静音发送，日期选择器 `AlertsCreator.createScheduleDatePickerDialog`）、编辑模式的完成按钮、频道静音铃铛、慢速模式倒计时；语音 / 圆形视频录制整套界面：`RecordCircle`（Blob/Wave 波纹）、`ControlsView`（上滑锁定、暂停、阅后即焚开关）、`SlideTextView`（左滑取消）、`RecordDot`、`TimerView`、录音预览（`SeekBarWaveform` 波形、播放 / 删除 / 继续录）。另有 `ChatInputLayout`（ChatActivity 根布局里与输入栏相关的测量 / 摆放：表情面板、录音圆圈、键盘高度）、`ChatInputTopPanel`（回复 / 编辑 / 转发 / 链接预览顶栏，即上游 ChatActivity 的 replyLayout） |
+| 表情 | `Emoji` + `EmojiData` + `CompoundEmoji`：上游原版，`assets/emoji/` 里的 3586 张 Telegram 表情精灵图（约 14 MB）按页异步加载，`Emoji.replaceEmoji(...)` 把文字里的 emoji 换成 `Emoji.EmojiSpan`；输入栏、回复 / 编辑顶栏、气泡、`CheckBoxCell` / `TextDetailSettingsCell` 等上游已调用的地方都会显示。精灵图加载完会发 `NotificationCenter.emojiLoaded`，宿主列表要像上游 ChatActivity 那样收到后重绘（`Emoji.invalidateAll(listView)`）；`SharedConfig.useSystemEmoji = true` 可改回系统 emoji |
+| 聊天 | `TextBubbleCell` + `TextBubbleMessage`（纯文本气泡：时间、发送中/已发送/已读勾、同侧连续消息合并圆角与尾巴、Telegram 表情；只有 emoji 的消息按上游 TYPE_EMOJIS 放大显示、不画气泡，时间放在小圆角底条上）、`Theme.MessageDrawable`（含渐变/动态渐变出站气泡）、`ChatInputBar`（已弃用的简易输入框，保留作轻量选项）、`ChatBubbleItemAnimator`（新消息从输入栏下方滑入、上方气泡同步上移）、`ChatSounds`（上游的发送 / 接收提示音 `sound_out` / `sound_in`，静音模式下不播放）、聊天背景 `MotionBackgroundDrawable` / `BackgroundGradientDrawable`（由 `SizeNotifierFrameLayout.setBackgroundImage(Theme.getCachedWallpaper(), …)` 绘制，发送时 `switchToNextPosition()` 旋转） |
+| 聊天输入栏 | `ChatActivityEnterView`：上游 11.4.2 原版移植，保留原布局、图标和动画——`EditTextCaption`（多行增长、选中文字的格式菜单：引用 / 剧透 / 粗体 / 斜体 / 等宽 / 删除线 / 下划线 / 链接 / 清除格式）、表情↔键盘图标动画（`ChatActivityEnterViewAnimatedIconView`，Lottie）、附件按钮、`SendButton` 及出现动画、长按发送菜单（定时发送 / 上线时发送 / 静音发送，日期选择器 `AlertsCreator.createScheduleDatePickerDialog`）、编辑模式的完成按钮、频道静音铃铛、慢速模式倒计时；语音 / 圆形视频录制整套界面：`RecordCircle`（Blob/Wave 波纹）、`ControlsView`（上滑锁定、暂停、阅后即焚开关）、`SlideTextView`（左滑取消）、`RecordDot`、`TimerView`、录音预览（`SeekBarWaveform` 波形、播放 / 删除 / 继续录）。宿主可以用 `setRecordButtonVisible(false)` 隐藏语音 / 圆形视频录制按钮（没有文字时那一格留空，有文字时发送按钮照常带动画出现）。另有 `ChatInputLayout`（ChatActivity 根布局里与输入栏相关的测量 / 摆放：表情面板、录音圆圈、键盘高度）、`ChatInputTopPanel`（回复 / 编辑 / 转发 / 链接预览顶栏，即上游 ChatActivity 的 replyLayout） |
 | 主题 | `Theme`（内置 Classic / Dark / Arctic / Day / Night，从上游 `.attheme` 资源加载；强调色、自动夜间模式（定时 / 光线 / 跟随系统））、`ThemeDescription`、`ThemeColors`、`OKLCH` |
 | 宿主 | `TelegramUI`（初始化 + 主题切换入口）、`TelegramActivity`（生命周期转发、系统栏颜色、日夜切换动画） |
 
@@ -114,7 +115,8 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 | `AnimatedEmojiSpan` | 保留自定义表情 id、占一个表情的宽度，动画渲染见路线图 |
 | `AlertsCreator` / `CaptionContainerView` / `VideoEditedInfo` | 分别只保留定时发送日期选择器、阅后即焚图标 `PeriodDrawable`、圆形视频裁剪字段 |
 | `RLottieDrawable` / `RLottieImageView` | 上游原版，native 库换成 `libtguilottie.so`；`addParentView` 改收 `View`（无 `ImageReceiver`），`RLottieImageView` 去掉了按 `TLRPC.Document` 加载贴纸的分支。`BitmapsCache` 缓存目录改为 `cacheDir/acache` |
-| `Emoji`、`AnimatedEmojiDrawable`、`AnimatedEmojiSpan` | 系统 emoji 原样显示；自定义 emoji 只保留常量和 `SwapAnimatedEmojiDrawable`，当普通 Drawable 容器用 |
+| `Emoji` | 上游原版；只把 `replaceWithRestrictedEmoji`（服务器的 RestrictedEmoji 动态贴纸集）换成普通 `replaceEmoji`，`useSystemEmoji` / `allowBigEmoji` 由 `SharedConfig` 的静态字段提供 |
+| `AnimatedEmojiDrawable`、`AnimatedEmojiSpan` | 自定义 emoji 只保留常量和 `SwapAnimatedEmojiDrawable`，当普通 Drawable 容器用 |
 | `BackupImageView` | 改成本地 Drawable/Bitmap 视图，支持圆角，不再依赖 `ImageReceiver` 和网络加载 |
 | `EditTextEffects` | 去掉剧透（spoiler）、引用块和自定义 emoji 渲染 |
 | `URLSpanReplacement` | 点击后用 `ACTION_VIEW` 打开链接 |
@@ -132,16 +134,18 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 - rlottie 的 pixman NEON 汇编（`pixman-arm*-neon-asm.S`）需要 GNU as，新 NDK 只有 clang 汇编器，所以所有 ABI 都走 rlottie 的 C 填充路径，纯色填充比上游略慢
 - 不能播放 Telegram 贴纸 / TGS 文件的网络加载（没有 `ImageReceiver` / `FileLoader`）；本地文件可以用 `new RLottieDrawable(File, w, h, cacheOptions, limitFps)`
 - 字符串只带了库内实际用到的 49 条英文，加上游自带的部分翻译（ar / de / es / it / ko / nl / pt-BR）；其它语言需要宿主覆盖资源
-- demo 在 Android 9 真机（Huawei MHA-AL00）上完整验证过；Android 16（OnePlus，targetSdk 36 强制边到边）上验证过聊天背景、气泡和键盘调整布局，但 `ChatActivityEnterView` 还没在 Android 15+ 真机上验证；平板布局没验证
+- demo 在 Android 9 真机（Huawei MHA-AL00）上完整验证过；Android 16（OnePlus，targetSdk 36 强制边到边）上验证过聊天背景、气泡、Telegram 表情和 `ChatActivityEnterView` 的显示，但输入栏的录音 / 表情面板等交互还没在 Android 15+ 真机上逐项验证；平板布局没验证
 - `Theme` 里仍留着对话列表、个人资料相关的 paint/drawable 字段，没用到但可以安全忽略；后续可以继续瘦身
 
 ## 路线图（分阶段恢复，均不放弃）
 
 1. **阶段 A（已完成）**：`ChatActivityEnterView` 原版输入栏——输入、格式菜单、表情↔键盘切换（占位面板）、发送动画与长按菜单、语音录制（按住 / 左滑取消 / 上滑锁定 / 暂停预览 / 播放）、圆形视频录制界面（相机由宿主提供）、回复 / 编辑顶栏
-2. **阶段 B：表情面板**——移植上游 `EmojiView`（约 9.2k 行）及 `Emoji` 资源（emoji 精灵图约 14 MB，不以包体为限制），替换占位面板；表情搜索、最近使用、肤色选择
-3. **阶段 C：动态表情 / 自定义表情**——`AnimatedEmojiDrawable` / `AnimatedEmojiSpan` 的真实渲染（rlottie 已就绪），文字里的自定义表情实体
-4. **阶段 D：贴纸和 GIF**——`EmojiView` 的贴纸 / GIF 页、`StickersAlert`、`TrendingStickersLayout`，数据由宿主提供（不接 Telegram 服务器）
-5. 之后可选：`SuggestEmojiView`、提及列表、`MessageSendPreview`（长按发送的消息预览与特效）、机器人键盘
+2. **阶段 B1（已完成）：Telegram 表情渲染**——上游 `Emoji` / `EmojiData` / `CompoundEmoji` 和全部 emoji 精灵图，输入栏、气泡（含纯 emoji 大号显示）和设置单元格里显示 Telegram 风格表情；输入栏可隐藏录音按钮
+3. **阶段 B2：表情面板**——移植上游 `EmojiView`（约 9.2k 行）的 emoji 页（分类、最近使用、肤色选择），替换占位面板；动工前先单独做依赖调查
+4. **阶段 B3**：表情搜索、动态 / 自定义表情页
+5. **阶段 C：动态表情 / 自定义表情**——`AnimatedEmojiDrawable` / `AnimatedEmojiSpan` 的真实渲染（rlottie 已就绪），文字里的自定义表情实体
+6. **阶段 D：贴纸和 GIF**——`EmojiView` 的贴纸 / GIF 页、`StickersAlert`、`TrendingStickersLayout`，数据由宿主提供（不接 Telegram 服务器）
+7. 之后可选：`SuggestEmojiView`、提及列表、`MessageSendPreview`（长按发送的消息预览与特效）、机器人键盘
 
 ## 抽取工具（`tools/`）
 

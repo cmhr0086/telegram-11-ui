@@ -793,6 +793,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     /** tgui: the chat is a broadcast channel (upstream: from TLRPC.Chat); enables the silent-broadcast bell */
     private boolean isChannelChat;
     private boolean roundVideoAvailable;
+    private boolean recordButtonVisible = true;
     private int maxMessageLength = 4096;
     private int maxCaptionLength = 1024;
     private CharSequence replyHint;
@@ -2769,7 +2770,17 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             }
 
             @Override
+            protected void dispatchDraw(Canvas canvas) {
+                if (recordButtonVisible) {
+                    super.dispatchDraw(canvas);
+                }
+            }
+
+            @Override
             public boolean onTouchEvent(MotionEvent motionEvent) {
+                if (!recordButtonVisible) {
+                    return false;
+                }
                 createRecordCircle();
                 if (motionEvent.getAction() == MotionEvent.ACTION_DOWN) {
                     if (recordCircle.isSendButtonVisible()) {
@@ -4857,6 +4868,23 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         roundVideoAvailable = enabled;
         hasRecordVideo = false;
         checkRoundVideo();
+    }
+
+    /**
+     * tgui: show or hide the voice / round video record button. While hidden its slot stays empty
+     * when there is no text, and the send button still appears there with the usual animation.
+     */
+    public void setRecordButtonVisible(boolean visible) {
+        if (recordButtonVisible == visible) {
+            return;
+        }
+        recordButtonVisible = visible;
+        audioVideoButtonContainer.setImportantForAccessibility(visible ? IMPORTANT_FOR_ACCESSIBILITY_AUTO : IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        audioVideoButtonContainer.invalidate();
+    }
+
+    public boolean isRecordButtonVisible() {
+        return recordButtonVisible;
     }
 
     /** tgui: ask the keyboard not to learn from the input (upstream does this in secret chats). */

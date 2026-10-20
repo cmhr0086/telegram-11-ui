@@ -21,6 +21,7 @@ import org.telegram.messenger.UserConfig;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
+import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
@@ -58,8 +59,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     };
 
     private static final int MENU_NIGHT = 1;
+    private static final int MENU_RECORD_BUTTON = 2;
 
     private ActionBarMenuItem nightItem;
+    private ActionBarMenuSubItem recordButtonItem;
     private ChatInputLayout contentView;
     private RecyclerListView listView;
     private LinearLayoutManager layoutManager;
@@ -86,7 +89,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         addSample("with time and check marks drawn like ChatMessageCell 🙂", true, "10:04", TextBubbleMessage.STATE_READ);
         addSample("Hold the microphone to record a voice message, slide left to cancel or up to lock.", false, "10:05", TextBubbleMessage.STATE_NONE);
         addSample("Long-press a message to reply to it, or to edit your own.", false, "10:05", TextBubbleMessage.STATE_NONE);
-        addSample("ok", true, "10:06", TextBubbleMessage.STATE_SENT);
+        addSample("Emoji use Telegram's own set 😎🔥🎉 in bubbles and in the input field", false, "10:06", TextBubbleMessage.STATE_NONE);
+        addSample("👋", false, "10:06", TextBubbleMessage.STATE_NONE);
+        addSample("😂❤️👍", true, "10:07", TextBubbleMessage.STATE_READ);
+        addSample("ok", true, "10:07", TextBubbleMessage.STATE_SENT);
         return super.onFragmentCreate();
     }
 
@@ -120,11 +126,19 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     finishFragment();
                 } else if (id == MENU_NIGHT) {
                     TelegramUI.toggleDayNight(nightItem);
+                } else if (id == MENU_RECORD_BUTTON) {
+                    boolean visible = !enterView.isRecordButtonVisible();
+                    enterView.setRecordButtonVisible(visible);
+                    recordButtonItem.setChecked(visible);
                 }
             }
         });
         nightItem = actionBar.createMenu().addItem(MENU_NIGHT, R.drawable.msg_theme);
         nightItem.setContentDescription("Switch day / night");
+        ActionBarMenuItem otherItem = actionBar.createMenu().addItem(0, R.drawable.ic_ab_other);
+        otherItem.setContentDescription("More options");
+        recordButtonItem = otherItem.addSubItem(MENU_RECORD_BUTTON, R.drawable.input_mic, "Voice / video button", true);
+        recordButtonItem.setChecked(true);
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());

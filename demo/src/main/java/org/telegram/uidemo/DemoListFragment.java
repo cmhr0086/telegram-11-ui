@@ -8,6 +8,7 @@ import android.widget.FrameLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.telegram.messenger.Emoji;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
@@ -156,6 +157,8 @@ public abstract class DemoListFragment extends BaseFragment implements Notificat
         fragmentView = frameLayout;
 
         listView = new RecyclerListView(context);
+        // emoji bitmaps load in the background; upstream screens redraw their lists on emojiLoaded
+        NotificationCenter.getGlobalInstance().listenGlobal(listView, NotificationCenter.emojiLoaded, args -> Emoji.invalidateAll(listView));
         listView.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false));
         listView.setVerticalScrollBarEnabled(false);
         listView.setAdapter(adapter = new ListAdapter(context));
@@ -322,7 +325,8 @@ public abstract class DemoListFragment extends BaseFragment implements Notificat
                     ((NotificationsCheckCell) holder.itemView).setTextAndValueAndCheck(item.text, item.value, item.checked, divider);
                     break;
                 case TYPE_DETAIL:
-                    ((TextDetailSettingsCell) holder.itemView).setTextAndValue(item.text, item.value, divider);
+                    TextDetailSettingsCell detailCell = (TextDetailSettingsCell) holder.itemView;
+                    detailCell.setTextAndValue(Emoji.replaceEmoji(item.text, detailCell.getTextView().getPaint().getFontMetricsInt(), false), item.value, divider);
                     break;
                 case TYPE_CHECKBOX:
                     ((CheckBoxCell) holder.itemView).setText(item.text, item.value == null ? "" : item.value.toString(), item.checked, divider);

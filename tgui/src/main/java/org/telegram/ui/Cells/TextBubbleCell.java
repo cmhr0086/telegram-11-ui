@@ -3,13 +3,18 @@ package org.telegram.ui.Cells;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.text.Layout;
+import android.text.Spanned;
 import android.text.StaticLayout;
+import android.text.TextPaint;
 import android.text.TextUtils;
 import android.view.View;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.Emoji;
+import org.telegram.messenger.NotificationCenter;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.MsgClockDrawable;
@@ -18,6 +23,8 @@ import org.telegram.ui.Components.MsgClockDrawable;
  * tgui: lightweight text-only message bubble. Geometry (paddings, time / check positions,
  * grouped corners) follows upstream ChatMessageCell for plain text messages without avatars,
  * names, replies, reactions or media; background is the restored {@link Theme.MessageDrawable}.
+ * Emoji are drawn with the bundled bitmaps ({@link Emoji#replaceEmoji}); a message of only emoji
+ * is drawn large without a bubble, with the time on a pill, as upstream's TYPE_EMOJIS.
  */
 public class TextBubbleCell extends View {
 
@@ -38,6 +45,9 @@ public class TextBubbleCell extends View {
     private int textX, textY;
     private int textLeftOffset;
     private int timeX;
+    private boolean emojiOnlyMode;
+    private TextPaint textPaint;
+    private final RectF timeRect = new RectF();
 
     private int lastState = -1;
     private long lastMessageId = Long.MIN_VALUE;
@@ -52,6 +62,8 @@ public class TextBubbleCell extends View {
         super(context);
         this.resourcesProvider = resourcesProvider;
         Theme.createChatResources(context, false);
+        // upstream ChatMessageCell redraws when emoji bitmaps finish loading
+        NotificationCenter.listenEmojiLoading(this);
     }
 
     /**
@@ -126,8 +138,12 @@ public class TextBubbleCell extends View {
             timeMore += AndroidUtilities.dp(20.5f);
         }
 
-        CharSequence text = TextUtils.isEmpty(message.text) ? " " : message.text;
-        textLayout = new StaticLayout(text, Theme.chat_msgTextPaint, textMaxWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
+        int[] emojiOnly = new int[1];
+        CharSequence text = TextUtils.isEmpty(message.text) ? " " : Emoji.replaceEmoji(message.text, Theme.chat_msgTextPaint.getFontMetricsInt(), true, emojiOnly);
+        TextPaint emojiPaint = getEmojiOnlyPaint(text, emojiOnly[0]);
+        emojiOnlyMode = emojiPaint != null;
+        textPaint = emojiOnlyMode ? emojiPaint : Theme.chat_msgTextPaint;
+        textLayout = new StaticLayout(text, textPaint, textMaxWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
 
         int lineCount = textLayout.getLineCount();
         int maxChildWidth = 0;
@@ -150,6 +166,12 @@ public class TextBubbleCell extends View {
         int lastLineWidth = (int) Math.ceil(textLayout.getLineRight(lineCount - 1) - minLeft);
 
         int textHeight = textLayout.getLineBottom(lineCount - 1);
+        if (emojiOnlyMode) {
+            backgroundWidth = maxChildWidth;
+            textY = AndroidUtilities.dp(4);
+            totalHeight = textY + textHeight + AndroidUtilities.dp(2 + 17 + 4);
+            return;
+        }
         int namesOffset = pinnedTop ? -AndroidUtilities.dp(1) : 0;
         totalHeight = textHeight + AndroidUtilities.dp(19.5f) + namesOffset;
 
@@ -167,6 +189,45 @@ public class TextBubbleCell extends View {
             }
         }
         textY = AndroidUtilities.dp(10) + namesOffset;
+    }
+
+    /**
+     * upstream MessageObject.checkEmojiOnly: up to a few bitmap emoji and nothing else (no other
+     * spans, no emoji without a bitmap) pick a large paint and resize the emoji spans to it.
+     */
+    private static TextPaint getEmojiOnlyPaint(CharSequence text, int emojiOnly) {
+        if (emojiOnly < 1 || !(text instanceof Spanned) || Theme.chat_msgTextPaintEmoji == null) {
+            return null;
+        }
+        Spanned spanned = (Spanned) text;
+        Emoji.EmojiSpan[] spans = spanned.getSpans(0, spanned.length(), Emoji.EmojiSpan.class);
+        if (spans == null || spans.length == 0 || emojiOnly - spans.length > 0) {
+            return null;
+        }
+        if (spanned.getSpans(0, spanned.length(), Object.class).length != spans.length) {
+            return null;
+        }
+        TextPaint paint;
+        switch (emojiOnly) {
+            case 1:
+            case 2:
+                paint = Theme.chat_msgTextPaintEmoji[2];
+                break;
+            case 3:
+                paint = Theme.chat_msgTextPaintEmoji[3];
+                break;
+            case 4:
+                paint = Theme.chat_msgTextPaintEmoji[4];
+                break;
+            default:
+                paint = Theme.chat_msgTextPaintEmoji[5];
+                break;
+        }
+        int size = (int) (paint.getTextSize() + AndroidUtilities.dp(4));
+        for (Emoji.EmojiSpan span : spans) {
+            span.replaceFontMetrics(paint.getFontMetricsInt(), size);
+        }
+        return paint;
     }
 
     @Override
@@ -203,6 +264,11 @@ public class TextBubbleCell extends View {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
         final int layoutHeight = getMeasuredHeight();
+
+        if (emojiOnlyMode) {
+            drawEmojiOnly(canvas, out, layoutWidth, layoutHeight);
+            return;
+        }
 
         // --- background (ChatMessageCell.drawBackground for !mediaBackground)
         Theme.MessageDrawable drawable;
@@ -264,8 +330,8 @@ public class TextBubbleCell extends View {
         } else {
             textX = backgroundLeft + AndroidUtilities.dp(pinnedBottom ? 11 : 17);
         }
-        Theme.chat_msgTextPaint.setColor(getThemedColor(out ? Theme.key_chat_messageTextOut : Theme.key_chat_messageTextIn));
-        Theme.chat_msgTextPaint.linkColor = getThemedColor(out ? Theme.key_chat_messageLinkOut : Theme.key_chat_messageLinkIn);
+        textPaint.setColor(getThemedColor(out ? Theme.key_chat_messageTextOut : Theme.key_chat_messageTextIn));
+        textPaint.linkColor = getThemedColor(out ? Theme.key_chat_messageLinkOut : Theme.key_chat_messageLinkIn);
         canvas.save();
         canvas.translate(textX - textLeftOffset, textY);
         textLayout.draw(canvas);
@@ -285,11 +351,43 @@ public class TextBubbleCell extends View {
 
         // --- status
         if (out) {
-            drawStatus(canvas, layoutWidth, layoutHeight);
+            drawStatus(canvas, layoutWidth, layoutHeight, false);
         }
     }
 
-    private void drawStatus(Canvas canvas, int layoutWidth, int layoutHeight) {
+    private void drawEmojiOnly(Canvas canvas, boolean out, int layoutWidth, int layoutHeight) {
+        int pillWidth = timeWidth + AndroidUtilities.dp(out ? 32 : 12);
+        int pillHeight = AndroidUtilities.dp(17);
+        int contentRight;
+        int contentLeft;
+        if (out) {
+            contentRight = layoutWidth - AndroidUtilities.dp(11);
+            contentLeft = contentRight - backgroundWidth;
+        } else {
+            contentLeft = AndroidUtilities.dp(17);
+            contentRight = contentLeft + Math.max(backgroundWidth, pillWidth);
+        }
+        canvas.save();
+        canvas.translate(contentLeft - textLeftOffset, textY);
+        textLayout.draw(canvas);
+        canvas.restore();
+
+        int pillBottom = layoutHeight - AndroidUtilities.dp(4);
+        timeRect.set(contentRight - pillWidth, pillBottom - pillHeight, contentRight, pillBottom);
+        Theme.chat_timeBackgroundPaint.setColor(getThemedColor(Theme.key_chat_mediaTimeBackground));
+        canvas.drawRoundRect(timeRect, AndroidUtilities.dp(4), AndroidUtilities.dp(4), Theme.chat_timeBackgroundPaint);
+        Theme.chat_timePaint.setColor(getThemedColor(Theme.key_chat_mediaTimeText));
+        canvas.save();
+        canvas.translate(timeRect.left + AndroidUtilities.dp(6), timeRect.centerY() - timeLayout.getHeight() / 2f);
+        timeLayout.draw(canvas);
+        canvas.restore();
+        if (out) {
+            drawStatus(canvas, contentRight + AndroidUtilities.dp(13), pillBottom + AndroidUtilities.dp(4), true);
+        }
+    }
+
+    /** Checks / clock with their right edge at {@code layoutWidth - 18dp}; {@code media}: white ones for the time pill. */
+    private void drawStatus(Canvas canvas, int layoutWidth, int layoutHeight, boolean media) {
         int state = message.state;
         float progress = statusProgress;
         boolean useScale = progress != 1f;
@@ -300,7 +398,7 @@ public class TextBubbleCell extends View {
             MsgClockDrawable clock = Theme.chat_msgClockDrawable;
             float alpha = state == TextBubbleMessage.STATE_SENDING ? 1f : 1f - progress;
             if (alpha > 0) {
-                clock.setColor(getThemedColor(Theme.key_chat_outSentClock));
+                clock.setColor(getThemedColor(media ? Theme.key_chat_mediaSentClock : Theme.key_chat_outSentClock));
                 setBounds(clock, layoutWidth - AndroidUtilities.dp(18.5f) - clock.getIntrinsicWidth(), layoutHeight - AndroidUtilities.dp(8.5f) - clock.getIntrinsicHeight());
                 clock.setAlpha((int) (255 * alpha));
                 clock.draw(canvas);
@@ -314,8 +412,8 @@ public class TextBubbleCell extends View {
             return;
         }
         boolean read = state == TextBubbleMessage.STATE_READ;
-        Drawable check = read ? Theme.chat_msgOutCheckReadDrawable : Theme.chat_msgOutCheckDrawable;
-        Theme.setDrawableColor(check, getThemedColor(read ? Theme.key_chat_outSentCheckRead : Theme.key_chat_outSentCheck));
+        Drawable check = media ? Theme.chat_msgMediaCheckDrawable : read ? Theme.chat_msgOutCheckReadDrawable : Theme.chat_msgOutCheckDrawable;
+        Theme.setDrawableColor(check, getThemedColor(media ? Theme.key_chat_mediaSentCheck : read ? Theme.key_chat_outSentCheckRead : Theme.key_chat_outSentCheck));
         if (read) {
             setBounds(check, layoutWidth - AndroidUtilities.dp(22.5f) - check.getIntrinsicWidth(), checkY - check.getIntrinsicHeight());
         } else {
@@ -323,8 +421,8 @@ public class TextBubbleCell extends View {
         }
         drawScaled(canvas, check, useScale, scale, progress);
         if (read) {
-            Drawable half = Theme.chat_msgOutHalfCheckDrawable;
-            Theme.setDrawableColor(half, getThemedColor(Theme.key_chat_outSentCheckRead));
+            Drawable half = media ? Theme.chat_msgMediaHalfCheckDrawable : Theme.chat_msgOutHalfCheckDrawable;
+            Theme.setDrawableColor(half, getThemedColor(media ? Theme.key_chat_mediaSentCheck : Theme.key_chat_outSentCheckRead));
             setBounds(half, layoutWidth - AndroidUtilities.dp(18) - half.getIntrinsicWidth(), checkY - half.getIntrinsicHeight());
             drawScaled(canvas, half, useScale, scale, progress);
         }
