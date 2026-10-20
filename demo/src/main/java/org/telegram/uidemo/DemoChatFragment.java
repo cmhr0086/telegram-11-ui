@@ -201,6 +201,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         listView.setInstantClick(true);
         listView.setDisableHighlightState(true);
         // setDisableHighlightState only stops setPressed(); the list selector would still ripple over the wallpaper
+        // no selector at all: the long-press TransitionDrawable still darkened the row even with a transparent colour
+        listView.setSelectorType(9);
         listView.setSelectorDrawableColor(0);
         // tap: context menu (createMenu(view, single = true)); in selection mode it toggles the row
         listView.setOnItemClickListener((RecyclerListView.OnItemClickListenerExtended) (view, position, x, y) -> {

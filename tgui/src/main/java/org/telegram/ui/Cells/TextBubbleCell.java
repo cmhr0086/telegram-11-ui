@@ -58,6 +58,8 @@ public class TextBubbleCell extends View {
     private long lastCheckBoxAnimationTime;
     private int checkBoxTranslation;
     private boolean drawSelectionBackground;
+    /** Upstream's full-width selected-row band (key_chat_selectedBackground); hosts can turn it back on. */
+    public static boolean drawRowHighlight = false;
     private float selectionProgress;
     private long lastSelectionAnimationTime;
     private int bubbleBottom;
@@ -409,7 +411,8 @@ public class TextBubbleCell extends View {
         }
         animateCheckboxTranslation();
         // row highlight (ChatActivity's ChatListView: MessageBackgroundDrawable with key_chat_selectedBackground)
-        float target = drawSelectionBackground ? 1f : 0f;
+        // off by default: the user wants no dark band over the row while pressing / selecting
+        float target = drawSelectionBackground && drawRowHighlight ? 1f : 0f;
         if (selectionProgress != target) {
             long newTime = SystemClock.elapsedRealtime();
             float step = (newTime - lastSelectionAnimationTime) / 200f;
