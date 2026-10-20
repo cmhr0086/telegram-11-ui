@@ -6582,6 +6582,20 @@ public class Theme {
         }
         if (gradientToColor1 != 0 && gradientToColor2 != 0) {
             MotionBackgroundDrawable motionBackgroundDrawable = new MotionBackgroundDrawable(backgroundColor, gradientToColor1, gradientToColor2, gradientToColor3, false);
+            ThemeAccent accent = theme.getAccent(false);
+            if (accent != null && (!TextUtils.isEmpty(accent.patternSlug) || accent.patternIntensity != 0)) {
+                // tgui: upstream downloads the accent's pattern by slug; the bundled default pattern stands in for it.
+                // Dark themes use a negative intensity: the gradient shows through the pattern on black.
+                int intensity = (int) (accent.patternIntensity * 100);
+                if (intensity == 0) {
+                    intensity = 50;
+                }
+                if (theme.isDark()) {
+                    intensity = -Math.abs(intensity);
+                }
+                motionBackgroundDrawable.setPatternBitmap(intensity, getDefaultPatternBitmap(0, 0));
+                motionBackgroundDrawable.setPatternColorFilter(motionBackgroundDrawable.getPatternColor());
+            }
             motionBackgroundDrawable.setPhase(phase);
             return motionBackgroundDrawable;
         } else if (gradientToColor1 == 0 || gradientToColor1 == backgroundColor) {
@@ -6607,6 +6621,20 @@ public class Theme {
         }
     }
 
+    private static Bitmap getDefaultPatternBitmap(int w, int h) {
+        if (w <= 0 || h <= 0) {
+            w = Math.min(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y);
+            h = Math.max(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y);
+        }
+        synchronized (sync) {
+            // tgui: parsing the 500 KB pattern SVG is slow, keep the rendered mask around
+            if (defaultPatternBitmap == null || defaultPatternBitmap.getWidth() != w || defaultPatternBitmap.getHeight() != h) {
+                defaultPatternBitmap = SvgHelper.getBitmap(R.raw.default_pattern, w, h, Color.BLACK);
+            }
+            return defaultPatternBitmap;
+        }
+    }
+
     public static Drawable createDefaultWallpaper() {
         return createDefaultWallpaper(0, 0);
     }
@@ -6617,15 +6645,7 @@ public class Theme {
             w = Math.min(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y);
             h = Math.max(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y);
         }
-        Bitmap pattern;
-        synchronized (sync) {
-            // tgui: parsing the 500 KB pattern SVG is slow, keep the rendered mask around
-            if (defaultPatternBitmap == null || defaultPatternBitmap.getWidth() != w || defaultPatternBitmap.getHeight() != h) {
-                defaultPatternBitmap = SvgHelper.getBitmap(R.raw.default_pattern, w, h, Color.BLACK);
-            }
-            pattern = defaultPatternBitmap;
-        }
-        motionBackgroundDrawable.setPatternBitmap(34, pattern);
+        motionBackgroundDrawable.setPatternBitmap(34, getDefaultPatternBitmap(w, h));
         motionBackgroundDrawable.setPatternColorFilter(motionBackgroundDrawable.getPatternColor());
         return motionBackgroundDrawable;
     }

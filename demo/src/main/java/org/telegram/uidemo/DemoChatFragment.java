@@ -15,16 +15,19 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Cells.TextBubbleCell;
 import org.telegram.ui.Cells.TextBubbleMessage;
+import org.telegram.ui.Components.ChatBubbleItemAnimator;
 import org.telegram.ui.Components.ChatInputBar;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.MotionBackgroundDrawable;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.SizeNotifierFrameLayout;
+import org.telegram.ui.TelegramUI;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -40,10 +43,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final String[] REPLIES = {
             "Nice 👍",
             "The background just moved, did you see it?",
-            "Try switching to Night mode from the ⋮ menu — bubbles, wallpaper and the input panel recolour together.",
+            "Tap the palette button at the top to switch day / night — bubbles, wallpaper and the input panel recolour together.",
             "ok",
     };
 
+    private static final int MENU_NIGHT = 1;
+
+    private ActionBarMenuItem nightItem;
     private SizeNotifierFrameLayout contentView;
     private RecyclerListView listView;
     private LinearLayoutManager layoutManager;
@@ -91,9 +97,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             public void onItemClick(int id) {
                 if (id == -1) {
                     finishFragment();
+                } else if (id == MENU_NIGHT) {
+                    TelegramUI.toggleDayNight(nightItem);
                 }
             }
         });
+        nightItem = actionBar.createMenu().addItem(MENU_NIGHT, R.drawable.msg_theme);
+        nightItem.setContentDescription("Switch day / night");
 
         contentView = new SizeNotifierFrameLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -114,7 +124,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         layoutManager = new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false);
         layoutManager.setStackFromEnd(true);
         listView.setLayoutManager(layoutManager);
-        listView.setItemAnimator(null);
+        listView.setItemAnimator(new ChatBubbleItemAnimator());
         listView.setVerticalScrollBarEnabled(true);
         listView.setClipToPadding(false);
         listView.setPadding(0, ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + AndroidUtilities.dp(4), 0, AndroidUtilities.dp(3));
@@ -161,7 +171,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             // the previous bubble loses its tail when the new one is from the same side
             listView.getAdapter().notifyItemChanged(position - 1);
         }
-        listView.smoothScrollToPosition(position);
+        layoutManager.scrollToPositionWithOffset(position, 0, true);
     }
 
     private void updateState(TextBubbleMessage message, int state) {
