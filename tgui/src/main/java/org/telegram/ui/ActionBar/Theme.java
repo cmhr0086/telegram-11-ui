@@ -9,6 +9,13 @@
 package org.telegram.ui.ActionBar;
 
 
+import org.telegram.ui.Components.StatusDrawable;
+import org.telegram.ui.Components.TypingDotsDrawable;
+import org.telegram.ui.Components.RecordStatusDrawable;
+import org.telegram.ui.Components.SendingFileDrawable;
+import org.telegram.ui.Components.PlayingGameDrawable;
+import org.telegram.ui.Components.RoundStatusDrawable;
+import org.telegram.ui.Components.ChoosingStickerStatusDrawable;
 import org.telegram.ui.Components.PathAnimator;
 import org.telegram.ui.Components.BackgroundGradientDrawable;
 import org.telegram.messenger.SvgHelper;
@@ -5738,6 +5745,7 @@ public class Theme {
             dialogs_playDrawable = resources.getDrawable(R.drawable.minithumb_play).mutate();
             dialogs_checkReadDrawable = resources.getDrawable(R.drawable.list_check).mutate();
             dialogs_halfCheckDrawable = resources.getDrawable(R.drawable.list_halfcheck);
+            dialogs_clockDrawable = new MsgClockDrawable();
             dialogs_errorDrawable = resources.getDrawable(R.drawable.list_warning_sign);
             dialogs_reorderDrawable = resources.getDrawable(R.drawable.list_reorder).mutate();
             dialogs_muteDrawable = resources.getDrawable(R.drawable.list_mute).mutate();
@@ -5783,6 +5791,42 @@ public class Theme {
         dialogs_searchNameEncryptedPaint.setTextSize(dp(16));
     }
 
+    private static StatusDrawable[] chat_status_drawables = new StatusDrawable[6];
+
+    public static StatusDrawable getChatStatusDrawable(int type) {
+        if (type < 0 || type > 5) {
+            return null;
+        }
+        StatusDrawable statusDrawable = chat_status_drawables[type];
+        if (statusDrawable != null) {
+            return statusDrawable;
+        }
+        switch (type) {
+            case 0:
+                chat_status_drawables[0] = new TypingDotsDrawable(true);
+                break;
+            case 1:
+                chat_status_drawables[1] = new RecordStatusDrawable(true);
+                break;
+            case 2:
+                chat_status_drawables[2] = new SendingFileDrawable(true);
+                break;
+            case 3:
+                chat_status_drawables[3] = new PlayingGameDrawable(true, null);
+                break;
+            case 4:
+                chat_status_drawables[4] = new RoundStatusDrawable(true);
+                break;
+            case 5:
+                chat_status_drawables[5] = new ChoosingStickerStatusDrawable(true);
+                break;
+        }
+        statusDrawable = chat_status_drawables[type];
+        statusDrawable.start();
+        statusDrawable.setColor(getColor(key_chats_actionMessage));
+        return statusDrawable;
+    }
+
     public static void applyDialogsTheme() {
         if (dialogs_namePaint == null) {
             return;
@@ -5824,6 +5868,9 @@ public class Theme {
         setDrawableColorByKey(dialogs_mentionDrawable, key_chats_mentionIcon);
         setDrawableColorByKey(dialogs_forum_arrowDrawable, key_chats_message);
         setDrawableColorByKey(dialogs_reactionsMentionDrawable, key_chats_mentionIcon);
+        for (int i = 0; i < chat_status_drawables.length; i++) {
+            setDrawableColorByKey(chat_status_drawables[i], key_chats_actionMessage);
+        }
         setDrawableColorByKey(dialogs_verifiedDrawable, key_chats_verifiedBackground);
         setDrawableColorByKey(dialogs_verifiedCheckDrawable, key_chats_verifiedCheck);
         setDrawableColorByKey(dialogs_holidayDrawable, key_actionBarDefaultTitle);

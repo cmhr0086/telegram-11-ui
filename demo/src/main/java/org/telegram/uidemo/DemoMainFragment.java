@@ -42,6 +42,7 @@ public class DemoMainFragment extends DemoListFragment {
     private static final int ROW_PUSH = 31;
     private static final int ROW_DUCKS = 32;
     private static final int ROW_CHAT = 33;
+    private static final int ROW_DIALOGS = 34;
 
     private static final int MENU_SEARCH = 1;
     private static final int MENU_NIGHT = 2;
@@ -118,6 +119,7 @@ public class DemoMainFragment extends DemoListFragment {
         items.add(shadow());
 
         items.add(header("Navigation"));
+        items.add(text(ROW_DIALOGS, "Chat list (DialogCell)", R.drawable.msg_list));
         items.add(text(ROW_CHAT, "Chat: background, bubbles, input", R.drawable.msg_msgbubble));
         items.add(text(ROW_CELLS, "Settings cells gallery", R.drawable.msg_settings));
         items.add(text(ROW_PUSH, "Push another screen", R.drawable.msg_link));
@@ -210,6 +212,9 @@ public class DemoMainFragment extends DemoListFragment {
                 break;
             case ROW_CHAT:
                 presentFragment(new DemoChatFragment());
+                break;
+            case ROW_DIALOGS:
+                presentFragment(new DemoDialogsFragment());
                 break;
         }
     }

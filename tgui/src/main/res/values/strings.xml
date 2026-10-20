@@ -165,4 +165,16 @@
     <string name="AccDescrBackspace">Backspace</string>
     <string name="Emoji">Emoji</string>
     <string name="EditPack">edit</string>
+    <string name="Archive">Archive</string>
+    <string name="Draft">Draft</string>
+    <string name="HideOnTop">Hide</string>
+    <string name="SwipeDeleteChat">Delete</string>
+    <string name="SwipeMarkAsRead">Read</string>
+    <string name="SwipeMarkAsUnread">Unread</string>
+    <string name="SwipeMute">Mute</string>
+    <string name="SwipePin">Pin</string>
+    <string name="SwipeUnmute">Unmute</string>
+    <string name="SwipeUnpin">Unpin</string>
+    <string name="Unarchive">Unarchive</string>
+    <string name="UnhideFromTop">Pin</string>
 </resources>

@@ -16,6 +16,8 @@ public class SharedConfig {
     /** Draw emoji with the system font instead of the bundled bitmaps (upstream setting). */
     public static boolean useSystemEmoji;
     public static boolean allowBigEmoji = true;
+    /** Chat list preview: false = upstream "two lines" (72dp rows), true = "three lines" (78dp rows). */
+    public static boolean useThreeLinesLayout;
 
     public static final boolean noStatusBar = true;
     public static int fontSize = 16;
