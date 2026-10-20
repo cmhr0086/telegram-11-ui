@@ -6586,15 +6586,21 @@ public class Theme {
             if (accent != null && (!TextUtils.isEmpty(accent.patternSlug) || accent.patternIntensity != 0)) {
                 // tgui: upstream downloads the accent's pattern by slug; the bundled default pattern stands in for it.
                 // Dark themes use a negative intensity: the gradient shows through the pattern on black.
+                // The stand-in pattern has much thinner strokes than the downloaded ones, so on dark themes
+                // it is drawn at full strength, otherwise the wallpaper reads as plain black.
                 int intensity = (int) (accent.patternIntensity * 100);
                 if (intensity == 0) {
                     intensity = 50;
                 }
                 if (theme.isDark()) {
-                    intensity = -Math.abs(intensity);
+                    intensity = -100;
                 }
                 motionBackgroundDrawable.setPatternBitmap(intensity, getDefaultPatternBitmap(0, 0));
                 motionBackgroundDrawable.setPatternColorFilter(motionBackgroundDrawable.getPatternColor());
+                if (intensity < 0) {
+                    // tgui: keep a dark tint of the gradient under the pattern instead of plain black
+                    motionBackgroundDrawable.setDarkBaseGradientAlpha(0.6f);
+                }
             }
             motionBackgroundDrawable.setPhase(phase);
             return motionBackgroundDrawable;

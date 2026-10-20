@@ -23,6 +23,7 @@ import org.telegram.ui.Cells.TextBubbleCell;
 import org.telegram.ui.Cells.TextBubbleMessage;
 import org.telegram.ui.Components.ChatBubbleItemAnimator;
 import org.telegram.ui.Components.ChatInputBar;
+import org.telegram.ui.Components.ChatSounds;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.MotionBackgroundDrawable;
 import org.telegram.ui.Components.RecyclerListView;
@@ -62,6 +63,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     @Override
     public boolean onFragmentCreate() {
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.didSetNewWallpapper);
+        ChatSounds.preload();
         addSample("Hey! This is the chat background from the current theme.", false, "10:02", TextBubbleMessage.STATE_NONE);
         addSample("Consecutive messages from the same side are grouped: the tail is only drawn on the last one and the inner corners get the small radius.", false, "10:02", TextBubbleMessage.STATE_NONE);
         addSample("Looks just like Telegram", true, "10:03", TextBubbleMessage.STATE_READ);
@@ -149,6 +151,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         TextBubbleMessage message = new TextBubbleMessage(nextId++, text.toString(), true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENDING);
         appendMessage(message);
         rotateMotionBackground();
+        ChatSounds.playOut();
         AndroidUtilities.runOnUIThread(() -> updateState(message, TextBubbleMessage.STATE_SENT), 700);
         AndroidUtilities.runOnUIThread(() -> updateState(message, TextBubbleMessage.STATE_READ), 1800);
         AndroidUtilities.runOnUIThread(() -> {
@@ -156,6 +159,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 return;
             }
             appendMessage(new TextBubbleMessage(nextId++, REPLIES[replyIndex++ % REPLIES.length], false, timeFormat.format(new Date()), TextBubbleMessage.STATE_NONE));
+            ChatSounds.playIn();
         }, 2400);
         return true;
     }

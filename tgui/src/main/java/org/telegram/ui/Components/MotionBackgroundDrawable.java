@@ -107,6 +107,7 @@ public class MotionBackgroundDrawable extends Drawable {
     private int roundRadius;
     private float patternAlpha = 1f;
     private float backgroundAlpha = 1f;
+    private float darkBaseGradientAlpha;
     private int alpha = 255;
 
     private ColorFilter legacyBitmapColorFilter;
@@ -464,6 +465,15 @@ public class MotionBackgroundDrawable extends Drawable {
         invalidateParent();
     }
 
+    /**
+     * tgui: with a negative intensity upstream fills the background with black and shows the gradient
+     * only through the pattern. A value > 0 lets a dimmed copy of the gradient show under the black too.
+     */
+    public void setDarkBaseGradientAlpha(float value) {
+        darkBaseGradientAlpha = value;
+        invalidateParent();
+    }
+
     public void setBackgroundAlpha(float alpha) {
         this.backgroundAlpha = alpha;
         invalidateParent();
@@ -713,7 +723,19 @@ public class MotionBackgroundDrawable extends Drawable {
             canvas.clipRect(bounds.left, bounds.top, bounds.right, bounds.bottom);
         }
         if (intensity < 0) {
-            canvas.drawColor(ColorUtils.setAlphaComponent(Color.BLACK, (int) (alpha * backgroundAlpha)));
+            if (darkBaseGradientAlpha > 0) {
+                canvas.save();
+                canvas.translate(0, tr);
+                rect.set(x, y, x + width, y + height);
+                int wasAlpha = paint.getAlpha();
+                paint.setAlpha((int) (alpha * backgroundAlpha));
+                canvas.drawBitmap(currentBitmap, null, rect, paint);
+                paint.setAlpha(wasAlpha);
+                canvas.restore();
+                canvas.drawColor(ColorUtils.setAlphaComponent(Color.BLACK, (int) (alpha * backgroundAlpha * (1f - darkBaseGradientAlpha))));
+            } else {
+                canvas.drawColor(ColorUtils.setAlphaComponent(Color.BLACK, (int) (alpha * backgroundAlpha)));
+            }
             if (patternBitmap != null) {
                 if (useLegacyBitmap) {
                     if (errorWhileGenerateLegacyBitmap) {
