@@ -51,6 +51,7 @@ public class DialogsActionMode {
     private float progressToActionMode;
     private int count;
     private int defaultColorKey = Theme.key_actionBarDefault;
+    private FilterTabsView filterTabsView;
 
     public DialogsActionMode(ActionBar actionBar) {
         this.actionBar = actionBar;
@@ -96,6 +97,14 @@ public class DialogsActionMode {
     public ActionBarMenu getMenu() {
         createActionMode();
         return actionMode;
+    }
+
+    /**
+     * Folder tabs living in the action bar's extra height: kept visible during the mode and recolored
+     * like upstream ({@code animateColorsTo} profile tab colors and back).
+     */
+    public void setFilterTabsView(FilterTabsView view) {
+        filterTabsView = view;
     }
 
     /** Action bar color key the bar returns to when the mode hides (archive uses actionBarDefaultArchived). */
@@ -146,6 +155,9 @@ public class DialogsActionMode {
         animatorSet.start();
 
         animateTo(1f);
+        if (filterTabsView != null) {
+            filterTabsView.animateColorsTo(Theme.key_profile_tabSelectedLine, Theme.key_profile_tabSelectedText, Theme.key_profile_tabText, Theme.key_profile_tabSelector, Theme.key_actionBarActionModeDefault);
+        }
 
         Drawable back = actionBar.getBackButton() != null ? actionBar.getBackButton().getDrawable() : null;
         if (back instanceof MenuDrawable) {
@@ -168,6 +180,9 @@ public class DialogsActionMode {
             ((MenuDrawable) back).setRotation(0, true);
         } else if (back instanceof BackDrawable) {
             ((BackDrawable) back).setRotation(0, true);
+        }
+        if (filterTabsView != null) {
+            filterTabsView.animateColorsTo(Theme.key_actionBarTabLine, Theme.key_actionBarTabActiveText, Theme.key_actionBarTabUnactiveText, Theme.key_actionBarTabSelector, Theme.key_actionBarDefault);
         }
         animateTo(0f);
     }
@@ -197,7 +212,7 @@ public class DialogsActionMode {
         actionBar.setBackgroundColor(ColorUtils.blendARGB(Theme.getColor(defaultColorKey), Theme.getColor(Theme.key_windowBackgroundWhite), progressToActionMode));
         for (int i = 0; i < actionBar.getChildCount(); i++) {
             View child = actionBar.getChildAt(i);
-            if (child.getVisibility() == View.VISIBLE && child != actionBar.getActionMode() && child != actionBar.getBackButton()) {
+            if (child.getVisibility() == View.VISIBLE && child != actionBar.getActionMode() && child != actionBar.getBackButton() && child != filterTabsView) {
                 child.setAlpha(1f - progressToActionMode);
             }
         }

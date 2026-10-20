@@ -177,4 +177,12 @@
     <string name="SwipeUnpin">Unpin</string>
     <string name="Unarchive">Unarchive</string>
     <string name="UnhideFromTop">Pin</string>
+    <string name="AccDescrOpenMenu2">Open menu</string>
+    <string name="FilterAllChats">All Chats</string>
+    <string name="FilterAllChatsShort">All</string>
+    <string name="AccDescrHideAccounts">Hide accounts</string>
+    <string name="AccDescrShowAccounts">Show accounts</string>
+    <string name="AccDescrSwitchToDayTheme">Switch to day theme</string>
+    <string name="AccDescrSwitchToNightTheme">Switch to night theme</string>
+    <string name="NewMessageTitle">New Message</string>
 </resources>

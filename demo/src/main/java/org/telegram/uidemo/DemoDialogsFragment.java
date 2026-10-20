@@ -7,6 +7,7 @@ import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -21,13 +22,17 @@ import org.telegram.ui.ActionBar.ActionBarMenu;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
 import org.telegram.ui.ActionBar.AlertDialog;
-import org.telegram.ui.ActionBar.BackDrawable;
+import org.telegram.ui.ActionBar.DrawerLayoutContainer;
+import org.telegram.ui.ActionBar.MenuDrawable;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Cells.DialogCell;
 import org.telegram.ui.Cells.DialogItem;
 import org.telegram.ui.Components.DialogsActionMode;
+import org.telegram.ui.Components.DialogsFloatingButton;
+import org.telegram.ui.Components.DrawerMenuView;
+import org.telegram.ui.Components.FilterTabsView;
 import org.telegram.ui.Components.DialogsListView;
 import org.telegram.ui.Components.DialogsSwipeController;
 import org.telegram.ui.Components.LayoutHelper;
@@ -64,6 +69,12 @@ public class DemoDialogsFragment extends BaseFragment {
     private ActionBarMenuItem swipeMenuItem;
     private ActionBarMenuSubItem swipeSubItem;
     private final ArrayList<DialogItem> dialogs = new ArrayList<>();
+    private final ArrayList<DialogItem> allDialogs = new ArrayList<>();
+    private FilterTabsView filterTabsView;
+    private DialogsFloatingButton floatingButton;
+    private DrawerMenuView drawerMenu;
+    private MenuDrawable menuDrawable;
+    private int currentTab;
     private final HashSet<Long> selected = new HashSet<>();
     private int simulateStep;
     private int swipeIndex;
@@ -71,7 +82,8 @@ public class DemoDialogsFragment extends BaseFragment {
 
     @Override
     public View createView(Context context) {
-        actionBar.setBackButtonDrawable(new BackDrawable(false));
+        actionBar.setBackButtonDrawable(menuDrawable = new MenuDrawable());
+        actionBar.setBackButtonContentDescription("Open navigation menu");
         actionBar.setAllowOverlayTitle(true);
         actionBar.setTitle("Telegram");
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
@@ -80,8 +92,8 @@ public class DemoDialogsFragment extends BaseFragment {
                 if (id == -1) {
                     if (actionMode.isShowing()) {
                         clearSelection();
-                    } else {
-                        finishFragment();
+                    } else if (getParentLayout() != null && getParentLayout().getDrawerLayoutContainer() != null) {
+                        getParentLayout().getDrawerLayoutContainer().openDrawer(false);
                     }
                 } else if (id == MENU_LINES) {
                     SharedConfig.useThreeLinesLayout = !SharedConfig.useThreeLinesLayout;
@@ -115,6 +127,10 @@ public class DemoDialogsFragment extends BaseFragment {
         actionMode.addOverflowItem(ACTION_READ, R.drawable.msg_markread, "Mark as read");
 
         fillDialogs();
+        applyFilter();
+        createFilterTabs(context);
+        actionMode.setFilterTabsView(filterTabsView);
+        createDrawer(context);
 
         FrameLayout frameLayout = new FrameLayout(context);
         fragmentView = frameLayout;
@@ -166,6 +182,7 @@ public class DemoDialogsFragment extends BaseFragment {
                         d.markUnread = true;
                     }
                     cell.setDialog(d, true);
+                    filterTabsView.checkTabsCounter();
                 } else if (action == DialogCell.SWIPE_ACTION_PIN) {
                     togglePinned(d);
                 } else if (action == DialogCell.SWIPE_ACTION_DELETE) {
@@ -193,11 +210,191 @@ public class DemoDialogsFragment extends BaseFragment {
                 DialogItem item = dialogs.remove(fromPosition);
                 dialogs.add(toPosition, item);
                 adapter.notifyItemMoved(fromPosition, toPosition);
+                syncAll();
                 return true;
             }
         });
         frameLayout.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+
+        floatingButton = new DialogsFloatingButton(context);
+        floatingButton.setOnClickListener(v -> {
+            AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+            builder.setTitle("New message");
+            builder.setMessage("The host opens its own compose screen here.");
+            builder.setPositiveButton("OK", null);
+            showDialog(builder.create());
+        });
+        frameLayout.addView(floatingButton, DialogsFloatingButton.createLayoutParams());
+        floatingButton.attachToList(listView);
         return fragmentView;
+    }
+
+    // ---- folder tabs (upstream DialogsActivity filterTabsView) ----
+
+    private static final String[] TABS = {"All Chats", "Unread", "Personal", "Groups"};
+
+    private void createFilterTabs(Context context) {
+        filterTabsView = new FilterTabsView(context);
+        filterTabsView.setDelegate(new FilterTabsView.FilterTabsViewDelegate() {
+            @Override
+            public void onPageSelected(FilterTabsView.Tab tab, boolean forward) {
+                currentTab = tab.id;
+                if (actionMode.isShowing()) {
+                    clearSelection();
+                }
+                applyFilter();
+            }
+
+            @Override
+            public void onPageScrolled(float progress) {
+            }
+
+            @Override
+            public void onSamePageSelected() {
+                listView.smoothScrollToPosition(0);
+            }
+
+            @Override
+            public int getTabCounter(int tabId) {
+                int count = 0;
+                for (DialogItem d : allDialogs) {
+                    if (!d.isFolder && matches(tabId, d) && (d.unreadCount > 0 || d.markUnread)) {
+                        count++;
+                    }
+                }
+                return count;
+            }
+
+            @Override
+            public boolean didSelectTab(FilterTabsView.TabView tabView, boolean selected) {
+                return true;
+            }
+
+            @Override
+            public boolean isTabMenuVisible() {
+                return false;
+            }
+
+            @Override
+            public void onDeletePressed(int id) {
+            }
+
+            @Override
+            public void onPageReorder(int fromId, int toId) {
+            }
+
+            @Override
+            public boolean canPerformActions() {
+                return true;
+            }
+        });
+        // upstream order: delegate first (addTab measures counters through it)
+        for (int a = 0; a < TABS.length; a++) {
+            filterTabsView.addTab(a, a, TABS[a], a == 0, false);
+        }
+        filterTabsView.finishAddingTabs(false);
+        actionBar.setExtraHeight(AndroidUtilities.dp(44));
+        actionBar.addView(filterTabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 44, Gravity.BOTTOM));
+    }
+
+    private static boolean matches(int tab, DialogItem d) {
+        switch (tab) {
+            case 1:
+                return d.unreadCount > 0 || d.markUnread || d.isFolder;
+            case 2:
+                return d.senderName == null && d.avatarType == DialogItem.AVATAR_NORMAL;
+            case 3:
+                return d.senderName != null;
+            default:
+                return true;
+        }
+    }
+
+    private void applyFilter() {
+        dialogs.clear();
+        for (DialogItem d : allDialogs) {
+            if (matches(currentTab, d) && (currentTab == 0 || !d.isFolder)) {
+                dialogs.add(d);
+            }
+        }
+        if (adapter != null) {
+            // a new folder is a new page upstream: no item animations for the swap
+            listView.setItemAnimator(null);
+            adapter.notifyDataSetChanged();
+            listView.scrollToPosition(0);
+            listView.post(() -> listView.setItemAnimator(listView.getDialogsItemAnimator()));
+        }
+    }
+
+    /** Keeps the master list in step with edits made on the visible page. */
+    private void syncAll() {
+        if (currentTab == 0) {
+            allDialogs.clear();
+            allDialogs.addAll(dialogs);
+        }
+        if (filterTabsView != null) {
+            filterTabsView.checkTabsCounter();
+        }
+    }
+
+    // ---- drawer (upstream LaunchActivity side menu) ----
+
+    private static final int DRAWER_NEW_GROUP = 1;
+    private static final int DRAWER_CONTACTS = 2;
+    private static final int DRAWER_CALLS = 3;
+    private static final int DRAWER_SAVED = 4;
+    private static final int DRAWER_SETTINGS = 5;
+    private static final int DRAWER_BACK = 6;
+
+    private void createDrawer(Context context) {
+        if (getParentLayout() == null || getParentLayout().getDrawerLayoutContainer() == null) {
+            return;
+        }
+        DrawerLayoutContainer container = getParentLayout().getDrawerLayoutContainer();
+        if (container.getDrawerLayout() instanceof DrawerMenuView) {
+            drawerMenu = (DrawerMenuView) container.getDrawerLayout();
+        } else {
+            drawerMenu = new DrawerMenuView(getParentActivity());
+            drawerMenu.setUser(42, "Pavel", "Durov", "+1 234 567 8900", null, gradientBitmap(0xFF7BC862, 0xFF46A03A));
+            drawerMenu.addItem(DRAWER_NEW_GROUP, R.drawable.msg_groups, "New Group");
+            drawerMenu.addItem(DRAWER_CONTACTS, R.drawable.msg_contacts, "Contacts");
+            drawerMenu.addItem(DRAWER_CALLS, R.drawable.msg_calls, "Calls");
+            drawerMenu.addItem(DRAWER_SAVED, R.drawable.msg_saved, "Saved Messages");
+            drawerMenu.addItem(DRAWER_SETTINGS, R.drawable.msg_settings_old, "Settings");
+            drawerMenu.addDivider();
+            drawerMenu.addItem(DRAWER_BACK, R.drawable.msg_leave, "Back to demo");
+            drawerMenu.attachTo(container);
+        }
+        drawerMenu.setDelegate(id -> {
+            container.closeDrawer(false);
+            if (id == DRAWER_BACK) {
+                finishFragment();
+            } else if (id == DRAWER_SETTINGS) {
+                presentFragment(new DemoCellsFragment());
+            }
+        });
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getParentLayout() != null && getParentLayout().getDrawerLayoutContainer() != null) {
+            getParentLayout().getDrawerLayoutContainer().setAllowOpenDrawer(true, false);
+        }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (getParentLayout() != null && getParentLayout().getDrawerLayoutContainer() != null) {
+            getParentLayout().getDrawerLayoutContainer().setAllowOpenDrawer(false, false);
+        }
+    }
+
+    @Override
+    public boolean isSwipeBackEnabled(android.view.MotionEvent event) {
+        // upstream DialogsActivity is the root screen: a swipe from the edge opens the drawer instead
+        return false;
     }
 
     private void updateSwipeMenuText() {
@@ -295,6 +492,7 @@ public class DemoDialogsFragment extends BaseFragment {
         }
         clearSelection();
         rebindVisible(true);
+        syncAll();
     }
 
     // ---- list changes (animated by DialogsItemAnimator) ----
@@ -324,6 +522,7 @@ public class DemoDialogsFragment extends BaseFragment {
         }
         dialogs.add(to, d);
         adapter.notifyItemMoved(from, to);
+        syncAll();
         listView.post(() -> {
             rebindVisible(true);
             adapter.notifyItemRangeChanged(0, dialogs.size());
@@ -347,7 +546,9 @@ public class DemoDialogsFragment extends BaseFragment {
         }
         listView.getDialogsItemAnimator().prepareForRemove();
         dialogs.remove(position);
+        allDialogs.remove(d);
         adapter.notifyItemRemoved(position);
+        syncAll();
         if (archive) {
             archivedCount++;
             if (!dialogs.isEmpty() && dialogs.get(0).isFolder) {
@@ -400,100 +601,103 @@ public class DemoDialogsFragment extends BaseFragment {
             out.sentState = out.sentState == DialogItem.SENT_READ ? DialogItem.SENT_SENDING : out.sentState + 1;
         }
         rebindVisible(true);
+        if (filterTabsView != null) {
+            filterTabsView.checkTabsCounter();
+        }
     }
 
     private void fillDialogs() {
-        dialogs.clear();
+        allDialogs.clear();
         DialogItem d;
 
         d = new DialogItem(0, "Archived Chats", "Design Team, Weekend Plans, Old Project", null);
         d.isFolder = true;
         d.senderName = null;
         d.unreadCount = 4;
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(1, "Saved Messages", "photo_2024.jpg", "14:02");
         d.avatarType = DialogItem.AVATAR_SAVED;
         d.pinned = true;
         d.sentState = DialogItem.SENT_READ;
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(2, "Telegram", "Your login code: 52713. Do not give this code to anyone.", "13:47");
         d.verified = true;
         d.pinned = true;
         d.unreadCount = 1;
         d.avatar = gradientAvatar(0xFF2AABEE, 0xFF229ED9, "✈");
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(3, "Alice Johnson", "See you tomorrow at the café ☕️", "13:12");
         d.online = true;
         d.unreadCount = 2;
         d.avatarBitmap = gradientBitmap(0xFFFF8A65, 0xFFE91E63);
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(4, "Bob Smith", "Sure, I'll send the files tonight", "12:58");
         d.sentState = DialogItem.SENT_SENT;
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(5, "Android Developers", "Is anyone using Compose with RecyclerView?", "12:40");
         d.senderName = "Kevin";
         d.unreadCount = 128;
         d.mention = true;
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(6, "Family 🏡", "Photo", "11:05");
         d.senderName = "Mom";
         d.mediaPreview = true;
         d.muted = true;
         d.unreadCount = 17;
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(7, "Charlie", "typing", "10:31");
         d.message = "Did you see the game last night?";
         d.typing = "typing";
         d.typingType = 0;
         d.online = true;
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(8, "Diana Prince", "Let me check my calendar", "Yesterday");
         d.draft = "I think Friday works better for";
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(9, "Evan", "Voice message", "Yesterday");
         d.mediaPreview = true;
         d.sentState = DialogItem.SENT_SENDING;
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(10, "Frank Ocean", "The upload failed, retrying…", "Mon");
         d.sentState = DialogItem.SENT_ERROR;
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(11, "Grace Hopper", "It's easier to ask forgiveness than it is to get permission.", "Sun");
         d.secret = true;
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(12, "Tech News", "New Android release brings predictive back to every app 🚀", "Sat");
         d.muted = true;
         d.markUnread = true;
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(13, "Hannah", "😂😂😂", "Fri");
         d.sentState = DialogItem.SENT_READ;
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(14, "Ivan Petrov", "Sticker", "Thu");
         d.mediaPreview = true;
         d.senderName = "You";
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(15, "Julia", "Thanks! 🙏", "12.10.24");
-        dialogs.add(d);
+        allDialogs.add(d);
 
         d = new DialogItem(16, "Kate", "recording voice", "11.10.24");
         d.message = "ok";
         d.typing = "recording voice";
         d.typingType = 1;
-        dialogs.add(d);
+        allDialogs.add(d);
     }
 
     private static Bitmap gradientBitmap(int c1, int c2) {
@@ -601,6 +805,18 @@ public class DemoDialogsFragment extends BaseFragment {
         arrayList.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_SUBMENUITEM, null, null, null, null, Theme.key_actionBarDefaultSubmenuItem));
         arrayList.add(new ThemeDescription(list, ThemeDescription.FLAG_SELECTOR, null, null, null, null, Theme.key_listSelector));
         arrayList.addAll(actionMode.getThemeDescriptions());
+        arrayList.addAll(floatingButton.getThemeDescriptions());
+        if (drawerMenu != null) {
+            arrayList.addAll(drawerMenu.getThemeDescriptions());
+        }
+        ThemeDescription.ThemeDescriptionDelegate tabsDelegate = () -> {
+            filterTabsView.getTabsContainer().invalidateViews();
+            filterTabsView.invalidate();
+        };
+        arrayList.add(new ThemeDescription(null, 0, null, null, null, tabsDelegate, Theme.key_actionBarTabLine));
+        arrayList.add(new ThemeDescription(null, 0, null, null, null, tabsDelegate, Theme.key_actionBarTabActiveText));
+        arrayList.add(new ThemeDescription(null, 0, null, null, null, tabsDelegate, Theme.key_actionBarTabUnactiveText));
+        arrayList.add(new ThemeDescription(null, 0, null, null, null, tabsDelegate, Theme.key_actionBarTabSelector));
         arrayList.add(new ThemeDescription(list, 0, new Class[]{View.class}, Theme.dividerPaint, null, null, Theme.key_divider));
 
         arrayList.add(new ThemeDescription(list, 0, new Class[]{DialogCell.class}, null, Theme.avatarDrawables, null, Theme.key_avatar_text));

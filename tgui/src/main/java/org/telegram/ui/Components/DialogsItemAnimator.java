@@ -428,6 +428,10 @@ public class DialogsItemAnimator extends SimpleItemAnimator {
 
     @Override
     public boolean animateChange(ViewHolder oldHolder, ViewHolder newHolder,ItemHolderInfo info, int fromX, int fromY, int toX, int toY) {
+        if (oldHolder == newHolder) {
+            // tgui: same holder rebound (stable ids + notifyDataSetChanged); as in DefaultItemAnimator
+            return animateMove(oldHolder, info, fromX, fromY, toX, toY);
+        }
         if (oldHolder.itemView instanceof DialogCell) {
             resetAnimation(oldHolder);
             resetAnimation(newHolder);
