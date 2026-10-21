@@ -278,7 +278,7 @@ public class DemoDialogsFragment extends BaseFragment {
         DialogsListView listView;
         page.listView = listView = new DialogsListView(context);
         listView.setAdapter(page.adapter = new Adapter(context, page.dialogs));
-        listView.setOnItemClickListener((view, position) -> {
+        listView.setOnItemClickListener((view, position, x, y) -> {
             if (!(view instanceof DialogCell)) {
                 return;
             }
@@ -289,6 +289,8 @@ public class DemoDialogsFragment extends BaseFragment {
                 }
             } else if (cell.getDialog().isFolder) {
                 cell.animateArchiveAvatar();
+            } else if (cell.isPointInsideAvatar(x, y)) {
+                openProfile(cell.getDialog());
             }
         });
         listView.setOnItemLongClickListener((view, position) -> {
@@ -484,6 +486,7 @@ public class DemoDialogsFragment extends BaseFragment {
     private static final int DRAWER_SAVED = 4;
     private static final int DRAWER_SETTINGS = 5;
     private static final int DRAWER_BACK = 6;
+    private static final int DRAWER_PROFILE = 7;
 
     private void createDrawer(Context context) {
         if (getParentLayout() == null || getParentLayout().getDrawerLayoutContainer() == null) {
@@ -495,6 +498,7 @@ public class DemoDialogsFragment extends BaseFragment {
         } else {
             drawerMenu = new DrawerMenuView(getParentActivity());
             drawerMenu.setUser(42, "Pavel", "Durov", "+1 234 567 8900", null, gradientBitmap(0xFF7BC862, 0xFF46A03A));
+            drawerMenu.addItem(DRAWER_PROFILE, R.drawable.msg_openprofile, "My Profile");
             drawerMenu.addItem(DRAWER_NEW_GROUP, R.drawable.msg_groups, "New Group");
             drawerMenu.addItem(DRAWER_CONTACTS, R.drawable.msg_contacts, "Contacts");
             drawerMenu.addItem(DRAWER_CALLS, R.drawable.msg_calls, "Calls");
@@ -510,6 +514,8 @@ public class DemoDialogsFragment extends BaseFragment {
                 finishFragment();
             } else if (id == DRAWER_SETTINGS) {
                 presentFragment(new DemoCellsFragment());
+            } else if (id == DRAWER_PROFILE) {
+                DemoProfiles.openSelf(this);
             }
         });
     }
@@ -841,6 +847,15 @@ public class DemoDialogsFragment extends BaseFragment {
         d.typing = "recording voice";
         d.typingType = 1;
         allDialogs.add(d);
+    }
+
+    private void openProfile(DialogItem d) {
+        if (d.id == 3) {
+            DemoProfiles.openAlice(this);
+            return;
+        }
+        Drawable photo = d.avatarBitmap != null ? new android.graphics.drawable.BitmapDrawable(getParentActivity().getResources(), d.avatarBitmap) : null;
+        DemoProfiles.open(this, d.id, d.title, d.online, d.verified, d.muted, photo);
     }
 
     private static Bitmap gradientBitmap(int c1, int c2) {

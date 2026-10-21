@@ -41,6 +41,7 @@ import androidx.annotation.NonNull;
 import androidx.core.graphics.ColorUtils;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.Emoji;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.tgui.R;
 import org.telegram.tgui.recyclerview.LinearLayoutManager;
@@ -351,6 +352,52 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
         }
 
         contentView = new FrameLayout(context) {
+
+            private boolean ignoreLayout;
+
+            @Override
+            protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                // upstream ProfileActivity contentView.onMeasure: the list's top padding is the screen
+                // width, scrolled so the first row sits at 88dp; pulling down can then open a square
+                final int width = MeasureSpec.getSize(widthMeasureSpec);
+                final int height = MeasureSpec.getSize(heightMeasureSpec);
+                final int paddingTop = AndroidUtilities.isTablet() || width > height ? AndroidUtilities.dp(88f) : width;
+                final int currentPaddingTop = listView.getPaddingTop();
+                if (currentPaddingTop != paddingTop) {
+                    ignoreLayout = true;
+                    View view = null;
+                    int pos = RecyclerView.NO_POSITION;
+                    for (int i = 0; i < listView.getChildCount(); i++) {
+                        int p = listView.getChildAdapterPosition(listView.getChildAt(i));
+                        if (p != RecyclerView.NO_POSITION) {
+                            view = listView.getChildAt(i);
+                            pos = p;
+                            break;
+                        }
+                    }
+                    if (view != null) {
+                        int top = view.getTop();
+                        if (pos == 0 && !allowPullingDown && top > AndroidUtilities.dp(88)) {
+                            top = AndroidUtilities.dp(88);
+                        }
+                        layoutManager.scrollToPositionWithOffset(pos, top - paddingTop);
+                    } else {
+                        layoutManager.scrollToPositionWithOffset(0, AndroidUtilities.dp(88) - paddingTop);
+                    }
+                    listView.setPadding(0, paddingTop, 0, 0);
+                    ignoreLayout = false;
+                }
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            }
+
+            @Override
+            public void requestLayout() {
+                if (ignoreLayout) {
+                    return;
+                }
+                super.requestLayout();
+            }
+
             @Override
             protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
                 super.onLayout(changed, left, top, right, bottom);
@@ -414,8 +461,8 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
             }
         };
         listView.setVerticalScrollBarEnabled(false);
+        NotificationCenter.getGlobalInstance().listenGlobal(listView, NotificationCenter.emojiLoaded, args -> Emoji.invalidateAll(listView));
         listView.setClipToPadding(false);
-        listView.setPadding(0, AndroidUtilities.dp(88), 0, 0);
         listView.setHideIfEmpty(false);
         layoutManager = new LinearLayoutManager(context) {
             @Override
@@ -1198,6 +1245,7 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
                 }
                 case Row.TYPE_NOTIFICATIONS: {
                     NotificationsCheckCell cell = (NotificationsCheckCell) view;
+                    cell.updateColors();
                     cell.setTextAndValueAndCheck(row.text, row.value, row.checked, divider);
                     break;
                 }
