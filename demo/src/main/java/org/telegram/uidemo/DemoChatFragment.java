@@ -55,6 +55,7 @@ import org.telegram.ui.Components.MessageContextMenu;
 import org.telegram.ui.Components.MotionBackgroundDrawable;
 import org.telegram.ui.Components.NumberTextView;
 import org.telegram.ui.Components.RecyclerListView;
+import org.telegram.ui.MediaViewer;
 import org.telegram.ui.TelegramUI;
 
 import java.text.SimpleDateFormat;
@@ -173,6 +174,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         TextBubbleMessage download = TextBubbleMessage.photo(nextId++, false, "10:10", TextBubbleMessage.STATE_NONE, samplePhoto(1280, 720, 2), null);
         download.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
         addSample(download);
+        // a video: a photo bubble with the play button and duration, MediaViewer plays the bundled mp4
+        android.net.Uri videoUri = android.net.Uri.parse("android.resource://" + ApplicationLoader.applicationContext.getPackageName() + "/" + org.telegram.uidemo.R.raw.sample_video);
+        TextBubbleMessage video = TextBubbleMessage.video(nextId++, true, "10:10", TextBubbleMessage.STATE_READ, sampleVideoThumb(videoUri), videoUri, 6, "Short clip 🎬");
+        addSample(video);
         // files: name / size / state from the host, the round button reports taps
         TextBubbleMessage guide = TextBubbleMessage.document(nextId++, false, "10:11", TextBubbleMessage.STATE_NONE, "Telegram_UI_Guide.pdf", 2_457_600);
         react(guide, "👍", 2, false);
@@ -1076,11 +1081,124 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         if (message.type == TextBubbleMessage.TYPE_VOICE) {
             return "🎤 Voice message";
         } else if (message.type == TextBubbleMessage.TYPE_PHOTO) {
-            return android.text.TextUtils.isEmpty(message.text) ? "🖼 Photo" : message.text;
+            if (android.text.TextUtils.isEmpty(message.text)) {
+                return message.videoUri != null ? "📹 Video" : "🖼 Photo";
+            }
+            return message.text;
         } else if (message.type == TextBubbleMessage.TYPE_DOCUMENT) {
             return "📎 " + message.fileName;
         }
         return message.text == null ? "" : message.text;
+    }
+
+    /** The video's first frame as its bubble thumbnail (the host's preview); a generated photo if that fails. */
+    private static Drawable sampleVideoThumb(android.net.Uri uri) {
+        android.media.MediaMetadataRetriever retriever = new android.media.MediaMetadataRetriever();
+        try {
+            retriever.setDataSource(ApplicationLoader.applicationContext, uri);
+            android.graphics.Bitmap frame = retriever.getFrameAtTime(0);
+            if (frame != null) {
+                return new android.graphics.drawable.BitmapDrawable(ApplicationLoader.applicationContext.getResources(), frame);
+            }
+        } catch (Exception ignore) {
+        } finally {
+            try {
+                retriever.release();
+            } catch (Exception ignore) {
+            }
+        }
+        return samplePhoto(640, 360, 0);
+    }
+
+    /**
+     * ChatActivity.didPressImage -> PhotoViewer.openPhoto: every loaded photo / video of the chat,
+     * in order, opened on {@code message} and animated out of its bubble.
+     */
+    private void openMediaViewer(TextBubbleMessage message) {
+        ArrayList<MediaViewer.Item> items = new ArrayList<>();
+        ArrayList<TextBubbleMessage> sources = new ArrayList<>();
+        int index = 0;
+        SimpleDateFormat format = new SimpleDateFormat("d MMM yyyy 'at' HH:mm", Locale.getDefault());
+        for (TextBubbleMessage m : messages) {
+            if (m.type != TextBubbleMessage.TYPE_PHOTO || m.mediaState != TextBubbleMessage.MEDIA_READY || m.photo == null && m.videoUri == null) {
+                continue;
+            }
+            if (m == message) {
+                index = items.size();
+            }
+            CharSequence sender = m.isOut ? "You" : "Alice Johnson";
+            CharSequence date = m.date != 0 ? format.format(new Date(m.date * 1000)) : m.time;
+            MediaViewer.Item item = m.videoUri != null
+                    ? MediaViewer.Item.video(m.videoUri, m.photo, sender, date, m.text)
+                    : MediaViewer.Item.photo(m.photo, sender, date, m.text);
+            item.width = m.photoWidth;
+            item.height = m.photoHeight;
+            item.tag = m;
+            items.add(item);
+            sources.add(m);
+        }
+        if (items.isEmpty()) {
+            return;
+        }
+        MediaViewer.open(getParentActivity(), items, index, new MediaViewer.Provider() {
+            @Override
+            public boolean getSourceRect(int i, android.graphics.RectF outRect, float[] outRadii) {
+                PhotoBubbleCell cell = findPhotoCell(sources.get(i));
+                if (cell == null || !cell.getPhotoRectOnScreen(outRect)) {
+                    return false;
+                }
+                // keep the part under the action bar / input out of the animation's start rect
+                int[] location = new int[2];
+                listView.getLocationOnScreen(location);
+                if (outRect.bottom < location[1] + listView.getPaddingTop() || outRect.top > location[1] + listView.getHeight() - listView.getPaddingBottom()) {
+                    return false;
+                }
+                System.arraycopy(cell.getPhotoRadii(), 0, outRadii, 0, 8);
+                return true;
+            }
+
+            @Override
+            public void setSourceVisible(int i, boolean visible) {
+                viewerHiddenMessage = visible ? null : sources.get(i);
+                PhotoBubbleCell cell = findPhotoCell(sources.get(i));
+                if (cell != null) {
+                    cell.setPhotoVisible(visible);
+                }
+            }
+
+            @Override
+            public void onPageSelected(int i) {
+                // ChatActivity scrolls the chat along so closing lands on the right bubble
+                int position = rows.indexOf(sources.get(i));
+                if (position >= 0 && findPhotoCell(sources.get(i)) == null) {
+                    layoutManager.scrollToPositionWithOffset(position, listView.getMeasuredHeight() / 3, false);
+                }
+            }
+
+            @Override
+            public void onClosed() {
+                viewerHiddenMessage = null;
+                for (int c = 0; c < listView.getChildCount(); c++) {
+                    View child = listView.getChildAt(c);
+                    if (child instanceof PhotoBubbleCell) {
+                        ((PhotoBubbleCell) child).setPhotoVisible(true);
+                    }
+                }
+            }
+        });
+    }
+
+    /** The photo MediaViewer shows full screen; its bubble leaves the image out (also after rebinding). */
+    private TextBubbleMessage viewerHiddenMessage;
+
+    private PhotoBubbleCell findPhotoCell(TextBubbleMessage message) {
+        for (int i = 0; i < listView.getChildCount(); i++) {
+            View child = listView.getChildAt(i);
+            if (child instanceof PhotoBubbleCell && ((PhotoBubbleCell) child).getMessage() == message) {
+                return (PhotoBubbleCell) child;
+            }
+        }
+        return null;
     }
 
     /** A generated landscape (sky gradient, sun, two hills) standing in for a decoded photo. */
@@ -1284,6 +1402,12 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) {
             if (message.type == TextBubbleMessage.TYPE_VOICE) {
                 toggleVoice(message);
+            } else if (message.type == TextBubbleMessage.TYPE_PHOTO && message.mediaState == TextBubbleMessage.MEDIA_READY) {
+                if (actionBar.isActionModeShowed()) {
+                    processRowSelect(message);
+                } else {
+                    openMediaViewer(message);
+                }
             } else if (message.type == TextBubbleMessage.TYPE_PHOTO || message.type == TextBubbleMessage.TYPE_DOCUMENT) {
                 toggleFakeDownload(message);
             }
@@ -1472,6 +1596,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             cell.setMessage(message, pinnedTop, pinnedBottom);
             cell.setCheckBoxVisible(actionBar.isActionModeShowed(), false);
             cell.setChecked(selectedMessages.contains(message), false);
+            if (cell instanceof PhotoBubbleCell) {
+                ((PhotoBubbleCell) cell).setPhotoVisible(message != viewerHiddenMessage);
+            }
             if (highlightMessageId != 0 && message.id == highlightMessageId) {
                 highlightMessageId = 0;
                 cell.setHighlightedAnimated();
