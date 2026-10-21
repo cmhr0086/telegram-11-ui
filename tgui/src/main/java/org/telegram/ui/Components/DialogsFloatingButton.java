@@ -125,6 +125,19 @@ public class DialogsFloatingButton extends FrameLayout {
         updateOffset();
     }
 
+    /** Hides / shows at once (upstream onSearchCollapse: floatingHidden = true, translation dp(100)). */
+    public void hide(boolean hide, boolean animated) {
+        if (animated) {
+            hide(hide);
+            return;
+        }
+        floatingHidden = hide;
+        floatingButtonHideProgress = hide ? 1f : 0f;
+        floatingButtonTranslation = dp(100) * floatingButtonHideProgress;
+        setClickable(!hide);
+        updateOffset();
+    }
+
     /** Upstream hideFloatingButton. */
     public void hide(boolean hide) {
         if (floatingHidden == hide || hide && floatingForceVisible) {

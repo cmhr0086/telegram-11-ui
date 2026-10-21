@@ -679,7 +679,10 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
             messageNameString = item.senderName;
             checkMessage = false;
             CharSequence mess = item.message != null ? item.message : "";
-            if (mess.length() > 150) {
+            if (hasHighlightedWords()) {
+                // upstream message.messageTrimmedToHighlight: keep the match in view
+                mess = AndroidUtilities.ellipsizeCenterEnd(AndroidUtilities.replaceNewLines(mess), item.highlightedWords.get(0), getMeasuredWidth() - dp(messagePaddingStart + 23), currentMessagePaint.paint, 130);
+            } else if (mess.length() > 150) {
                 mess = mess.subSequence(0, 150);
             }
             mess = AndroidUtilities.replaceNewLines(mess);
@@ -701,6 +704,9 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
             checkMessage = false;
         } else {
             messageString = item.message != null ? item.message : "";
+            if (hasHighlightedWords()) {
+                messageString = AndroidUtilities.ellipsizeCenterEnd(AndroidUtilities.replaceNewLines(messageString), item.highlightedWords.get(0), getMeasuredWidth() - dp(messagePaddingStart + 23), currentMessagePaint.paint, 130);
+            }
         }
 
         if (isFolder()) {
@@ -838,6 +844,12 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
             }
             CharSequence nameStringFinal = TextUtils.ellipsize(nameString, Theme.dialogs_namePaint[paintIndex], ellipsizeWidth, TextUtils.TruncateAt.END);
             nameStringFinal = Emoji.replaceEmoji(nameStringFinal, Theme.dialogs_namePaint[paintIndex].getFontMetricsInt(), dp(20), false);
+            if (hasHighlightedWords()) {
+                CharSequence s = AndroidUtilities.highlightText(nameStringFinal, item.highlightedWords, resourcesProvider);
+                if (s != null) {
+                    nameStringFinal = s;
+                }
+            }
             nameLayout = new StaticLayout(nameStringFinal, Theme.dialogs_namePaint[paintIndex], Math.max(ellipsizeWidth, nameWidth), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
         } catch (Exception e) {
             FileLog.e(e);
@@ -971,6 +983,18 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
                 mess = AndroidUtilities.replaceTwoNewLinesToOne(mess);
             }
             messageString = Emoji.replaceEmoji(mess, Theme.dialogs_messagePaint[paintIndex].getFontMetricsInt(), dp(17), false);
+        }
+        if (hasHighlightedWords() && item.draft == null && item.typing == null) {
+            CharSequence s = AndroidUtilities.highlightText(messageString, item.highlightedWords, resourcesProvider);
+            if (s != null) {
+                messageString = s;
+            }
+            if (threeLines && messageNameString != null) {
+                s = AndroidUtilities.highlightText(messageNameString, item.highlightedWords, resourcesProvider);
+                if (s != null) {
+                    messageNameString = s;
+                }
+            }
         }
         messageWidth = Math.max(dp(12), messageWidth);
         if (threeLines && messageNameString != null) {
@@ -1253,6 +1277,11 @@ public class DialogCell extends BaseCell implements NotificationCenter.Notificat
         } else {
             return x >= getMeasuredWidth() - dp(60) && x < getMeasuredWidth();
         }
+    }
+
+    /** Upstream MessageObject.hasHighlightedWords: search results ({@link DialogItem#highlightedWords}). */
+    private boolean hasHighlightedWords() {
+        return item != null && item.highlightedWords != null && !item.highlightedWords.isEmpty();
     }
 
     /** Tablet-style selected highlight (upstream setDialogSelected). */

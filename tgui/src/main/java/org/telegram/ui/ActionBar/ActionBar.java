@@ -1845,6 +1845,28 @@ public class ActionBar extends FrameLayout {
         setBackground(null);
     }
 
+    // tgui: upstream DialogsActivity's ContentView paints the white search bar behind its action bar
+    // (a circle growing from the search icon, then a divider); here the action bar paints it itself.
+    private float searchRevealProgress;
+    private int searchRevealFromColor;
+    private int searchRevealToColor;
+    private boolean searchRevealCircle;
+    private Paint searchRevealPaint;
+
+    /**
+     * Upstream DialogsActivity whiteActionBar search transition: 0 draws nothing, 0..1 the bar in
+     * {@code fromColor} blended into {@code toColor} — as a circle growing from the rightmost item
+     * when {@code circle}, else filling the bar — and 1 a solid {@code toColor} bar; a divider
+     * fades in underneath.
+     */
+    public void setSearchRevealProgress(float progress, int fromColor, int toColor, boolean circle) {
+        searchRevealProgress = progress;
+        searchRevealCircle = circle;
+        searchRevealFromColor = fromColor;
+        searchRevealToColor = toColor;
+        invalidate();
+    }
+
     @Override
     protected void dispatchDraw(Canvas canvas) {
         if (blurredBackground && actionBarColor != Color.TRANSPARENT) {
@@ -1852,7 +1874,34 @@ public class ActionBar extends FrameLayout {
             blurScrimPaint.setColor(actionBarColor);
             contentView.drawBlurRect(canvas, getY(), rectTmp, blurScrimPaint, true);
         }
+        if (searchRevealProgress > 0) {
+            if (searchRevealPaint == null) {
+                searchRevealPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            }
+            if (searchRevealProgress >= 1f) {
+                searchRevealPaint.setColor(searchRevealToColor);
+                canvas.drawRect(0, 0, getMeasuredWidth(), getMeasuredHeight(), searchRevealPaint);
+            } else if (!searchRevealCircle) {
+                searchRevealPaint.setColor(androidx.core.graphics.ColorUtils.blendARGB(searchRevealFromColor, searchRevealToColor, searchRevealProgress));
+                canvas.drawRect(0, 0, getMeasuredWidth(), getMeasuredHeight(), searchRevealPaint);
+            } else {
+                searchRevealPaint.setColor(androidx.core.graphics.ColorUtils.blendARGB(searchRevealFromColor, searchRevealToColor, searchRevealProgress));
+                canvas.save();
+                canvas.clipRect(0, 0, getMeasuredWidth(), getMeasuredHeight());
+                float cX = getMeasuredWidth() - dp(24);
+                int statusBarH = occupyStatusBar ? AndroidUtilities.statusBarHeight : 0;
+                float cY = statusBarH + (getMeasuredHeight() - extraHeight - statusBarH) / 2f;
+                canvas.drawCircle(cX, cY, getMeasuredWidth() * 1.3f * searchRevealProgress, searchRevealPaint);
+                canvas.restore();
+            }
+        }
         super.dispatchDraw(canvas);
+        if (searchRevealProgress > 0) {
+            int a = Theme.dividerPaint.getAlpha();
+            Theme.dividerPaint.setAlpha((int) (a * Math.min(1f, searchRevealProgress)));
+            canvas.drawRect(0, getMeasuredHeight() - 1, getMeasuredWidth(), getMeasuredHeight(), Theme.dividerPaint);
+            Theme.dividerPaint.setAlpha(a);
+        }
     }
 
     public void setForceSkipTouches(boolean forceSkipTouches) {

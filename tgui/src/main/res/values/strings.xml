@@ -192,4 +192,14 @@
     <string name="chatFullDate">MMMM d, yyyy</string>
     <string name="ChatDateToday">Today</string>
     <string name="ChatDateYesterday">Yesterday</string>
+    <string name="Recent">Recent</string>
+    <string name="ChatHints">People</string>
+    <string name="Search">Search</string>
+    <string name="SearchAllChatsShort">Chats</string>
+    <string name="SearchMessages">Messages</string>
+    <string name="GlobalSearch">Global search</string>
+    <string name="NoResultFoundFor2">There were no results for \"%s\".\nTry a new search.</string>
+    <string name="ClearSearchAlertTitle">Clear search history</string>
+    <string name="ClearSearchAlert">Are you sure you want to clear your search history?</string>
+    <string name="AccDescrOpenMenu">Open navigation menu</string>
 </resources>
