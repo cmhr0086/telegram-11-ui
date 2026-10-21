@@ -23,6 +23,7 @@ import org.telegram.tgui.recyclerview.LinearLayoutManager;
 import org.telegram.tgui.recyclerview.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.NotificationCenter;
@@ -39,6 +40,7 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Cells.TextBubbleCell;
 import org.telegram.ui.Cells.TextBubbleMessage;
+import org.telegram.ui.Cells.PhotoBubbleCell;
 import org.telegram.ui.Cells.VoiceBubbleCell;
 import org.telegram.ui.Components.ChatActivityEnterView;
 import org.telegram.ui.Components.ChatBubbleItemAnimator;
@@ -130,6 +132,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         addSample("👋", false, "10:06", TextBubbleMessage.STATE_NONE);
         addSample("😂❤️👍", true, "10:07", TextBubbleMessage.STATE_READ);
         addSample("ok", true, "10:07", TextBubbleMessage.STATE_SENT);
+        // photos: the host hands in a Drawable (here generated, no network); one waits for a tap to "download"
+        messages.add(TextBubbleMessage.photo(nextId++, false, "10:08", TextBubbleMessage.STATE_NONE, samplePhoto(1280, 853, 0), null));
+        TextBubbleMessage portrait = TextBubbleMessage.photo(nextId++, true, "10:09", TextBubbleMessage.STATE_READ, samplePhoto(720, 960, 1), "Sunset from the hill 🌅");
+        messages.add(portrait);
+        TextBubbleMessage download = TextBubbleMessage.photo(nextId++, false, "10:10", TextBubbleMessage.STATE_NONE, samplePhoto(1280, 720, 2), null);
+        download.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
+        messages.add(download);
         return super.onFragmentCreate();
     }
 
@@ -876,6 +885,74 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         return message.text == null ? "" : message.text;
     }
 
+    /** A generated landscape (sky gradient, sun, two hills) standing in for a decoded photo. */
+    private static Drawable samplePhoto(int width, int height, int variant) {
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        int[][] skies = {{0xff4fa3e0, 0xffbfe3f7}, {0xff3b2667, 0xffff9a62}, {0xff1d4350, 0xffa3d39c}};
+        int[][] hills = {{0xff5d9b46, 0xff3f7a32}, {0xff4a2d4f, 0xff2a1830}, {0xff2f6b4f, 0xff1f4a37}};
+        android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        paint.setShader(new android.graphics.LinearGradient(0, 0, 0, height, skies[variant][0], skies[variant][1], android.graphics.Shader.TileMode.CLAMP));
+        canvas.drawRect(0, 0, width, height, paint);
+        paint.setShader(null);
+        paint.setColor(variant == 1 ? 0xffffd36b : 0xfffff4c2);
+        canvas.drawCircle(width * 0.7f, height * 0.38f, Math.min(width, height) * 0.11f, paint);
+        paint.setColor(hills[variant][0]);
+        canvas.drawOval(-width * 0.3f, height * 0.62f, width * 0.8f, height * 1.4f, paint);
+        paint.setColor(hills[variant][1]);
+        canvas.drawOval(width * 0.25f, height * 0.7f, width * 1.4f, height * 1.5f, paint);
+        return new android.graphics.drawable.BitmapDrawable(ApplicationLoader.applicationContext.getResources(), bitmap);
+    }
+
+    /** Pretend download / upload for photos and files: MEDIA_DOWNLOAD -> MEDIA_LOADING (progress) -> MEDIA_READY; tap again cancels. */
+    private void toggleFakeDownload(TextBubbleMessage message) {
+        if (message.mediaState == TextBubbleMessage.MEDIA_READY) {
+            if (message.type == TextBubbleMessage.TYPE_DOCUMENT) {
+                Toast.makeText(getParentActivity(), "Open " + message.fileName + ": the host opens the file here", Toast.LENGTH_SHORT).show();
+            }
+            return;
+        }
+        if (message.mediaState == TextBubbleMessage.MEDIA_LOADING) {
+            message.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
+            message.mediaProgress = 0;
+            refreshMedia(message);
+            return;
+        }
+        message.mediaState = TextBubbleMessage.MEDIA_LOADING;
+        message.mediaProgress = 0;
+        refreshMedia(message);
+        Runnable step = new Runnable() {
+            @Override
+            public void run() {
+                if (message.mediaState != TextBubbleMessage.MEDIA_LOADING) {
+                    return;
+                }
+                message.mediaProgress = Math.min(1f, message.mediaProgress + 0.04f);
+                if (message.mediaProgress >= 1f) {
+                    message.mediaState = TextBubbleMessage.MEDIA_READY;
+                } else {
+                    AndroidUtilities.runOnUIThread(this, 80);
+                }
+                refreshMedia(message);
+            }
+        };
+        AndroidUtilities.runOnUIThread(step, 80);
+    }
+
+    private void refreshMedia(TextBubbleMessage message) {
+        if (listView == null) {
+            return;
+        }
+        for (int i = 0; i < listView.getChildCount(); i++) {
+            View child = listView.getChildAt(i);
+            if (child instanceof TextBubbleCell && ((TextBubbleCell) child).getMessage() == message) {
+                if (child instanceof PhotoBubbleCell) {
+                    ((PhotoBubbleCell) child).updateButtonState(true);
+                }
+            }
+        }
+    }
+
     private static byte[] sampleWaveform() {
         ArrayList<Integer> levels = new ArrayList<>();
         java.util.Random random = new java.util.Random(7);
@@ -891,6 +968,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) {
             if (message.type == TextBubbleMessage.TYPE_VOICE) {
                 toggleVoice(message);
+            } else if (message.type == TextBubbleMessage.TYPE_PHOTO || message.type == TextBubbleMessage.TYPE_DOCUMENT) {
+                toggleFakeDownload(message);
             }
         }
 
@@ -1043,6 +1122,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             TextBubbleCell cell;
             if (viewType == TextBubbleMessage.TYPE_VOICE) {
                 cell = new VoiceBubbleCell(context, getResourceProvider());
+            } else if (viewType == TextBubbleMessage.TYPE_PHOTO) {
+                cell = new PhotoBubbleCell(context, getResourceProvider());
             } else {
                 cell = new TextBubbleCell(context, getResourceProvider());
             }

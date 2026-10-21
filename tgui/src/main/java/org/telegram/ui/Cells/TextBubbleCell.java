@@ -156,6 +156,8 @@ public class TextBubbleCell extends View {
             Theme.key_chat_inVoiceSeekbar, Theme.key_chat_outVoiceSeekbar, Theme.key_chat_inVoiceSeekbarFill, Theme.key_chat_outVoiceSeekbarFill,
             Theme.key_chat_inVoiceSeekbarSelected, Theme.key_chat_outVoiceSeekbarSelected,
             Theme.key_chat_mediaTimeBackground, Theme.key_chat_mediaTimeText, Theme.key_chat_mediaSentCheck, Theme.key_chat_mediaSentClock,
+            Theme.key_chat_mediaLoaderPhoto, Theme.key_chat_mediaLoaderPhotoSelected, Theme.key_chat_mediaLoaderPhotoIcon, Theme.key_chat_mediaLoaderPhotoIconSelected,
+            Theme.key_chat_mediaProgress,
     };
 
     /** Adds a redraw ThemeDescription for every key in {@link #MEDIA_THEME_KEYS}. */
@@ -616,12 +618,17 @@ public class TextBubbleCell extends View {
      * with white checks for outgoing messages.
      */
     protected void drawTimePill(Canvas canvas, int right, int bottom) {
+        drawTimePill(canvas, right, bottom, AndroidUtilities.dp(4));
+    }
+
+    /** @param radius pill corner radius: 4dp for emoji, min(8dp, photo corner) over media */
+    protected void drawTimePill(Canvas canvas, int right, int bottom, int radius) {
         final boolean out = message.isOut;
         int pillWidth = timeWidth + AndroidUtilities.dp(out ? 32 : 12);
         int pillHeight = AndroidUtilities.dp(17);
         timeRect.set(right - pillWidth, bottom - pillHeight, right, bottom);
         Theme.chat_timeBackgroundPaint.setColor(getThemedColor(Theme.key_chat_mediaTimeBackground));
-        canvas.drawRoundRect(timeRect, AndroidUtilities.dp(4), AndroidUtilities.dp(4), Theme.chat_timeBackgroundPaint);
+        canvas.drawRoundRect(timeRect, radius, radius, Theme.chat_timeBackgroundPaint);
         Theme.chat_timePaint.setColor(getThemedColor(Theme.key_chat_mediaTimeText));
         canvas.save();
         canvas.translate(timeRect.left + AndroidUtilities.dp(6), timeRect.centerY() - timeLayout.getHeight() / 2f);
