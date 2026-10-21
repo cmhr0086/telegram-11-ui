@@ -4,8 +4,8 @@ plugins {
 }
 
 android {
-    // Keep upstream namespace so `org.telegram.messenger.R` resolves unchanged.
-    namespace = "org.telegram.messenger"
+    // Own namespace (not org.telegram.messenger) so hosts, including Telegram forks, do not clash.
+    namespace = "org.telegram.tgui"
     compileSdk = 36
 
     defaultConfig {

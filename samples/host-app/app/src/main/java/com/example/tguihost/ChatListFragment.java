@@ -10,7 +10,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 // library resources live in the library R (host has nonTransitiveRClass=true by default)
-import org.telegram.messenger.R;
+import org.telegram.tgui.R;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;

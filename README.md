@@ -3,7 +3,7 @@
 把 Telegram Android 官方客户端（经典 UI）的原生 UI 组件抽成独立 Android Library（AAR），去掉账号、消息、网络等业务依赖，供其他项目直接复用。
 
 - 基线：[DrKLO/Telegram](https://github.com/DrKLO/Telegram) `release-11.4.2-5469`（不追上游）
-- 包名保持上游原样（`org.telegram.ui.*`、`org.telegram.messenger.*`），库 namespace 为 `org.telegram.messenger`，所以上游代码里的 `org.telegram.messenger.R` 不用改
+- 包名保持上游原样（`org.telegram.ui.*`、`org.telegram.messenger.*`），库 namespace 是独立的 `org.telegram.tgui`（不和 Telegram 及其分支的 `org.telegram.messenger` 冲突），库资源的 R 类是 `org.telegram.tgui.R`，上游代码搬过来时把 `import org.telegram.messenger.R;` 换成 `import org.telegram.tgui.R;`
 - 第一阶段：纯 Java 组件；第二阶段接入 Lottie（上游 rlottie 原生库，CMake 构建出 `libtguilottie.so`，含 armeabi-v7a / arm64-v8a / x86 / x86_64）
 - 版本变更见 [CHANGELOG.md](CHANGELOG.md)
 
@@ -71,7 +71,11 @@ Manifest 里给 Activity 加上
 
 注意 `createView()` 不是只调一次：切换主题（部分情况）、语言或屏幕配置变化时，`ActionBarLayout` 会重建页面视图，`createView()` 会再次执行。和上游约定一样，数据和监听的初始化放在 `onFragmentCreate()`，`createView()` 里只建视图、绑定已有数据。
 
+库里的图标、字符串等资源都通过 `org.telegram.tgui.R` 引用（AGP 8+ 默认 `nonTransitiveRClass=true`，宿主自己的 `R` 不包含库资源）：
+
 ```java
+import org.telegram.tgui.R;
+
 showDialog(new AlertDialog.Builder(getParentActivity())
         .setTitle("Title").setMessage("Message")
         .setPositiveButton("OK", null).setNegativeButton("Cancel", null)

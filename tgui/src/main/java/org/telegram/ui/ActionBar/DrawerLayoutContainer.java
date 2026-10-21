@@ -43,7 +43,7 @@ import androidx.annotation.Nullable;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.FileLog;
-import org.telegram.messenger.R;
+import org.telegram.tgui.R;
 import org.telegram.messenger.Utilities;
 
 public class DrawerLayoutContainer extends FrameLayout {

@@ -51,7 +51,7 @@ logcat 的 crash 缓冲区为空。小米 10.0.0.139 测试时已经掉线（adb
 ### 3. 【高】宿主的 `R` 拿不到库资源；namespace 用 `org.telegram.messenger` 的宿主直接合并失败
 
 - **现象 A**：照 README 示例写 `R.drawable.msg_copy`（宿主包下的 `R`），编译报 `cannot find symbol … variable drawable / location: class R`。
-  AGP 8+ 新工程默认 `android.nonTransitiveRClass=true`，宿主自己的 `R` 不含库资源。要改成 `import org.telegram.messenger.R;`。README 里没提。
+  AGP 8+ 新工程默认 `android.nonTransitiveRClass=true`，宿主自己的 `R` 不含库资源。要改成 `import org.telegram.tgui.R;`。README 里没提。
   另外库自己的 `gradle.properties` 设了 `nonTransitiveRClass=false`，demo 能直接用，外部宿主则不行，两边行为不一致。
 - **现象 B**：把宿主 namespace 设成 `org.telegram.messenger`（任何 Telegram 分支 App 都是这个包），manifest 合并直接失败：
   `Namespace 'org.telegram.messenger' is used in multiple modules and/or libraries: AndroidManifest.xml, org.telegram.ui:tgui:11.4.2-ui2.`

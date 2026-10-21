@@ -2,7 +2,7 @@ package org.telegram.uidemo;
 
 import android.view.View;
 
-import org.telegram.messenger.R;
+import org.telegram.tgui.R;
 import org.telegram.ui.Cells.CheckBoxCell;
 import org.telegram.ui.Cells.NotificationsCheckCell;
 import org.telegram.ui.Cells.RadioCell;

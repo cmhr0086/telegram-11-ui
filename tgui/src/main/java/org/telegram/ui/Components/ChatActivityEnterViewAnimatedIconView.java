@@ -6,7 +6,7 @@ import androidx.annotation.Nullable;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
-import org.telegram.messenger.R;
+import org.telegram.tgui.R;
 
 import java.util.HashMap;
 import java.util.Map;

@@ -1,5 +1,7 @@
 package org.telegram.messenger;
 
+import org.telegram.tgui.R;
+
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.Build;

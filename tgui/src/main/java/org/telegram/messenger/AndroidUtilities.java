@@ -8,6 +8,8 @@
 
 package org.telegram.messenger;
 
+import org.telegram.tgui.R;
+
 import org.telegram.ui.Components.ColoredImageSpan;
 import org.telegram.ui.Components.ForegroundColorSpanThemable;
 import org.telegram.ui.Components.URLSpanReplacement;

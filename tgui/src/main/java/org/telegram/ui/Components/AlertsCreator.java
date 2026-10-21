@@ -83,7 +83,7 @@ import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 
 import org.telegram.messenger.OneUIUtilities;
-import org.telegram.messenger.R;
+import org.telegram.tgui.R;
 
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.SvgHelper;

@@ -8,7 +8,7 @@ import android.os.SystemClock;
 
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
-import org.telegram.messenger.R;
+import org.telegram.tgui.R;
 import org.telegram.messenger.Utilities;
 
 /**

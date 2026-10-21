@@ -13,7 +13,7 @@ import android.view.WindowInsets;
 import androidx.annotation.RequiresApi;
 
 import org.telegram.messenger.AndroidUtilities;
-import org.telegram.messenger.R;
+import org.telegram.tgui.R;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 
 import java.util.ArrayList;

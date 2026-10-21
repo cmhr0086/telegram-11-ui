@@ -59,7 +59,7 @@ import androidx.core.content.ContextCompat;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
 import org.telegram.messenger.LocaleController;
-import org.telegram.messenger.R;
+import org.telegram.tgui.R;
 
 import org.telegram.ui.Components.CloseProgressDrawable2;
 import org.telegram.ui.Components.EditTextBoldCursor;

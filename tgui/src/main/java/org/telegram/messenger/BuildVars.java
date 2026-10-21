@@ -8,6 +8,8 @@
 
 package org.telegram.messenger;
 
+import org.telegram.tgui.BuildConfig;
+
 // tgui: trimmed to the debug/log switches used by UI code.
 public class BuildVars {
 

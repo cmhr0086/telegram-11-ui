@@ -12,7 +12,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 // library resources live in the library R (host has nonTransitiveRClass=true by default)
-import org.telegram.messenger.R;
+import org.telegram.tgui.R;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.tgnet.TLRPC;

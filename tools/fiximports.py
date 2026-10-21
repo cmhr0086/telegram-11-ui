@@ -8,7 +8,7 @@ for d, _, fs in os.walk(LIB):
     for f in fs:
         if f.endswith(".java"):
             present.add(os.path.relpath(os.path.join(d, f), LIB)[:-5].replace("/", "."))
-keep = {"org.telegram.messenger.R", "org.telegram.messenger.BuildConfig"}
+keep = {"org.telegram.tgui.R", "org.telegram.tgui.BuildConfig"}
 pat = re.compile(r"^import\s+(static\s+)?((?:org\.telegram|androidx\.recyclerview)[\w.]*?)(\.\*)?;\s*$", re.M)
 for d, _, fs in os.walk(LIB):
     for f in fs:
