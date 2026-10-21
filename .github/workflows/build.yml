@@ -35,6 +35,14 @@ jobs:
       - name: Build
         run: ./gradlew :tgui:assembleRelease :demo:assembleDebug --stacktrace
 
+      # The demo uses project(":tgui") and never sees the published AAR; this standalone
+      # sample consumes it from mavenLocal only, so AAR-only breakage (e.g. D8 failures) shows up here.
+      - name: Build host-app sample against the published AAR
+        run: |
+          ./gradlew :tgui:publishToMavenLocal --stacktrace
+          cd samples/host-app
+          ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
+
       - uses: actions/upload-artifact@v4
         with:
           name: tgui-release-aar

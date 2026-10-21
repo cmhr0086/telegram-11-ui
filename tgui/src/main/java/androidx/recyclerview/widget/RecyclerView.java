@@ -12372,9 +12372,7 @@ public class RecyclerView extends ViewGroup implements ScrollingView,
         // Fields below must be updated or cleared before they are used (generally before a pass)
         ////////////////////////////////////////////////////////////////////////////////////////////
 
-        @IntDef(flag = true, value = {
-                STEP_START, STEP_LAYOUT, STEP_ANIMATIONS
-        })
+        // No @IntDef: AGP strips non-public typedefs from the AAR, but the NestMembers attribute still names them and D8 fails in consumers.
         @Retention(RetentionPolicy.SOURCE)
         @interface LayoutState {}
 

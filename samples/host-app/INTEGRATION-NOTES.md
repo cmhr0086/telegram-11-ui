@@ -23,21 +23,19 @@ logcat 的 crash 缓冲区为空。小米 10.0.0.139 测试时已经掉线（adb
 
 ## 摩擦点（按严重程度排序）
 
-### 1. 【阻断】发布出来的 AAR 不能被任何宿主 dex：缺 5 个 `@IntDef` 注解类
+### 1. ~~【阻断】发布出来的 AAR 不能被任何宿主 dex：缺 5 个 `@IntDef` 注解类~~ 【已修复】
 
 - **现象**：宿主 `assembleDebug` 在 `mergeExtDexDebug` 失败：
   `D8: Compilation of classes androidx.recyclerview.widget.RecyclerView, … requires its nest mates androidx.recyclerview.widget.RecyclerView$State$LayoutState (unavailable) to be on program or class path.`
-- **原因**：对比 `tgui/build/intermediates/javac/.../classes` 和 AAR 的 `classes.jar`，AAR 里少了 5 个类：
-  `RecyclerView$State$LayoutState`、`FastScroller$State`、`FastScroller$DragState`、`FastScroller$AnimationState`、`EmojiView$Type`。
-  它们都是嵌套的 `@IntDef` + `@Retention(SOURCE)` 注解。AGP 打 AAR 时把 SOURCE 级 typedef 当成“只给 lint 用”而删掉（导出到 `annotations.zip`），
-  但库用 Java 17 编译，外层类的 `NestMembers` 属性仍然指向它们，D8 校验 nest 时就报错。官方 androidx 是 Java 8 目标，没有 nest 属性，所以不出事。
-  demo 用的是 `project(":tgui")`，不经过 AAR，所以 CI 一直是绿的、发现不了。
-- **宿主侧临时绕过（本工程正在用）**：把这 5 个 `.class` 从库的 javac 输出里打成 `app/libs/tgui-stripped-typedefs.jar` 加进依赖，
-  并在 `gradle.properties` 里加 `android.useFullClasspathForDexingTransform=true`，让 D8 dex AAR 时能在 classpath 上看到它们。外部用户做不到这一步（拿不到库的 javac 输出）。
-- **库里建议的修法**（任选其一）：
-  - 把这几个嵌套注解改成 `@Retention(RetentionPolicy.CLASS)`（AGP 只删 SOURCE 级），或者干脆删掉注解只留常量；
-  - 或把它们移成顶层注解类型（不再是 nest member）；
-  - 并在 CI 里加一个“从 mavenLocal 构建 `samples/host-app`”的任务，否则这类只在 AAR 路径上出现的问题永远测不到。
+- **原因**：AAR 的 `classes.jar` 里少了 5 个类：`RecyclerView$State$LayoutState`、`FastScroller$State`、`FastScroller$DragState`、
+  `FastScroller$AnimationState`、`EmojiView$Type`。AGP 的 `extractReleaseAnnotations` 会把**非 public** 的 `@IntDef` 类型
+  记进 `typedefs.txt`（导出到 `annotations.zip`），打 AAR 时从 `classes.jar` 删掉——和 `@Retention` 无关，改成 `CLASS` 实测照删不误。
+  但库用 Java 17 编译，外层类的 `NestMembers` 属性仍指向它们，D8 校验 nest 时就报错。官方 androidx 是 Java 8 目标，没有 nest 属性，所以不出事。
+  demo 用的是 `project(":tgui")`，不经过 AAR，所以 CI 之前发现不了。public 的嵌套 typedef（`RecyclerView.Orientation` 等）不会被删，没有问题。
+- **修法**：去掉这 5 处的 `@IntDef`（注解类型和常量保留，只少了 lint 对取值的检查），`typedefs.txt` 变为空，5 个类都回到 AAR 里。
+  本工程原来的绕过（`app/libs/tgui-stripped-typedefs.jar` + `android.useFullClasspathForDexingTransform=true`）已删除，debug 和 R8 release 都能直接构建。
+- **防回归**：`.github/workflows/build.yml` 加了一步，先 `publishToMavenLocal` 再构建本工程的 debug + release。
+  以后如果要给库里加 `@IntDef`，要么做成 public，要么别嵌套在类里。
 
 ### 2. 【高】库自带 RecyclerView fork，和 Material Components 等常见依赖直接冲突
 

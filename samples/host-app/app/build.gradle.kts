@@ -30,7 +30,4 @@ android {
 
 dependencies {
     implementation("org.telegram.ui:tgui:11.4.2-ui2")
-    // WORKAROUND (see INTEGRATION-NOTES.md #1): the published AAR lacks 5 @IntDef classes that AGP strips
-    // as SOURCE-retention typedefs, but Java 17 NestMembers still reference them, so D8 fails to dex the AAR.
-    implementation(files("libs/tgui-stripped-typedefs.jar"))
 }

@@ -25,7 +25,6 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.StateListDrawable;
 import android.view.MotionEvent;
 
-import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -39,7 +38,7 @@ import java.lang.annotation.RetentionPolicy;
  */
 @VisibleForTesting
 class FastScroller extends RecyclerView.ItemDecoration implements RecyclerView.OnItemTouchListener {
-    @IntDef({STATE_HIDDEN, STATE_VISIBLE, STATE_DRAGGING})
+    // No @IntDef: AGP strips non-public typedefs from the AAR, but the NestMembers attribute still names them and D8 fails in consumers.
     @Retention(RetentionPolicy.SOURCE)
     private @interface State { }
     // Scroll thumb not showing
@@ -49,15 +48,14 @@ class FastScroller extends RecyclerView.ItemDecoration implements RecyclerView.O
     // Scroll thumb being dragged by user
     private static final int STATE_DRAGGING = 2;
 
-    @IntDef({DRAG_X, DRAG_Y, DRAG_NONE})
+    // No @IntDef: AGP strips non-public typedefs from the AAR, but the NestMembers attribute still names them and D8 fails in consumers.
     @Retention(RetentionPolicy.SOURCE)
     private @interface DragState{ }
     private static final int DRAG_NONE = 0;
     private static final int DRAG_X = 1;
     private static final int DRAG_Y = 2;
 
-    @IntDef({ANIMATION_STATE_OUT, ANIMATION_STATE_FADING_IN, ANIMATION_STATE_IN,
-        ANIMATION_STATE_FADING_OUT})
+    // No @IntDef: AGP strips non-public typedefs from the AAR, but the NestMembers attribute still names them and D8 fails in consumers.
     @Retention(RetentionPolicy.SOURCE)
     private @interface AnimationState { }
     private static final int ANIMATION_STATE_OUT = 0;

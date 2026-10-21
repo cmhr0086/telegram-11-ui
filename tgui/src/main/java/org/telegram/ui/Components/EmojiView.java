@@ -42,7 +42,6 @@ import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
-import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.core.graphics.ColorUtils;
 import androidx.recyclerview.widget.DefaultItemAnimator;
@@ -183,7 +182,7 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
     private final int[] tabsMinusDy = new int[3];
     private ObjectAnimator[] tabsYAnimators = new ObjectAnimator[3];
 
-    @IntDef({Type.STICKERS, Type.EMOJIS, Type.GIFS})
+    // No @IntDef: AGP strips non-public typedefs from the AAR, but the NestMembers attribute still names them and D8 fails in consumers.
     @Retention(RetentionPolicy.SOURCE)
     private @interface Type {
         int STICKERS = 0;
