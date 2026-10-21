@@ -11,11 +11,13 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.Toast;
 
 import org.telegram.tgui.recyclerview.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.tgui.R;
+import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenu;
@@ -34,6 +36,8 @@ import org.telegram.ui.Components.DialogsFloatingButton;
 import org.telegram.ui.Components.DrawerMenuView;
 import org.telegram.ui.Components.FilterTabsView;
 import org.telegram.ui.Components.DialogsListView;
+import org.telegram.ui.Components.DialogsSearchController;
+import org.telegram.ui.Components.DialogsSearchView;
 import org.telegram.ui.Components.DialogsSwipeController;
 import org.telegram.ui.Components.DialogsViewPager;
 import org.telegram.ui.Components.LayoutHelper;
@@ -92,6 +96,9 @@ public class DemoDialogsFragment extends BaseFragment {
     private int simulateStep;
     private int swipeIndex;
     private int archivedCount = 4;
+    private DialogsSearchController searchController;
+    private DemoSearch demoSearch;
+    private final ArrayList<DialogItem> recentSearches = new ArrayList<>();
 
     @Override
     public View createView(Context context) {
@@ -125,14 +132,6 @@ public class DemoDialogsFragment extends BaseFragment {
                 }
             }
         });
-        ActionBarMenu menu = actionBar.createMenu();
-        swipeMenuItem = menu.addItem(0, R.drawable.ic_ab_other);
-        swipeMenuItem.addSubItem(MENU_SIMULATE, R.drawable.msg_msgbubble2, "Simulate update");
-        swipeSubItem = swipeMenuItem.addSubItem(MENU_SWIPE, R.drawable.msg_archive, "");
-        swipeMenuItem.addSubItem(MENU_LINES, R.drawable.msg_list, "Two / three lines");
-        swipeMenuItem.addSubItem(MENU_NIGHT, R.drawable.msg_theme, "Day / night");
-        updateSwipeMenuText();
-
         // upstream DialogsActivity.createActionMode items
         actionMode = new DialogsActionMode(actionBar);
         actionMode.addItem(ACTION_PIN, R.drawable.msg_pin, "Pin");
@@ -172,7 +171,7 @@ public class DemoDialogsFragment extends BaseFragment {
             @Override
             public boolean canSwipe() {
                 DrawerLayoutContainer drawer = getParentLayout() != null ? getParentLayout().getDrawerLayoutContainer() : null;
-                return SWIPE_ACTIONS[swipeIndex] < 0 && !actionMode.isShowing() && (drawer == null || !drawer.isDrawerOpened());
+                return SWIPE_ACTIONS[swipeIndex] < 0 && !actionMode.isShowing() && !searchController.isSearching() && (drawer == null || !drawer.isDrawerOpened());
             }
         });
         frameLayout.addView(viewPager, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
@@ -189,11 +188,83 @@ public class DemoDialogsFragment extends BaseFragment {
         for (Page page : pages) {
             floatingButton.attachToList(page.listView);
         }
+
+        createSearch(frameLayout);
+        ActionBarMenu menu = actionBar.createMenu();
+        searchController.createSearchItem(menu);
+        swipeMenuItem = menu.addItem(0, R.drawable.ic_ab_other);
+        swipeMenuItem.addSubItem(MENU_SIMULATE, R.drawable.msg_msgbubble2, "Simulate update");
+        swipeSubItem = swipeMenuItem.addSubItem(MENU_SWIPE, R.drawable.msg_archive, "");
+        swipeMenuItem.addSubItem(MENU_LINES, R.drawable.msg_list, "Two / three lines");
+        swipeMenuItem.addSubItem(MENU_NIGHT, R.drawable.msg_theme, "Day / night");
+        updateSwipeMenuText();
         return fragmentView;
     }
 
     private Page pageFor(View view) {
         return pages[0].listView == view ? pages[0] : pages[1];
+    }
+
+    // ---- search (upstream DialogsActivity searchItem / searchViewPager) ----
+
+    private void createSearch(FrameLayout frameLayout) {
+        demoSearch = new DemoSearch(allDialogs);
+        searchController = new DialogsSearchController(actionBar, frameLayout, viewPager, filterTabsView, floatingButton);
+        searchController.setListener(new DialogsSearchController.Listener() {
+            @Override
+            public void onSearchingChanged(boolean searching) {
+                updateDrawerSwipe();
+            }
+
+            @Override
+            public boolean canToggleSearch() {
+                return !actionMode.isShowing();
+            }
+        });
+        recentSearches.addAll(demoSearch.recent());
+        DialogsSearchView searchView = searchController.getSearchView();
+        searchView.setRecent(demoSearch.hints(), recentSearches);
+        searchView.setDelegate(new DialogsSearchView.Delegate() {
+            @Override
+            public void onSearch(String query, DialogsSearchView.ResultsCallback callback) {
+                demoSearch.search(query, callback);
+            }
+
+            @Override
+            public void onChatClick(DialogItem chat) {
+                // upstream putRecentSearch: the opened chat moves to the top of "Recent"
+                recentSearches.remove(chat);
+                recentSearches.add(0, chat);
+                searchView.setRecent(demoSearch.hints(), recentSearches);
+                Toast.makeText(getParentActivity(), "Open chat: " + chat.title, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onMessageClick(DialogItem message) {
+                Toast.makeText(getParentActivity(), "Open message in " + message.title + ": " + message.message, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onClearRecent() {
+                // upstream DialogsActivity needClearList
+                AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+                builder.setTitle(LocaleController.getString(R.string.ClearSearchAlertTitle));
+                builder.setMessage(LocaleController.getString(R.string.ClearSearchAlert));
+                builder.setPositiveButton(LocaleController.getString(R.string.ClearButton), (dialog, which) -> {
+                    recentSearches.clear();
+                    searchView.setRecent(demoSearch.hints(), recentSearches);
+                });
+                builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+                builder.makeRed(AlertDialog.BUTTON_POSITIVE);
+                showDialog(builder.create());
+            }
+        });
+    }
+
+    @Override
+    public boolean isLightStatusBar() {
+        Boolean light = searchController != null ? searchController.isLightStatusBar() : null;
+        return light != null ? light : super.isLightStatusBar();
     }
 
     private void setCurrentPage(Page page) {
@@ -389,7 +460,8 @@ public class DemoDialogsFragment extends BaseFragment {
     /** Upstream updateDrawerSwipeEnabled: a right swipe opens the drawer on the first folder only. */
     private void updateDrawerSwipe() {
         if (getParentLayout() != null && getParentLayout().getDrawerLayoutContainer() != null) {
-            getParentLayout().getDrawerLayoutContainer().setAllowOpenDrawerBySwipe(currentTab == filterTabsView.getFirstTabId());
+            boolean searching = searchController != null && searchController.isSearching();
+            getParentLayout().getDrawerLayoutContainer().setAllowOpenDrawerBySwipe(!searching && currentTab == filterTabsView.getFirstTabId());
         }
     }
 
@@ -876,6 +948,7 @@ public class DemoDialogsFragment extends BaseFragment {
         arrayList.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_SUBMENUITEM, null, null, null, null, Theme.key_actionBarDefaultSubmenuItem));
         arrayList.addAll(actionMode.getThemeDescriptions());
         arrayList.addAll(floatingButton.getThemeDescriptions());
+        arrayList.addAll(searchController.getThemeDescriptions());
         if (drawerMenu != null) {
             arrayList.addAll(drawerMenu.getThemeDescriptions());
         }
