@@ -2,6 +2,20 @@
 
 版本号格式：`11.4.2-uiN`，前面是所基于的上游版本，`uiN` 是本库自己的迭代号。
 
+## Unreleased
+
+### 新增
+- 媒体消息气泡，按上游 `ChatMessageCell` 对应分支移植（尺寸、绘制顺序、颜色 key、动画参数照搬），和文字气泡一样支持单击菜单、长按多选、日夜切换：
+  - `VoiceBubbleCell`：语音消息，`RadialProgress2` 播放 / 暂停（出站渐变气泡上图标镂空）、`SeekBarWaveform` 波形（可拖动定位）、时长 / 已播放时间、未听圆点；宿主负责播放。
+  - `PhotoBubbleCell`：图片，上游尺寸规则和分组圆角、图片上的时间小胶囊、可选说明文字、可选下载 / 取消 / 进度圆圈；图片是宿主给的 `Drawable`。
+  - `DocumentBubbleCell`：文件，圆形文件图标 / 下载 / 取消按钮、两行文件名、大小与扩展名、下载进度文字、⋮ 图标。
+- `TextBubbleMessage` 增加 `type` 和媒体字段，以及 `voice(...)` / `photo(...)` / `document(...)` 工厂方法；`TextBubbleCell.MediaDelegate`（`onMediaPressed`、`onSeek`）和 `setMediaDelegate`；`TextBubbleCell.MEDIA_THEME_KEYS` / `addMediaThemeDescriptions` 登记媒体气泡的颜色。
+- `RadialProgress2`（上游原版，去掉封面覆盖图）。
+- demo：录完语音会生成语音气泡并用 `MediaPlayer` 播放（波形进度跟着走）；示例里加了语音、图片（含说明文字和待下载的一张）、文件消息，点下载按钮模拟下载进度。
+
+### 修复
+- `Theme.createChatResources` 补上上游的媒体文字字号（`chat_infoPaint`、`chat_docNamePaint`、`chat_audioTimePaint` 等原来是默认字号）和 `chat_filePath`（`MediaActionDrawable.ICON_FILE` 原来画不出来）。
+
 ## 11.4.2-ui3
 
 这一版修的是外部宿主接入测试（`samples/host-app`，只通过 mavenLocal 引用 AAR）发现的问题，有两处**不兼容改动**，升级前请看“迁移”。

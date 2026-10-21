@@ -40,6 +40,7 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Cells.TextBubbleCell;
 import org.telegram.ui.Cells.TextBubbleMessage;
+import org.telegram.ui.Cells.DocumentBubbleCell;
 import org.telegram.ui.Cells.PhotoBubbleCell;
 import org.telegram.ui.Cells.VoiceBubbleCell;
 import org.telegram.ui.Components.ChatActivityEnterView;
@@ -139,6 +140,12 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         TextBubbleMessage download = TextBubbleMessage.photo(nextId++, false, "10:10", TextBubbleMessage.STATE_NONE, samplePhoto(1280, 720, 2), null);
         download.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
         messages.add(download);
+        // files: name / size / state from the host, the round button reports taps
+        messages.add(TextBubbleMessage.document(nextId++, false, "10:11", TextBubbleMessage.STATE_NONE, "Telegram_UI_Guide.pdf", 2_457_600));
+        TextBubbleMessage archive = TextBubbleMessage.document(nextId++, false, "10:11", TextBubbleMessage.STATE_NONE, "tgui-11.4.2-ui3-release-with-a-very-long-file-name-sources.zip", 48_234_496);
+        archive.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
+        messages.add(archive);
+        messages.add(TextBubbleMessage.document(nextId++, true, "10:12", TextBubbleMessage.STATE_READ, "notes.txt", 12_288));
         return super.onFragmentCreate();
     }
 
@@ -948,6 +955,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             if (child instanceof TextBubbleCell && ((TextBubbleCell) child).getMessage() == message) {
                 if (child instanceof PhotoBubbleCell) {
                     ((PhotoBubbleCell) child).updateButtonState(true);
+                } else if (child instanceof DocumentBubbleCell) {
+                    ((DocumentBubbleCell) child).updateButtonState(true);
                 }
             }
         }
@@ -1124,6 +1133,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 cell = new VoiceBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_PHOTO) {
                 cell = new PhotoBubbleCell(context, getResourceProvider());
+            } else if (viewType == TextBubbleMessage.TYPE_DOCUMENT) {
+                cell = new DocumentBubbleCell(context, getResourceProvider());
             } else {
                 cell = new TextBubbleCell(context, getResourceProvider());
             }

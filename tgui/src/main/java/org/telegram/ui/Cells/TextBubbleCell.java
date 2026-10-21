@@ -158,6 +158,9 @@ public class TextBubbleCell extends View {
             Theme.key_chat_mediaTimeBackground, Theme.key_chat_mediaTimeText, Theme.key_chat_mediaSentCheck, Theme.key_chat_mediaSentClock,
             Theme.key_chat_mediaLoaderPhoto, Theme.key_chat_mediaLoaderPhotoSelected, Theme.key_chat_mediaLoaderPhotoIcon, Theme.key_chat_mediaLoaderPhotoIconSelected,
             Theme.key_chat_mediaProgress,
+            Theme.key_chat_inFileNameText, Theme.key_chat_outFileNameText, Theme.key_chat_inFileInfoText, Theme.key_chat_outFileInfoText,
+            Theme.key_chat_inFileInfoSelectedText, Theme.key_chat_outFileInfoSelectedText,
+            Theme.key_chat_inMenu, Theme.key_chat_outMenu, Theme.key_chat_inMenuSelected, Theme.key_chat_outMenuSelected,
     };
 
     /** Adds a redraw ThemeDescription for every key in {@link #MEDIA_THEME_KEYS}. */

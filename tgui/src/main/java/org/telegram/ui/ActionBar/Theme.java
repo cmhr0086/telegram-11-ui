@@ -6094,6 +6094,30 @@ public class Theme {
             chat_msgOutHalfCheckSelectedDrawable = resources.getDrawable(R.drawable.msg_halfcheck).mutate();
             chat_msgMediaHalfCheckDrawable = resources.getDrawable(R.drawable.msg_halfcheck_s).mutate();
             chat_msgClockDrawable = new MsgClockDrawable();
+
+            // MediaActionDrawable.ICON_FILE (document bubbles), upstream createChatResources
+            int fileRad = dp(2);
+            RectF fileRect = new RectF();
+            chat_filePath[0] = new Path();
+            chat_filePath[0].moveTo(dp(7), dp(3));
+            chat_filePath[0].lineTo(dp(14), dp(3));
+            chat_filePath[0].lineTo(dp(21), dp(10));
+            chat_filePath[0].lineTo(dp(21), dp(20));
+            fileRect.set(dp(21) - fileRad * 2, dp(19) - fileRad, dp(21), dp(19) + fileRad);
+            chat_filePath[0].arcTo(fileRect, 0, 90, false);
+            chat_filePath[0].lineTo(dp(6), dp(21));
+            fileRect.set(dp(5), dp(19) - fileRad, dp(5) + fileRad * 2, dp(19) + fileRad);
+            chat_filePath[0].arcTo(fileRect, 90, 90, false);
+            chat_filePath[0].lineTo(dp(5), dp(4));
+            fileRect.set(dp(5), dp(3), dp(5) + fileRad * 2, dp(3) + fileRad * 2);
+            chat_filePath[0].arcTo(fileRect, 180, 90, false);
+            chat_filePath[0].close();
+
+            chat_filePath[1] = new Path();
+            chat_filePath[1].moveTo(dp(14), dp(5));
+            chat_filePath[1].lineTo(dp(19), dp(10));
+            chat_filePath[1].lineTo(dp(14), dp(10));
+            chat_filePath[1].close();
             playPauseAnimator = new PathAnimator(0.293f, -26, -28, 1.0f);
             playPauseAnimator.addSvgKeyFrame("M 34.141 16.042 C 37.384 17.921 40.886 20.001 44.211 21.965 C 46.139 23.104 49.285 24.729 49.586 25.917 C 50.289 28.687 48.484 30 46.274 30 L 6 30.021 C 3.79 30.021 2.075 30.023 2 26.021 L 2.009 3.417 C 2.009 0.417 5.326 -0.58 7.068 0.417 C 10.545 2.406 25.024 10.761 34.141 16.042 Z", 166);
             playPauseAnimator.addSvgKeyFrame("M 37.843 17.769 C 41.143 19.508 44.131 21.164 47.429 23.117 C 48.542 23.775 49.623 24.561 49.761 25.993 C 50.074 28.708 48.557 30 46.347 30 L 6 30.012 C 3.79 30.012 2 28.222 2 26.012 L 2.009 4.609 C 2.009 1.626 5.276 0.664 7.074 1.541 C 10.608 3.309 28.488 12.842 37.843 17.769 Z", 200);
