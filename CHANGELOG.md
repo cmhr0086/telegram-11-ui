@@ -11,6 +11,12 @@
   - `DocumentBubbleCell`：文件，圆形文件图标 / 下载 / 取消按钮、两行文件名、大小与扩展名、下载进度文字、⋮ 图标。
 - `TextBubbleMessage` 增加 `type` 和媒体字段，以及 `voice(...)` / `photo(...)` / `document(...)` 工厂方法；`TextBubbleCell.MediaDelegate`（`onMediaPressed`、`onSeek`）和 `setMediaDelegate`；`TextBubbleCell.MEDIA_THEME_KEYS` / `addMediaThemeDescriptions` 登记媒体气泡的颜色。
 - `RadialProgress2`（上游原版，去掉封面覆盖图）。
+- 气泡里的回复引用：`TextBubbleMessage.replyTo`（`TextBubbleMessage.ReplyTo`：名字、预览、可选缩略图、原消息 id、`colorId`；`ReplyTo.of(message, name)`），文字 / 语音 / 图片 / 文件气泡都会在顶部画上游的回复块（新类 `ReplyMessageLine`）；点按走新的 `TextBubbleCell.Delegate.onReplyPressed`，长按走 `onBubbleLongPressed`；`TextBubbleCell.setHighlightedAnimated()` 是上游跳到原消息后的高亮闪烁。
+- 文字气泡里的链接：网址、@提及、#话题按上游 `MessageObject.addLinks` 识别并着色（`TextBubbleCell.addLinks(text)` 也可单独用，`TextBubbleCell.detectLinks = false` 关闭），按下有上游 `LinkSpanDrawable` 高亮，点按 / 长按回调 `Delegate.onLinkPressed` / `onLinkLongPressed`；手指拖过触摸阈值会把手势还给列表，照常滚动。
+- 日期分隔：新类 `ChatActionCell`（上游服务消息胶囊，`setCustomDate` / `setCustomText` / `setVisiblePart` / `setFloating`，`ChatActionCell.formatDate` 给出 Today / Yesterday / 上游 `chatDate`、`chatFullDate` 格式）；`TextBubbleMessage.date`（unix 秒）。
+- `Theme.applyChatServiceMessageColor(...)`（上游移植）：壁纸加载完、切换主题时重算服务消息底色和文字色，动态渐变壁纸用壁纸位图做 shader。之前 `chat_actionBackgroundPaint` 没有颜色、`chat_actionTextPaint` 没有字号。
+- `TextBubbleCell.MEDIA_THEME_KEYS` 加上回复、链接按下底色和服务消息的颜色 key。
+- demo：示例消息分成三天并插入日期分隔，滚动时顶部浮出当前日期；示例里有回复文字和回复图片的消息，点引用跳到原消息并闪烁；从输入栏回复面板发出的消息带引用；有一条带链接、@提及和 #话题的消息，单击打开网址，长按弹出“打开 / 复制”。
 - demo：录完语音会生成语音气泡并用 `MediaPlayer` 播放（波形进度跟着走）；示例里加了语音、图片（含说明文字和待下载的一张）、文件消息，点下载按钮模拟下载进度。
 
 ### 修复
