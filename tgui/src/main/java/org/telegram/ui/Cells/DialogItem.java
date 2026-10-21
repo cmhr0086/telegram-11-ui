@@ -3,6 +3,10 @@ package org.telegram.ui.Cells;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 
+import org.telegram.ui.Components.AvatarDrawable;
+
+import java.util.ArrayList;
+
 /**
  * tgui: plain model for {@link DialogCell}, replacing upstream TLRPC.Dialog + MessageObject + User/Chat.
  * Fill the fields, hand the item to {@link DialogCell#setDialog(DialogItem, boolean)}; call it again
@@ -62,6 +66,29 @@ public class DialogItem {
     public int avatarType = AVATAR_NORMAL;
     /** Archive folder row: archived name/message colors, gray counters, no time. */
     public boolean isFolder;
+
+    /** Search: second line of {@link ProfileSearchCell} ("online", "last seen…", "@username", "12 members"). */
+    public CharSequence status;
+    /** Search: {@link #status} is drawn in the online (blue) color. Defaults to {@link #online}. */
+    public Boolean statusOnline;
+    /** Search: words highlighted in the title and message (upstream MessageObject.highlightedWords). */
+    public ArrayList<String> highlightedWords;
+
+    /** Upstream AvatarDrawable.setInfo for this item: users reach it as first + last name, split the title the same way. */
+    public void fillAvatarDrawable(AvatarDrawable avatarDrawable) {
+        String name = title != null ? title.toString().trim() : "";
+        int space = name.lastIndexOf(' ');
+        if (space > 0) {
+            avatarDrawable.setInfo(id, name.substring(0, space), name.substring(space + 1));
+        } else {
+            avatarDrawable.setInfo(id, name, null);
+        }
+        if (isFolder || avatarType == AVATAR_ARCHIVED) {
+            avatarDrawable.setAvatarType(AvatarDrawable.AVATAR_TYPE_ARCHIVED);
+        } else if (avatarType != AVATAR_NORMAL) {
+            avatarDrawable.setAvatarType(avatarType);
+        }
+    }
 
     public DialogItem() {
     }
