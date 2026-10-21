@@ -16,6 +16,7 @@ import android.text.StaticLayout;
 import android.text.TextUtils;
 import android.view.MotionEvent;
 import android.view.SoundEffectConstants;
+import android.view.ViewConfiguration;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Emoji;
@@ -40,7 +41,12 @@ import org.telegram.ui.Components.RadialProgress2;
  * </ul>
  * The photo is a host-supplied {@link Drawable} (a {@link BitmapDrawable} is drawn with a
  * BitmapShader for anti-aliased corners, anything else is clipped), scaled center-crop like
- * BackupImageView / ImageReceiver.
+ * BackupImageView / ImageReceiver. With {@link TextBubbleMessage#videoUri} set it is a video
+ * thumbnail: a play button in the middle and the duration pill top-left (videoInfoLayout).
+ * <p>
+ * Touches (checkPhotoImageMotionEvent): a tap on the photo goes to
+ * {@link MediaDelegate#onMediaPressed} (open the viewer, or download / cancel), a long press on it
+ * to {@link Delegate#onBubbleLongPressed}; the rest of the bubble is a normal row tap.
  */
 public class PhotoBubbleCell extends TextBubbleCell {
 
@@ -61,6 +67,13 @@ public class PhotoBubbleCell extends TextBubbleCell {
     private int namesOffset;
     private int buttonState = -1;
     private boolean photoPressed;
+    private boolean photoTouch;
+    private float photoTouchX, photoTouchY;
+    private Runnable photoLongPress;
+    private boolean photoVisible = true;
+    private StaticLayout videoInfoLayout;
+    private int durationWidth;
+    private final RectF videoInfoRect = new RectF();
 
     public PhotoBubbleCell(Context context) {
         this(context, null);
@@ -75,6 +88,9 @@ public class PhotoBubbleCell extends TextBubbleCell {
     @Override
     public void setMessage(TextBubbleMessage message, boolean pinnedTop, boolean pinnedBottom) {
         boolean changed = this.message != message;
+        if (changed) {
+            photoVisible = true;
+        }
         super.setMessage(message, pinnedTop, pinnedBottom);
         if (message != null) {
             updateButtonState(!changed);
@@ -100,6 +116,8 @@ public class PhotoBubbleCell extends TextBubbleCell {
                 icon = MediaActionDrawable.ICON_DOWNLOAD;
             } else if (state == TextBubbleMessage.MEDIA_LOADING) {
                 icon = MediaActionDrawable.ICON_CANCEL;
+            } else if (message.videoUri != null) {
+                icon = MediaActionDrawable.ICON_PLAY;
             } else {
                 icon = MediaActionDrawable.ICON_NONE;
             }
@@ -140,6 +158,13 @@ public class PhotoBubbleCell extends TextBubbleCell {
         int[] size = getMessageSize(imageW, imageH, maxPhotoWidth, maxPhotoHeight);
         int w = size[0];
         int h = size[1];
+
+        videoInfoLayout = null;
+        if (message.videoUri != null) {
+            String str = AndroidUtilities.formatShortDuration(message.duration);
+            durationWidth = (int) Math.ceil(Theme.chat_durationPaint.measureText(str));
+            videoInfoLayout = new StaticLayout(str, Theme.chat_durationPaint, durationWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
+        }
 
         measureTime();
         int timeWidthTotal = timeWidth + AndroidUtilities.dp((SharedConfig.bubbleRadius >= 10 ? 22 : 18) + (out ? 20 : 0));
@@ -349,6 +374,11 @@ public class PhotoBubbleCell extends TextBubbleCell {
         x -= AndroidUtilities.dp(2);
         int y = photoY + namesOffset;
         photoRect.set(x, y, x + photoWidth, y + photoHeight);
+        if (!photoVisible) {
+            // the viewer is showing this photo (upstream photoImage.setVisible(false) while PhotoViewer is open)
+            drawCaptionAndTime(canvas, out, layoutWidth, backgroundLeft, x, y);
+            return;
+        }
         drawPhoto(canvas);
 
         // the 48dp loader in the photo's center
@@ -360,6 +390,25 @@ public class PhotoBubbleCell extends TextBubbleCell {
         radialProgress.setPressed(photoPressed, false);
         radialProgress.draw(canvas);
 
+        if (videoInfoLayout != null) {
+            // drawOverlays: duration pill 9dp / 6dp inside the photo's top-left corner
+            boolean bigRadius = SharedConfig.bubbleRadius >= 10;
+            float rad = AndroidUtilities.dp(SharedConfig.bubbleRadius > 2 ? SharedConfig.bubbleRadius - 2 : SharedConfig.bubbleRadius);
+            int vx = x + AndroidUtilities.dp(9);
+            int vy = y + AndroidUtilities.dp(6);
+            videoInfoRect.set(vx - AndroidUtilities.dp(4), vy - AndroidUtilities.dp(1.5f), vx + durationWidth + AndroidUtilities.dp(4) + AndroidUtilities.dp(bigRadius ? 2 : 0), vy + videoInfoLayout.getHeight() + AndroidUtilities.dp(1.5f));
+            Theme.chat_timeBackgroundPaint.setColor(getThemedColor(Theme.key_chat_mediaTimeBackground));
+            canvas.drawRoundRect(videoInfoRect, rad, rad, Theme.chat_timeBackgroundPaint);
+            Theme.chat_durationPaint.setColor(getThemedColor(Theme.key_chat_mediaTimeText));
+            canvas.save();
+            canvas.translate(vx + (bigRadius ? 2 : 0), vy);
+            videoInfoLayout.draw(canvas);
+            canvas.restore();
+        }
+        drawCaptionAndTime(canvas, out, layoutWidth, backgroundLeft, x, y);
+    }
+
+    private void drawCaptionAndTime(Canvas canvas, boolean out, int layoutWidth, int backgroundLeft, int x, int y) {
         if (captionLayout != null) {
             // drawCaptionLayout: below the photo, 5dp in, 6dp down
             Theme.chat_msgTextPaint.setColor(getThemedColor(out ? Theme.key_chat_messageTextOut : Theme.key_chat_messageTextIn));
@@ -428,35 +477,98 @@ public class PhotoBubbleCell extends TextBubbleCell {
         }
     }
 
+    /** The photo's rect in this cell's coordinates (as last drawn); MediaViewer animates from it. */
+    public void getPhotoRect(RectF out) {
+        out.set(photoRect);
+    }
+
+    /** {@link #getPhotoRect} in getLocationOnScreen coordinates (MediaViewer.Provider#getSourceRect). */
+    public boolean getPhotoRectOnScreen(RectF out) {
+        if (!isAttachedToWindow() || photoRect.isEmpty()) {
+            return false;
+        }
+        int[] location = new int[2];
+        getLocationOnScreen(location);
+        out.set(photoRect);
+        out.offset(location[0], location[1]);
+        return true;
+    }
+
+    /** Corner radii of {@link #getPhotoRect} (tl, tr, br, bl as x/y pairs, like Path.addRoundRect). */
+    public float[] getPhotoRadii() {
+        return radii.clone();
+    }
+
+    /** Hides the photo while a viewer shows it full screen; the bubble, caption and time stay. */
+    public void setPhotoVisible(boolean visible) {
+        if (photoVisible != visible) {
+            photoVisible = visible;
+            invalidate();
+        }
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (message == null || isCheckBoxVisible() || mediaDelegate == null) {
+            resetPhotoTouch();
             return super.onTouchEvent(event);
         }
-        // only the download / cancel button takes the tap; a ready photo opens the menu like other bubbles
-        boolean area = buttonState != TextBubbleMessage.MEDIA_READY && photoRect.contains(event.getX(), event.getY());
-        if (event.getAction() == MotionEvent.ACTION_DOWN) {
+        // checkPhotoImageMotionEvent: the photo takes the tap (viewer, or download / cancel) and the long
+        // press (selection, no press feedback); moving past the slop hands the gesture back to the list
+        float x = event.getX(), y = event.getY();
+        boolean area = photoRect.contains(x, y);
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
             if (area) {
-                photoPressed = true;
+                photoTouch = true;
+                photoTouchX = x;
+                photoTouchY = y;
+                photoPressed = buttonState != TextBubbleMessage.MEDIA_READY;
                 if (getParent() != null) {
                     getParent().requestDisallowInterceptTouchEvent(true);
                 }
+                photoLongPress = () -> {
+                    photoLongPress = null;
+                    resetPhotoTouch();
+                    onInteractiveLongPress(false);
+                    invalidate();
+                };
+                postDelayed(photoLongPress, ViewConfiguration.getLongPressTimeout());
                 invalidate();
                 return true;
             }
-        } else if (photoPressed) {
-            if (event.getAction() == MotionEvent.ACTION_UP) {
-                photoPressed = false;
+        } else if (photoTouch) {
+            if (action == MotionEvent.ACTION_UP) {
+                resetPhotoTouch();
                 playSoundEffect(SoundEffectConstants.CLICK);
                 mediaDelegate.onMediaPressed(this, message);
                 invalidate();
-            } else if (event.getAction() == MotionEvent.ACTION_CANCEL || event.getAction() == MotionEvent.ACTION_MOVE && !area) {
-                photoPressed = false;
+            } else if (action == MotionEvent.ACTION_CANCEL) {
+                resetPhotoTouch();
                 invalidate();
+            } else if (action == MotionEvent.ACTION_MOVE) {
+                float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                if (!area || Math.abs(x - photoTouchX) > slop || Math.abs(y - photoTouchY) > slop) {
+                    resetPhotoTouch();
+                    if (getParent() != null) {
+                        getParent().requestDisallowInterceptTouchEvent(false);
+                    }
+                    invalidate();
+                    return false;
+                }
             }
             return true;
         }
         return super.onTouchEvent(event);
+    }
+
+    private void resetPhotoTouch() {
+        photoTouch = false;
+        photoPressed = false;
+        if (photoLongPress != null) {
+            removeCallbacks(photoLongPress);
+            photoLongPress = null;
+        }
     }
 
     @Override
@@ -469,5 +581,6 @@ public class PhotoBubbleCell extends TextBubbleCell {
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         radialProgress.onDetachedFromWindow();
+        resetPhotoTouch();
     }
 }
