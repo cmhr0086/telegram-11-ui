@@ -309,8 +309,20 @@ public class DocumentBubbleCell extends TextBubbleCell {
         int x = (int) event.getX();
         int y = (int) event.getY();
         int side = AndroidUtilities.dp(44);
-        boolean area = x >= buttonX && x <= buttonX + side && y >= buttonY && y <= buttonY + side;
+        // upstream ChatMessageCell.checkOtherButtonMotionEvent / checkAudioMotionEvent: the menu dots open
+        // the message options (didPressOther), the rest of the file row opens the file (didPressButton)
+        int menuX = buttonX + backgroundWidth - AndroidUtilities.dp(48);
+        boolean menuArea = x >= menuX - AndroidUtilities.dp(10) && x <= menuX + AndroidUtilities.dp(34)
+                && y >= buttonY - AndroidUtilities.dp(10) && y <= buttonY + side + AndroidUtilities.dp(4);
+        boolean area = !menuArea && x >= buttonX && x < menuX - AndroidUtilities.dp(10) && y >= buttonY && y <= buttonY + side;
         if (event.getAction() == MotionEvent.ACTION_DOWN) {
+            if (menuArea) {
+                buttonPressed = 2;
+                if (getParent() != null) {
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                }
+                return true;
+            }
             if (area) {
                 buttonPressed = 1;
                 if (getParent() != null) {
@@ -321,11 +333,16 @@ public class DocumentBubbleCell extends TextBubbleCell {
             }
         } else if (buttonPressed != 0) {
             if (event.getAction() == MotionEvent.ACTION_UP) {
+                int pressed = buttonPressed;
                 buttonPressed = 0;
                 playSoundEffect(SoundEffectConstants.CLICK);
-                mediaDelegate.onMediaPressed(this, message);
+                if (pressed == 2) {
+                    mediaDelegate.onMenuPressed(this, message, x, y);
+                } else {
+                    mediaDelegate.onMediaPressed(this, message);
+                }
                 invalidate();
-            } else if (event.getAction() == MotionEvent.ACTION_CANCEL || event.getAction() == MotionEvent.ACTION_MOVE && !area) {
+            } else if (event.getAction() == MotionEvent.ACTION_CANCEL || event.getAction() == MotionEvent.ACTION_MOVE && !(buttonPressed == 2 ? menuArea : area)) {
                 buttonPressed = 0;
                 invalidate();
             }

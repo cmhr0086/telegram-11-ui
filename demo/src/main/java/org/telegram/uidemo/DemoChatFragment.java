@@ -1266,6 +1266,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     private final TextBubbleCell.MediaDelegate mediaDelegate = new TextBubbleCell.MediaDelegate() {
         @Override
+        public void onMenuPressed(TextBubbleCell cell, TextBubbleMessage message, float x, float y) {
+            if (!actionBar.isActionModeShowed()) {
+                showMessageOptions(cell, message, x, y);
+            }
+        }
+
+        @Override
         public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) {
             if (message.type == TextBubbleMessage.TYPE_VOICE) {
                 toggleVoice(message);

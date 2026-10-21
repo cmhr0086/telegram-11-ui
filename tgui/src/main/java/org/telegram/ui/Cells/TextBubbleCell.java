@@ -355,6 +355,13 @@ public class TextBubbleCell extends View {
         /** The play / download / open button (or the photo, or the file row) was tapped. */
         void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message);
 
+        /**
+         * The menu dots on a file bubble were tapped (upstream didPressOther): show the message options
+         * here, as a tap elsewhere on a text bubble does. Coordinates are relative to the cell.
+         */
+        default void onMenuPressed(TextBubbleCell cell, TextBubbleMessage message, float x, float y) {
+        }
+
         /** The voice waveform was dragged to {@code progress} (0..1). */
         default void onSeek(TextBubbleCell cell, TextBubbleMessage message, float progress) {
         }
