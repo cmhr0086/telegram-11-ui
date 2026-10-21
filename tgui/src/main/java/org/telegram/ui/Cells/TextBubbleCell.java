@@ -231,6 +231,21 @@ public class TextBubbleCell extends View {
         drawReactions(canvas);
     }
 
+    /** ChatActionCell: aligns the wallpaper-tinted service paint with this row's position in the list. */
+    protected void applyServiceShaderMatrix() {
+        float top = getY();
+        int height = getMeasuredHeight();
+        if (getParent() instanceof View) {
+            View parent = (View) getParent();
+            top += parent.getY();
+            height = parent.getMeasuredHeight();
+            if (parent.getParent() instanceof android.view.ViewGroup) {
+                height = Math.max(height, ((android.view.ViewGroup) parent.getParent()).getMeasuredHeight());
+            }
+        }
+        Theme.applyServiceShaderMatrix(getMeasuredWidth(), height, 0, top);
+    }
+
     /** Pills to draw: some reactions, or the last ones still animating out. */
     protected boolean hasReactionsToDraw() {
         return !reactionsLayoutInBubble.isEmpty || reactionsChangeProgress != 1f || pendingReactionsAnimation;
@@ -1050,8 +1065,9 @@ public class TextBubbleCell extends View {
             backgroundWidth = maxChildWidth;
             textY = AndroidUtilities.dp(4);
             totalHeight = textY + textHeight + AndroidUtilities.dp(2 + 17 + 4);
-            // TYPE_EMOJIS: the pills go under the emoji, outside any bubble
-            reactionsLayoutInBubble.measure(maxWidth, android.view.Gravity.LEFT);
+            // TYPE_EMOJIS: the pills go under the emoji on service backgrounds, right-aligned for outgoing
+            reactionsLayoutInBubble.measure(maxWidth, out ? android.view.Gravity.RIGHT : android.view.Gravity.LEFT);
+            reactionsLayoutInBubble.drawServiceShaderBackground = 1f;
             if (!reactionsLayoutInBubble.isEmpty) {
                 reactionsLayoutInBubble.totalHeight = reactionsLayoutInBubble.height + AndroidUtilities.dp(4);
                 totalHeight += reactionsLayoutInBubble.totalHeight;
@@ -1484,6 +1500,7 @@ public class TextBubbleCell extends View {
             // TYPE_EMOJIS: outgoing pills end 16dp from the edge, incoming ones start at the emoji
             reactionsLayoutInBubble.x = out ? layoutWidth - reactionsLayoutInBubble.width - AndroidUtilities.dp(16) : contentLeft;
             reactionsLayoutInBubble.y = textY + textLayout.getHeight() + AndroidUtilities.dp(4);
+            applyServiceShaderMatrix();
             drawReactions(canvas);
         }
 

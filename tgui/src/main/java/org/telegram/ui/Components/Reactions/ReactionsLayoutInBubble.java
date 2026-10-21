@@ -48,6 +48,8 @@ public class ReactionsLayoutInBubble {
     private final static int ANIMATION_TYPE_IN = 1;
     private final static int ANIMATION_TYPE_OUT = 2;
     private final static int ANIMATION_TYPE_MOVE = 3;
+    /** 1 = pills on the wallpaper (emoji-only messages): chat_actionBackground paint and service colours. */
+    public float drawServiceShaderBackground;
 
     private static final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private static final TextPaint textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
@@ -186,6 +188,7 @@ public class ReactionsLayoutInBubble {
             width = maxWidth;
         }
         height = currentY + (reactionButtons.size() == 0 ? 0 : dp(26));
+        drawServiceShaderBackground = 0f;
     }
 
     public void draw(Canvas canvas, float animationProgress) {
@@ -216,6 +219,7 @@ public class ReactionsLayoutInBubble {
                 alpha = animationProgress;
                 canvas.scale(s, s, totalX + x + reactionButton.width / 2f, totalY + y + reactionButton.height / 2f);
             }
+            reactionButton.drawServiceShaderBackground = drawServiceShaderBackground;
             reactionButton.draw(canvas, totalX + x, totalY + y, reactionButton.animationType == ANIMATION_TYPE_MOVE ? animationProgress : 1f, alpha);
             canvas.restore();
         }
@@ -225,6 +229,7 @@ public class ReactionsLayoutInBubble {
             float s = 0.5f + 0.5f * (1f - animationProgress);
             canvas.save();
             canvas.scale(s, s, totalX + reactionButton.x + reactionButton.width / 2f, totalY + reactionButton.y + reactionButton.height / 2f);
+            reactionButton.drawServiceShaderBackground = drawServiceShaderBackground;
             outButtons.get(i).draw(canvas, totalX + reactionButton.x, totalY + reactionButton.y, 1f, (1f - animationProgress));
             canvas.restore();
         }
@@ -337,6 +342,9 @@ public class ReactionsLayoutInBubble {
         public CounterView.CounterDrawable counterDrawable;
         int backgroundColor;
         int textColor;
+        int serviceBackgroundColor;
+        int serviceTextColor;
+        float drawServiceShaderBackground;
 
         public int lastDrawnTextColor;
         public int lastDrawnBackgroundColor;
@@ -388,10 +396,14 @@ public class ReactionsLayoutInBubble {
             if (choosen) {
                 backgroundColor = Theme.getColor(isOutOwner ? Theme.key_chat_outReactionButtonBackground : Theme.key_chat_inReactionButtonBackground, resourcesProvider);
                 textColor = Theme.getColor(isOutOwner ? Theme.key_chat_outReactionButtonTextSelected : Theme.key_chat_inReactionButtonTextSelected, resourcesProvider);
+                serviceTextColor = Theme.getColor(isOutOwner ? Theme.key_chat_outReactionButtonBackground : Theme.key_chat_inReactionButtonBackground, resourcesProvider);
+                serviceBackgroundColor = Theme.getColor(isOutOwner ? Theme.key_chat_outBubble : Theme.key_chat_inBubble, resourcesProvider);
             } else {
                 textColor = Theme.getColor(isOutOwner ? Theme.key_chat_outReactionButtonText : Theme.key_chat_inReactionButtonText, resourcesProvider);
                 backgroundColor = Theme.getColor(isOutOwner ? Theme.key_chat_outReactionButtonBackground : Theme.key_chat_inReactionButtonBackground, resourcesProvider);
                 backgroundColor = ColorUtils.setAlphaComponent(backgroundColor, (int) (Color.alpha(backgroundColor) * 0.156f));
+                serviceTextColor = Theme.getColor(Theme.key_chat_serviceText, resourcesProvider);
+                serviceBackgroundColor = Color.TRANSPARENT;
             }
             updateColors(progress);
             textPaint.setColor(lastDrawnTextColor);
@@ -415,6 +427,20 @@ public class ReactionsLayoutInBubble {
                 canvas.scale(bounceScale, bounceScale, x + w / 2f, y + height / 2f);
             }
             float rad = height / 2f;
+            if (drawServiceShaderBackground > 0) {
+                Paint paint1 = Theme.getThemePaint(Theme.key_paint_chatActionBackground, resourcesProvider);
+                Paint paint2 = Theme.getThemePaint(Theme.key_paint_chatActionBackgroundDarken, resourcesProvider);
+                int oldAlpha = paint1.getAlpha();
+                int oldAlpha2 = paint2.getAlpha();
+                paint1.setAlpha((int) (oldAlpha * alpha * drawServiceShaderBackground));
+                paint2.setAlpha((int) (oldAlpha2 * alpha * drawServiceShaderBackground));
+                canvas.drawRoundRect(AndroidUtilities.rectTmp, rad, rad, paint1);
+                if (Theme.hasGradientService()) {
+                    canvas.drawRoundRect(AndroidUtilities.rectTmp, rad, rad, paint2);
+                }
+                paint1.setAlpha(oldAlpha);
+                paint2.setAlpha(oldAlpha2);
+            }
             canvas.drawRoundRect(AndroidUtilities.rectTmp, rad, rad, paint);
 
             if (emojiDrawable != null) {
@@ -441,8 +467,8 @@ public class ReactionsLayoutInBubble {
         }
 
         protected void updateColors(float progress) {
-            lastDrawnTextColor = ColorUtils.blendARGB(fromTextColor, textColor, progress);
-            lastDrawnBackgroundColor = ColorUtils.blendARGB(fromBackgroundColor, backgroundColor, progress);
+            lastDrawnTextColor = ColorUtils.blendARGB(fromTextColor, ColorUtils.blendARGB(textColor, serviceTextColor, drawServiceShaderBackground), progress);
+            lastDrawnBackgroundColor = ColorUtils.blendARGB(fromBackgroundColor, ColorUtils.blendARGB(backgroundColor, serviceBackgroundColor, drawServiceShaderBackground), progress);
         }
     }
 
