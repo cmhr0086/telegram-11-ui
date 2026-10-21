@@ -26,6 +26,13 @@
 - `TextBubbleCell.MEDIA_THEME_KEYS` 加上反应胶囊的 6 个颜色 key。
 - demo：示例消息带上反应（文字、语音、图片、文件、纯 emoji 都有），单击胶囊切换自己的反应，长按弹计数提示；菜单反应条显示已选项，选表情会加 / 换 / 取消反应并带动画。
 
+- 对话列表搜索：新类 `DialogsSearchController`（上游 `DialogsActivity` 的 `searchItem` / `showSearch` / `setSearchAnimationProgress` 按原数值移植：放大镜展开搜索框，文件夹标签淡出并收起，写消息按钮隐藏，列表缩到 0.9 淡出、搜索页从 1.05 淡入，200ms / 180ms；有最近记录时上游白色搜索栏从放大镜处圆形展开，图标和状态栏变深色；返回键或箭头反向收回）和 `DialogsSearchView`（上游 `SearchViewPager` 对话页 + `DialogsSearchAdapter`：空查询显示 People 头像横排和带 Clear 的 Recent，有查询显示 Chats / Global search / Messages 分组，没有结果显示 “No results” 空状态）。结果由宿主通过 `DialogsSearchView.Delegate.onSearch(query, callback)` 异步给出。
+- 新单元格（上游移植到 `DialogItem`）：`GraySectionCell`（分组标题 + 右侧按钮）、`ProfileSearchCell`（聊天搜索行：头像、名字高亮、私密锁、认证、状态行、最近记录的未读数）、`HintDialogCell`（People 横排头像：未读数、在线圆点）。
+- `DialogItem.status` / `statusOnline`（搜索行第二行）、`highlightedWords`（`DialogCell` 和 `ProfileSearchCell` 里高亮，消息会按上游 `ellipsizeCenterEnd` 截到匹配处）、`fillAvatarDrawable(AvatarDrawable)`。
+- `ActionBar.setSearchRevealProgress(progress, fromColor, toColor, circle)`：上游白色搜索栏的圆形展开 / 整体渐变和底部分隔线。
+- `DialogsFloatingButton.hide(hide, animated)`：不带动画地隐藏 / 显示。
+- demo：对话列表的放大镜，本地过滤示例对话、一小段消息历史和三个“公开频道”，结果延迟 120ms 回调模拟异步；点结果弹 Toast 并把聊天移到 Recent 顶部，Clear 弹上游确认框。
+
 ### 变更（不兼容）
 - `TextBubbleMessage.reaction`（单个字符串、固定计数 1 的小胶囊）删除，改用 `reactions` 列表；原来 `message.reaction = emoji.equals(message.reaction) ? null : emoji` 的写法换成 `message.toggleReaction(emoji)`。
 
