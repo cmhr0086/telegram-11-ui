@@ -69,6 +69,8 @@ Manifest 里给 Activity 加上
 
 页面写法和上游完全一样：继承 `BaseFragment`，在 `createView()` 里配置 `actionBar` 并返回 `fragmentView`；跳转用 `presentFragment()`，左滑返回、预览、`showAsSheet()` 都可用；`getThemeDescriptions()` 里登记的颜色会在切换主题时做动画。完整示例见 `demo/src/main/java/org/telegram/uidemo/`。
 
+注意 `createView()` 不是只调一次：切换主题（部分情况）、语言或屏幕配置变化时，`ActionBarLayout` 会重建页面视图，`createView()` 会再次执行。和上游约定一样，数据和监听的初始化放在 `onFragmentCreate()`，`createView()` 里只建视图、绑定已有数据。
+
 ```java
 showDialog(new AlertDialog.Builder(getParentActivity())
         .setTitle("Title").setMessage("Message")

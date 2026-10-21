@@ -109,9 +109,12 @@ public abstract class TelegramActivity extends Activity implements NotificationC
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.didSetNewTheme);
 
         if (mainFragmentsStack.isEmpty()) {
+            // addFragmentToStack already attaches (creates) the root view; rebuilding here would
+            // call createView() a second time.
             actionBarLayout.addFragmentToStack(createRootFragment());
+        } else {
+            actionBarLayout.rebuildFragments(INavigationLayout.REBUILD_FLAG_REBUILD_LAST);
         }
-        actionBarLayout.rebuildFragments(INavigationLayout.REBUILD_FLAG_REBUILD_LAST);
         checkSystemBarColors();
     }
 
