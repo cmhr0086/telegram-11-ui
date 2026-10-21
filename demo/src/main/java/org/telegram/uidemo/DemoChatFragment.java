@@ -31,6 +31,7 @@ import org.telegram.tgui.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.ActionBar.ActionBarMenu;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
@@ -132,6 +133,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         messages.add(voice);
         addSample("Tap a message for the menu and reactions, long-press to select messages.", false, "10:05", TextBubbleMessage.STATE_NONE);
         addSample("Emoji use Telegram's own set 😎🔥🎉 in bubbles and in the input field", false, "10:06", TextBubbleMessage.STATE_NONE);
+        addSample("Links work too: https://telegram.org, core.telegram.org/api and mentions like @durov or #hashtags. Long-press a link to copy it.", false, "10:06", TextBubbleMessage.STATE_NONE);
         addSample("👋", false, "10:06", TextBubbleMessage.STATE_NONE);
         addSample("😂❤️👍", true, "10:07", TextBubbleMessage.STATE_READ);
         addSample("ok", true, "10:07", TextBubbleMessage.STATE_SENT);
@@ -995,6 +997,33 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         }
 
         @Override
+        public void onLinkPressed(TextBubbleCell cell, TextBubbleMessage message, String url) {
+            if (actionBar.isActionModeShowed()) {
+                processRowSelect(message);
+                return;
+            }
+            openLink(url);
+        }
+
+        @Override
+        public void onLinkLongPressed(TextBubbleCell cell, TextBubbleMessage message, String url) {
+            if (actionBar.isActionModeShowed()) {
+                return;
+            }
+            // ChatActivity.didPressUrl(longPress): a sheet titled with the link, Open / Copy
+            BottomSheet.Builder builder = new BottomSheet.Builder(getParentActivity(), false, getResourceProvider());
+            builder.setTitle(url);
+            builder.setItems(new CharSequence[]{"Open", "Copy"}, (dialog, which) -> {
+                if (which == 0) {
+                    openLink(url);
+                } else if (AndroidUtilities.addToClipboard(url)) {
+                    Toast.makeText(getParentActivity(), "Link copied to clipboard", Toast.LENGTH_SHORT).show();
+                }
+            });
+            showDialog(builder.create());
+        }
+
+        @Override
         public void onBubbleLongPressed(TextBubbleCell cell, TextBubbleMessage message) {
             int position = listView.getChildAdapterPosition(cell);
             if (position < 0 || position >= messages.size()) {
@@ -1007,6 +1036,20 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             }
         }
     };
+
+    /** Web links open in the browser; @mentions / #hashtags belong to the host (here a toast). */
+    private void openLink(String url) {
+        if (url.startsWith("@") || url.startsWith("#")) {
+            Toast.makeText(getParentActivity(), (url.startsWith("@") ? "Open profile " : "Search ") + url, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url));
+            getParentActivity().startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(getParentActivity(), "No app can open " + url, Toast.LENGTH_SHORT).show();
+        }
+    }
 
     /** ChatActivity.scrollToMessageId + highlightMessageId: brings the message to the middle and flashes it. */
     private void scrollToMessage(long messageId) {

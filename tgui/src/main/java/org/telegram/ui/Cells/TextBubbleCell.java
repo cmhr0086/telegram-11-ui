@@ -8,10 +8,14 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.text.Layout;
+import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.text.TextUtils;
+import android.text.style.ClickableSpan;
+import android.text.style.URLSpan;
+import android.text.util.Linkify;
 import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.SoundEffectConstants;
@@ -21,6 +25,8 @@ import android.view.ViewConfiguration;
 import androidx.core.graphics.ColorUtils;
 
 import java.util.ArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import android.view.animation.Interpolator;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -34,14 +40,20 @@ import org.telegram.ui.Components.AnimatedFloat;
 import org.telegram.ui.Components.ButtonBounce;
 import org.telegram.ui.Components.CheckBoxBase;
 import org.telegram.ui.Components.CubicBezierInterpolator;
+import org.telegram.ui.Components.LinkPath;
+import org.telegram.ui.Components.LinkSpanDrawable;
 import org.telegram.ui.Components.MsgClockDrawable;
 import org.telegram.ui.Components.ReplyMessageLine;
+import org.telegram.ui.Components.URLSpanNoUnderline;
+import org.telegram.ui.Components.URLSpanReplacement;
 
 /**
  * tgui: lightweight text-only message bubble. Geometry (paddings, time / check positions,
  * grouped corners) follows upstream ChatMessageCell for plain text messages without avatars,
  * names or media; background is the restored {@link Theme.MessageDrawable}. A
  * {@link TextBubbleMessage#replyTo} draws upstream's reply panel (ReplyMessageLine) at the top.
+ * URLs, @mentions and #hashtags are detected like MessageObject.addLinks, drawn in the link colour
+ * and pressed with upstream's LinkSpanDrawable highlight ({@link Delegate#onLinkPressed}).
  * Emoji are drawn with the bundled bitmaps ({@link Emoji#replaceEmoji}); a message of only emoji
  * is drawn large without a bubble, with the time on a pill, as upstream's TYPE_EMOJIS.
  */
@@ -122,6 +134,14 @@ public class TextBubbleCell extends View {
     private final RectF replyImageRect = new RectF();
     protected Delegate delegate;
     private Runnable longPressRunnable;
+
+    // links (ChatMessageCell links / pressedLink / checkTextBlockMotionEvent)
+    /** Detect URLs, @mentions and #hashtags in bubble text (upstream MessageObject.addLinks). */
+    public static boolean detectLinks = true;
+    private static Pattern urlPattern;
+    private final LinkSpanDrawable.LinkCollector links = new LinkSpanDrawable.LinkCollector(this);
+    private LinkSpanDrawable<ClickableSpan> pressedLink;
+    private float linkTouchX, linkTouchY;
 
     // ChatMessageCell.setHighlightedAnimated: the selected bubble + chat_selectedBackground row fade out
     private boolean isHighlightedAnimated;
@@ -235,9 +255,66 @@ public class TextBubbleCell extends View {
         default void onReplyPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.ReplyTo replyTo) {
         }
 
-        /** A long press started on the quote or a link: hosts usually treat it like a long press on the row. */
+        /** A long press started on the quote: hosts usually treat it like a long press on the row. */
         default void onBubbleLongPressed(TextBubbleCell cell, TextBubbleMessage message) {
         }
+
+        /**
+         * A link was tapped (ChatMessageCellDelegate.didPressUrl). {@code url} is the URL of web links
+         * ("https://..."), or the text itself for "@mention" / "#hashtag".
+         */
+        default void onLinkPressed(TextBubbleCell cell, TextBubbleMessage message, String url) {
+        }
+
+        /** A link was long-pressed (didPressUrl with longPress, where upstream shows the open / copy sheet). */
+        default void onLinkLongPressed(TextBubbleCell cell, TextBubbleMessage message, String url) {
+            onBubbleLongPressed(cell, message);
+        }
+    }
+
+    /**
+     * upstream MessageObject.addLinks: web links (AndroidUtilities.addLinks with Linkify.WEB_URLS) and
+     * addUrlsByPattern's @mentions / #hashtags, all as {@link URLSpanNoUnderline}; returns a copy.
+     */
+    public static CharSequence addLinks(CharSequence text) {
+        if (TextUtils.isEmpty(text)) {
+            return text;
+        }
+        SpannableStringBuilder sb = new SpannableStringBuilder(text);
+        try {
+            AndroidUtilities.addLinks(sb, Linkify.WEB_URLS, false, false);
+        } catch (Exception ignore) {
+        }
+        for (URLSpan span : sb.getSpans(0, sb.length(), URLSpan.class)) {
+            if (span instanceof URLSpanNoUnderline || span instanceof URLSpanReplacement) {
+                continue;
+            }
+            int start = sb.getSpanStart(span);
+            int end = sb.getSpanEnd(span);
+            sb.removeSpan(span);
+            sb.setSpan(new URLSpanNoUnderline(span.getURL()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        try {
+            if (urlPattern == null) {
+                urlPattern = Pattern.compile("(^|\\s|\\()@[a-zA-Z\\d_]{1,32}|(^|\\s|\\()#[^0-9][\\w.]+(@[^0-9][\\w.]+)?");
+            }
+            Matcher matcher = urlPattern.matcher(sb);
+            while (matcher.find()) {
+                int start = matcher.start();
+                int end = matcher.end();
+                char ch = sb.charAt(start);
+                if (ch != '@' && ch != '#') {
+                    start++;
+                }
+                URLSpan[] spans = sb.getSpans(start, end, URLSpan.class);
+                if (spans != null && spans.length > 0) {
+                    continue;
+                }
+                sb.setSpan(new URLSpanNoUnderline(sb.subSequence(start, end).toString()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+        } catch (Exception ignore) {
+        }
+        return sb;
     }
 
     public void setDelegate(Delegate delegate) {
@@ -510,6 +587,18 @@ public class TextBubbleCell extends View {
         cancelCheckLongPress();
         longPressRunnable = () -> {
             longPressRunnable = null;
+            if (pressedLink != null) {
+                String url = getUrl(pressedLink.getSpan());
+                resetPressedLink();
+                if (getParent() != null) {
+                    getParent().requestDisallowInterceptTouchEvent(false);
+                }
+                performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+                if (delegate != null) {
+                    delegate.onLinkLongPressed(this, message, url);
+                }
+                return;
+            }
             boolean wasReply = replyPressed;
             resetReplyPressed();
             onInteractiveLongPress(wasReply);
@@ -622,18 +711,114 @@ public class TextBubbleCell extends View {
         return true;
     }
 
+    private String getUrl(ClickableSpan span) {
+        if (span instanceof URLSpan) {
+            return ((URLSpan) span).getURL();
+        }
+        CharSequence text = textLayout == null ? null : textLayout.getText();
+        if (text instanceof Spanned) {
+            Spanned spanned = (Spanned) text;
+            int start = spanned.getSpanStart(span);
+            int end = spanned.getSpanEnd(span);
+            if (start >= 0 && end >= start) {
+                return spanned.subSequence(start, end).toString();
+            }
+        }
+        return null;
+    }
+
+    private void resetPressedLink() {
+        if (pressedLink != null) {
+            links.removeLink(pressedLink);
+            pressedLink = null;
+            invalidate();
+        }
+    }
+
+    /** upstream checkTextBlockMotionEvent for one text layout: press highlight (LinkPath), tap and long press. */
+    protected boolean checkLinkTouchEvent(MotionEvent event) {
+        if (textLayout == null || emojiOnlyMode || !(textLayout.getText() instanceof Spanned)) {
+            return false;
+        }
+        final int action = event.getAction();
+        if (action == MotionEvent.ACTION_DOWN) {
+            float x = event.getX() - (textX - textLeftOffset);
+            float y = event.getY() - textY;
+            if (y < 0 || y > textLayout.getHeight()) {
+                return false;
+            }
+            final int line = textLayout.getLineForVertical((int) y);
+            final int off = textLayout.getOffsetForHorizontal(line, x);
+            final float left = textLayout.getLineLeft(line);
+            if (left <= x && left + textLayout.getLineWidth(line) >= x) {
+                Spanned buffer = (Spanned) textLayout.getText();
+                ClickableSpan[] link = buffer.getSpans(off, off, ClickableSpan.class);
+                if (link != null && link.length > 0) {
+                    resetPressedLink();
+                    pressedLink = new LinkSpanDrawable<>(link[0], resourcesProvider, x, y);
+                    pressedLink.setColor(getThemedColor(message.isOut ? Theme.key_chat_outLinkSelectBackground : Theme.key_chat_linkSelectBackground));
+                    try {
+                        LinkPath path = pressedLink.obtainNewPath();
+                        int start = buffer.getSpanStart(link[0]);
+                        int end = buffer.getSpanEnd(link[0]);
+                        path.setCurrentLayout(textLayout, start, 0);
+                        textLayout.getSelectionPath(start, end, path);
+                    } catch (Exception ignore) {
+                    }
+                    links.addLink(pressedLink);
+                    linkTouchX = event.getX();
+                    linkTouchY = event.getY();
+                    if (getParent() != null) {
+                        getParent().requestDisallowInterceptTouchEvent(true);
+                    }
+                    startCheckLongPress();
+                    invalidate();
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (pressedLink == null) {
+            return false;
+        }
+        if (action == MotionEvent.ACTION_UP) {
+            cancelCheckLongPress();
+            String url = getUrl(pressedLink.getSpan());
+            resetPressedLink();
+            playSoundEffect(SoundEffectConstants.CLICK);
+            if (delegate != null && url != null) {
+                delegate.onLinkPressed(this, message, url);
+            }
+        } else if (action == MotionEvent.ACTION_CANCEL) {
+            cancelCheckLongPress();
+            resetPressedLink();
+        } else if (action == MotionEvent.ACTION_MOVE) {
+            float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+            if (Math.abs(event.getX() - linkTouchX) > slop || Math.abs(event.getY() - linkTouchY) > slop) {
+                cancelCheckLongPress();
+                resetPressedLink();
+                if (getParent() != null) {
+                    getParent().requestDisallowInterceptTouchEvent(false);
+                }
+                return false;
+            }
+        }
+        return true;
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (message == null || isCheckBoxVisible()) {
             return super.onTouchEvent(event);
         }
-        if (checkReplyTouchEvent(event)) {
+        if (checkReplyTouchEvent(event) || checkLinkTouchEvent(event)) {
             return true;
         }
         return super.onTouchEvent(event);
     }
 
     protected void buildLayout(int width) {
+        resetPressedLink();
         layoutForWidth = width;
         layoutForText = message.text;
         layoutForReaction = message.reaction;
@@ -667,7 +852,8 @@ public class TextBubbleCell extends View {
         }
 
         int[] emojiOnly = new int[1];
-        CharSequence text = TextUtils.isEmpty(message.text) ? " " : Emoji.replaceEmoji(message.text, Theme.chat_msgTextPaint.getFontMetricsInt(), true, emojiOnly);
+        CharSequence source = detectLinks ? addLinks(message.text) : message.text;
+        CharSequence text = TextUtils.isEmpty(source) ? " " : Emoji.replaceEmoji(source, Theme.chat_msgTextPaint.getFontMetricsInt(), true, emojiOnly);
         TextPaint emojiPaint = getEmojiOnlyPaint(text, emojiOnly[0]);
         emojiOnlyMode = emojiPaint != null;
         textPaint = emojiOnlyMode ? emojiPaint : Theme.chat_msgTextPaint;
@@ -698,7 +884,7 @@ public class TextBubbleCell extends View {
             // a reply needs the bubble: draw the emoji at the regular size
             emojiOnlyMode = false;
             textPaint = Theme.chat_msgTextPaint;
-            text = Emoji.replaceEmoji(message.text, Theme.chat_msgTextPaint.getFontMetricsInt(), true);
+            text = Emoji.replaceEmoji(source, Theme.chat_msgTextPaint.getFontMetricsInt(), true);
             textLayout = new StaticLayout(text, textPaint, textMaxWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
             lineCount = textLayout.getLineCount();
             maxChildWidth = 0;
@@ -832,6 +1018,8 @@ public class TextBubbleCell extends View {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        cancelCheckLongPress();
+        resetPressedLink();
         if (checkBox != null) {
             checkBox.onDetachedFromWindow();
         }
@@ -995,6 +1183,9 @@ public class TextBubbleCell extends View {
         textPaint.linkColor = getThemedColor(out ? Theme.key_chat_messageLinkOut : Theme.key_chat_messageLinkIn);
         canvas.save();
         canvas.translate(textX - textLeftOffset, textY);
+        if (links.draw(canvas)) {
+            invalidate();
+        }
         textLayout.draw(canvas);
         canvas.restore();
         drawReaction(canvas, textX, out);
