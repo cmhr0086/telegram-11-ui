@@ -2,6 +2,17 @@
 
 版本号格式：`11.4.2-uiN`，前面是所基于的上游版本，`uiN` 是本库自己的迭代号。
 
+## Unreleased
+
+### 新增
+- `MediaViewer`：简易全屏图片 / 视频查看器（`org.telegram.ui.MediaViewer`，不是 `PhotoViewer` 移植，只借用上游外观和手势数值）——从气泡图片位置放大打开、缩回关闭，下拉关闭且背景渐隐，双指 / 双击缩放到 3 倍和拖动，左右翻页，顶栏（返回、发送者、日期、序号）和说明文字，视频用 `MediaPlayer` + `TextureView`（播放 / 暂停、进度条、时间）；数据是纯模型 `MediaViewer.Item`，位置和隐藏源图走 `MediaViewer.Provider`。
+- `TextBubbleMessage.videoUri` 和 `TextBubbleMessage.video(...)`：图片气泡当视频显示（中间播放按钮、左上角上游的时长小胶囊）。
+- `PhotoBubbleCell.getPhotoRect` / `getPhotoRectOnScreen` / `getPhotoRadii` / `setPhotoVisible`，供查看器做打开 / 关闭动画。
+- demo：点图片 / 视频打开查看器，可在聊天里所有已下载的图片和视频之间翻页；加了一条 6 秒的示例视频消息（`demo/res/raw/sample_video.mp4`，80 KB）。
+
+### 修复
+- 点 `PhotoBubbleCell` 的图片会弹出消息菜单：现在图片区域的单击按上游 `didPressImage` 回调 `MediaDelegate.onMediaPressed`（任何下载状态），说明文字条和气泡其它位置仍然单击出菜单；长按图片照常进入多选、没有按下效果，手指移动超过阈值把手势还给列表滚动。
+
 ## 11.4.2-ui4
 
 ### 新增
