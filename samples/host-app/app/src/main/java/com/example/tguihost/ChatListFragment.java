@@ -98,10 +98,6 @@ public class ChatListFragment extends BaseFragment {
             }
 
             @Override
-            public void onPageScrolled(float progress) {
-            }
-
-            @Override
             public void onSamePageSelected() {
                 listView.scrollToTop(true);
             }
@@ -115,29 +111,6 @@ public class ChatListFragment extends BaseFragment {
                     }
                 }
                 return n;
-            }
-
-            @Override
-            public boolean didSelectTab(FilterTabsView.TabView tabView, boolean selected) {
-                return true;
-            }
-
-            @Override
-            public boolean isTabMenuVisible() {
-                return false;
-            }
-
-            @Override
-            public void onDeletePressed(int id) {
-            }
-
-            @Override
-            public void onPageReorder(int fromId, int toId) {
-            }
-
-            @Override
-            public boolean canPerformActions() {
-                return true;
             }
         });
         for (int a = 0; a < TABS.length; a++) {

@@ -20,7 +20,7 @@ upstream/    上游源码浅克隆，只读参考，已在 .gitignore 中
 
 ## 构建
 
-需要 JDK 17 或 21（AGP 9.0.1 / Gradle 9.1.0，compileSdk 36，minSdk 21），以及 NDK `28.2.13676358` 和 CMake `3.22.1`（编 rlottie）：
+需要 JDK 17 或 21（AGP 9.0.1 / Gradle 9.1.0，compileSdk 36，minSdk 21），以及 NDK `28.2.13676358` 和 CMake `3.22.1`（编 rlottie）。Android SDK 路径要通过 `ANDROID_HOME` 环境变量或仓库根目录的 `local.properties`（`sdk.dir=...`）给出，新检出 / 新 worktree 里没有它会报 `SDK location not found`：
 
 ```bash
 sdkmanager "ndk;28.2.13676358" "cmake;3.22.1"
@@ -41,6 +41,8 @@ JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew :tgui:publishToMavenLocal
 ```
 
 坐标 `org.telegram.ui:tgui:11.4.2-ui2`。直接引用 AAR 文件时，宿主需要自己加 `androidx.core:core`、`androidx.annotation:annotation`、`androidx.dynamicanimation:dynamicanimation`、`androidx.customview:customview`、`androidx.collection:collection`、`androidx.interpolator:interpolator`、`androidx.viewpager:viewpager`。RecyclerView 用的是上游自带的 fork，包名改成了 `org.telegram.tgui.recyclerview`（源码在库里），可以和官方 `androidx.recyclerview` 共存，宿主照常引入 Material、preference、viewpager2 等即可。库的列表组件（`RecyclerListView` 等）用的是 fork，宿主代码里的 `RecyclerView` / `LinearLayoutManager` / `DiffUtil` 要从 `org.telegram.tgui.recyclerview` 导入，和库组件混用官方类会类型不匹配。
+
+体积参考（`samples/host-app` 实测，最小宿主 + R8）：release APK 约 10.9 MB，基本都来自 tgui；加 `isShrinkResources = true` 约 9.8 MB，再只留 `abiFilters += "arm64-v8a"` 约 8.6 MB。大头是 `assets/emoji` 精灵图 5.2 MB、`res` 1.3 MB（含 Lottie 插图）、字体 0.8 MB、四个 ABI 的 `libtguilottie.so` 合计 1.45 MB。
 
 ## 使用
 
@@ -70,6 +72,22 @@ Manifest 里给 Activity 加上
 页面写法和上游完全一样：继承 `BaseFragment`，在 `createView()` 里配置 `actionBar` 并返回 `fragmentView`；跳转用 `presentFragment()`，左滑返回、预览、`showAsSheet()` 都可用；`getThemeDescriptions()` 里登记的颜色会在切换主题时做动画。完整示例见 `demo/src/main/java/org/telegram/uidemo/`。
 
 注意 `createView()` 不是只调一次：切换主题（部分情况）、语言或屏幕配置变化时，`ActionBarLayout` 会重建页面视图，`createView()` 会再次执行。和上游约定一样，数据和监听的初始化放在 `onFragmentCreate()`，`createView()` 里只建视图、绑定已有数据。
+
+主题切换只刷新在 `getThemeDescriptions()` 里登记过的视图，**没登记的页面不会跟着日夜切换**（要退出再进才变）。聊天页至少要登记 ActionBar 的背景 / 标题 / 按钮颜色、`ChatActivityEnterView.getThemeDescriptions()`，以及一个在聊天颜色 key（`chat_inBubble`、`chat_outBubble`、`chat_messageTextIn` 等）变化时重绘列表的回调；壁纸要监听 `NotificationCenter.didSetNewWallpapper` 后重新 `setBackgroundImage(...)`。写法见 demo 的 `DemoChatFragment` 或 `samples/host-app` 的 `ChatFragment`。
+
+搭聊天页（`ChatInputLayout` + `ChatActivityEnterView` + `TextBubbleCell`）目前要照 demo 自己拼，几个容易漏的步骤：
+- `actionBar.setAddToContainer(false)`，再 `contentView.addView(actionBar)` + `contentView.setActionBar(actionBar)`；
+- `new ChatInputLayout(context, parentLayout)` → `setContentView(listView)` → 加 `enterView` 后 `setEnterView(enterView)`，最后加 ActionBar；
+- 列表顶部 padding 自己算：`ActionBar.getCurrentActionBarHeight() + AndroidUtilities.statusBarHeight + dp(4)`；
+- `onResume` / `onPause` 转发给 `contentView` 和 `enterView`，`onFragmentDestroy` 里调 `enterView.onDestroy()`；
+- `ChatActivityEnterViewDelegate` 全是 default 方法，默认值都是“不显示额外东西”，只实现 `onSendText` 就能发消息；
+- 多选的 ActionMode 由宿主搭（`samples/host-app/.../ChatFragment.java` 里有约 60 行的最小版）。
+
+文件夹标签 `FilterTabsView`：`FilterTabsViewDelegate` 只有 `onPageSelected` 必须实现，其余都是 default（不显示计数、没有长按菜单）。顺序是先 `setDelegate`，再 `addTab(...)`（`addTab` 会通过 delegate 取计数），然后 `finishAddingTabs(false)`；挂到 ActionBar 下沿用 `actionBar.setExtraHeight(dp(44))` + `actionBar.addView(tabs, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 44, Gravity.BOTTOM))`。
+
+数据模型都是公开字段：
+- `DialogItem`：`id`（稳定 id，决定头像配色）、`title`、`message`、`senderName`、`mediaPreview`、`draft`、`typing` / `typingType`、`time`、`unreadCount`、`markUnread`、`mention`、`muted`、`pinned`、`verified`、`secret`、`online`、`sentState`（`SENT_*`）、`avatar` / `avatarBitmap` / `avatarType`、`isFolder`（归档行）。
+- `TextBubbleMessage`：`id`、`text`、`isOut`、`time`、`state`（`STATE_*` 发送状态）、`reaction`（已选反应 emoji，null 为无）。
 
 库里的图标、字符串等资源都通过 `org.telegram.tgui.R` 引用（AGP 8+ 默认 `nonTransitiveRClass=true`，宿主自己的 `R` 不包含库资源）：
 

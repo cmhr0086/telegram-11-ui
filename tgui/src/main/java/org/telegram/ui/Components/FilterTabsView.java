@@ -85,21 +85,37 @@ public class FilterTabsView extends FrameLayout {
     public interface FilterTabsViewDelegate {
         void onPageSelected(Tab tab, boolean forward);
 
-        void onPageScrolled(float progress);
+        // tgui: everything below is optional; the defaults show no counters and no long-press menu.
+        default void onPageScrolled(float progress) {
+        }
 
-        void onSamePageSelected();
+        default void onSamePageSelected() {
+        }
 
-        int getTabCounter(int tabId);
+        /** Unread counter shown on the tab; 0 or less hides it. */
+        default int getTabCounter(int tabId) {
+            return 0;
+        }
 
-        boolean didSelectTab(TabView tabView, boolean selected);
+        /** Long press on a tab; return true if the host showed a menu for it. */
+        default boolean didSelectTab(TabView tabView, boolean selected) {
+            return false;
+        }
 
-        boolean isTabMenuVisible();
+        default boolean isTabMenuVisible() {
+            return false;
+        }
 
-        void onDeletePressed(int id);
+        default void onDeletePressed(int id) {
+        }
 
-        void onPageReorder(int fromId, int toId);
+        default void onPageReorder(int fromId, int toId) {
+        }
 
-        boolean canPerformActions();
+        /** false ignores taps and long presses on the tabs. */
+        default boolean canPerformActions() {
+            return true;
+        }
     }
 
     public class Tab {

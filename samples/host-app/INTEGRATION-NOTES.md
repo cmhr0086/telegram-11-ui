@@ -37,7 +37,9 @@ logcat 的 crash 缓冲区为空。小米 10.0.0.139 测试时已经掉线（adb
 - **防回归**：`.github/workflows/build.yml` 加了一步，先 `publishToMavenLocal` 再构建本工程的 debug + release。
   以后如果要给库里加 `@IntDef`，要么做成 public，要么别嵌套在类里。
 
-### 2. 【高】库自带 RecyclerView fork，和 Material Components 等常见依赖直接冲突
+### 2. ~~【高】库自带 RecyclerView fork，和 Material Components 等常见依赖直接冲突~~ 【ui3 已修复】
+
+- **ui3**：fork 搬到 `org.telegram.tgui.recyclerview`；本工程现在直接依赖 `com.google.android.material:material:1.12.0`（无 exclude），debug 和 R8 release 都能构建（CI 也会跑）。
 
 - **现象**：在宿主里加一行 `implementation("com.google.android.material:material:1.12.0")`，构建失败，
   `Duplicate class androidx.recyclerview.widget.AdapterHelper found in modules recyclerview-1.1.0.aar … and tgui-11.4.2-ui2.aar …`，一共 **175 个** 重复类。
@@ -48,7 +50,9 @@ logcat 的 crash 缓冲区为空。小米 10.0.0.139 测试时已经掉线（adb
 - **建议**：把 fork 改到自己的包（例如 `org.telegram.ui.recyclerview`，上游自己也只是复制了源码），这样能和官方 RecyclerView 共存；
   短期至少在 README 里写明 exclude 写法和风险。
 
-### 3. 【高】宿主的 `R` 拿不到库资源；namespace 用 `org.telegram.messenger` 的宿主直接合并失败
+### 3. ~~【高】宿主的 `R` 拿不到库资源；namespace 用 `org.telegram.messenger` 的宿主直接合并失败~~ 【ui3 已修复】
+
+- **ui3**：库 namespace 改为 `org.telegram.tgui`，资源用 `import org.telegram.tgui.R;`；仓库去掉了 `nonTransitiveRClass=false`，demo 和外部宿主行为一致；README 示例已写明 R 的导入。
 
 - **现象 A**：照 README 示例写 `R.drawable.msg_copy`（宿主包下的 `R`），编译报 `cannot find symbol … variable drawable / location: class R`。
   AGP 8+ 新工程默认 `android.nonTransitiveRClass=true`，宿主自己的 `R` 不含库资源。要改成 `import org.telegram.tgui.R;`。README 里没提。
@@ -60,7 +64,9 @@ logcat 的 crash 缓冲区为空。小米 10.0.0.139 测试时已经掉线（adb
 - **建议**：README 的示例代码统一写 `org.telegram.messenger.R`；长期把 namespace 换成独立的（例如 `org.telegram.tgui`），
   库内部用 `import org.telegram.tgui.R`（这样 Telegram 分支也能用）。类包名能否整体迁移另议，但至少 namespace 要避开 `org.telegram.messenger`。
 
-### 4. 【中】`TelegramActivity` 启动时会调用根 Fragment 的 `createView()` 两次
+### 4. ~~【中】`TelegramActivity` 启动时会调用根 Fragment 的 `createView()` 两次~~ 【ui3 已修复】
+
+- **ui3**：`onCreate` 只在栈被子类预先填好时才 `rebuildFragments`；README 写明 `createView()` 在主题 / 配置变化时仍可能再跑。
 
 - **现象**：我第一版在 `createView()` 里填对话数据，结果文件夹标签的未读计数全是双倍（All 6 / Unread 6，实际应为 3）。加日志看到：
   第一次来自 `TelegramActivity.onCreate → ActionBarLayout.addFragmentToStack → attachView`，第二次来自
@@ -69,13 +75,15 @@ logcat 的 crash 缓冲区为空。小米 10.0.0.139 测试时已经掉线（adb
 - **宿主绕过**：数据初始化放到 `onFragmentCreate()`（本工程已这样改）。
 - **建议**：`TelegramActivity.onCreate` 去掉多余的 `rebuildFragments`（或只在需要时重建）；在 README 写清楚“`createView()` 可能被多次调用，不要在里面初始化数据”（上游也是这样的约定）。
 
-### 5. 【中】`ChatActivityEnterViewDelegate.hasScheduledMessages()` 默认返回 `true`
+### 5. ~~【中】`ChatActivityEnterViewDelegate.hasScheduledMessages()` 默认返回 `true`~~ 【ui3 已修复】
+
+- **ui3**：默认改为 `false`，其它 default 逐个检查过都是中性值；本工程删掉了对应的覆盖。
 
 - **现象**：只实现了 `onSendText` 的宿主，发出第一条消息后，输入栏右侧多出一个带红点的“定时消息”日历按钮，点了也没东西。
 - **原因**：`ChatActivityEnterView.java` 里 `default boolean hasScheduledMessages() { return true; }`（其它 default 大多是中性值；52 个 default 方法里这是不中性的一个）。
 - **建议**：默认改成 `false`。这个接口已经全部是 default 方法了，这点很好，只实现 `onSendText` 就能用，但默认值要逐个检查成“什么都不显示”。
 
-### 6. 【中】聊天页不写 `getThemeDescriptions()` 就不跟着日夜切换
+### 6. 【中】聊天页不写 `getThemeDescriptions()` 就不跟着日夜切换 【ui3 补了文档，帮手见“后续”】
 
 - **现象**：在聊天页点日夜切换，聊天页本身（ActionBar、壁纸、气泡、输入栏）**完全不变**；退回列表才发现主题已经切换了。
   补上 `getThemeDescriptions()`（ActionBar 三项 + 聊天颜色 key 的重绘回调 + `enterView.getThemeDescriptions()`）
@@ -83,7 +91,7 @@ logcat 的 crash 缓冲区为空。小米 10.0.0.139 测试时已经掉线（adb
 - **原因**：库组件不会自己监听主题变化，全靠宿主页面登记。README 只说“登记的颜色会做动画”，没说**不登记就不刷新**，也没列出聊天页要登记哪些 key。
 - **建议**：给 `ChatInputLayout` / `TextBubbleCell` 提供一个现成的 `ChatThemeHelper.getThemeDescriptions(actionBar, listView, contentView, enterView)`，并由 `ChatInputLayout` 自己监听 `didSetNewWallpapper`。
 
-### 7. 【中】聊天页的搭建步骤全靠读 demo，README 没有最小示例
+### 7. 【中】聊天页的搭建步骤全靠读 demo，README 没有最小示例 【ui3 README 列了必做步骤，`BaseChatFragment` 见“后续”】
 
 我照着 demo 的 `DemoChatFragment`（871 行）抄出最小聊天页，`ChatFragment.java` 仍有 369 行。必须做、但 README 没写的步骤：
 - `actionBar.setAddToContainer(false)`，再手动 `contentView.addView(actionBar)` + `contentView.setActionBar(actionBar)`；
@@ -94,19 +102,23 @@ logcat 的 crash 缓冲区为空。小米 10.0.0.139 测试时已经掉线（adb
 - 多选的 ActionMode（计数 `NumberTextView`、按钮、`showActionMode` / `hideActionMode`、逐行 `setCheckBoxVisible` / `setChecked`）全部由宿主实现，最小版约 60 行。
 - **建议**：提供一个可继承的 `BaseChatFragment`（或 `ChatScreen` 组合类），内置上面的布局、生命周期转发、主题登记、多选 ActionMode，宿主只给消息列表和回调；README 放一个 30 行以内的最小示例。
 
-### 8. 【中】聊天列表：`FilterTabsViewDelegate` 有 9 个抽象方法，标签栏挂法也没写
+### 8. ~~【中】聊天列表：`FilterTabsViewDelegate` 有 9 个抽象方法，标签栏挂法也没写~~ 【ui3 已修复】
+
+- **ui3**：只有 `onPageSelected` 是抽象的，其余改为中性 default；README 写了 `setDelegate` → `addTab` → `finishAddingTabs` → 挂到 ActionBar 的顺序。本工程的 delegate 删到 3 个方法。
 
 - **现象**：只想要“点标签切换列表”，也得实现 9 个方法（`onPageSelected`、`onPageScrolled`、`onSamePageSelected`、`getTabCounter`、`didSelectTab`、`isTabMenuVisible`、`onDeletePressed`、`onPageReorder`、`canPerformActions`），其中 6 个写空实现或固定返回值。
   还要知道先 `setDelegate` 再 `addTab`（`addTab` 内部会通过 delegate 算计数，demo 里有注释），之后调 `finishAddingTabs`、`actionBar.setExtraHeight(dp(44))`、`actionBar.addView(tabs, …, Gravity.BOTTOM)`，这些 README 都没写。
 - 对比：`DialogsSwipeController.Delegate` 只有 `getSwipeAction` 是必须的，其它都是 default，好用很多（我一开始也照 demo 全写了，后来删到 2 个方法）。
 - **建议**：`FilterTabsViewDelegate` 的非必要方法改成 default；加一个 `FilterTabsView.attachTo(ActionBar)` 帮手。
 
-### 9. 【低】文档里没有 `DialogItem` / `TextBubbleMessage` 的字段说明
+### 9. ~~【低】文档里没有 `DialogItem` / `TextBubbleMessage` 的字段说明~~ 【ui3 README 已补字段表】
 
 - **现象**：我按直觉写了 `getDialog().name`，编译报错，字段其实叫 `title`。只能去 sources jar 或 demo 里翻。
 - **建议**：README 给 `DialogItem` 列一张字段表（`title`、`message`、`senderName`、`time`、`unreadCount`、`muted`、`pinned`、`sentState`…）。
 
-### 10. 【低】APK 体积：最小宿主 release 约 10.9 MB，基本都来自 tgui
+### 10. 【低】APK 体积：最小宿主 release 约 10.9 MB，基本都来自 tgui 【ui3 README 写了体积和裁剪办法，拆模块见“后续”】
+
+（下表是 ui2、未加 Material 时量的；ui3 起本工程依赖 Material，APK 会更大。）
 
 实测（同一宿主，`isMinifyEnabled = true`）：
 
@@ -122,7 +134,7 @@ release 里的大头：`assets/emoji` 5.2 MB（PNG，不再压缩，资源压缩
 - **建议**：README 写明体积和 `abiFilters` / `isShrinkResources` 的效果；把 46 个大幅 Lottie 插图拆成可选的 `tgui-illustrations` 模块；emoji 精灵图考虑 WebP 或按需下载。
 - 顺带：README 原来写 emoji 精灵图“约 14 MB”，那是 `du` 按磁盘块算的（3599 个小文件），实际字节数是 5.2 MB，已在 README 里改正。
 
-### 11. 【低】发布命令在没有 `local.properties` 的检出里直接失败
+### 11. ~~【低】发布命令在没有 `local.properties` 的检出里直接失败~~ 【ui3 README 已补 SDK 路径说明】
 
 - **现象**：新 worktree 里跑 README 的 `./gradlew :tgui:publishToMavenLocal`，报 `SDK location not found`。要设 `ANDROID_HOME` 或建 `local.properties`。README 的“构建”一节只写了 NDK / CMake。
 - **建议**：README 加一句 SDK 路径的要求。
@@ -146,3 +158,13 @@ release 里的大头：`assets/emoji` 5.2 MB（PNG，不再压缩，资源压缩
 - 语音录制、附件按钮、回复 / 编辑顶栏（本示例隐藏了录音按钮）。
 - Material exclude 方案的运行时行为、`isShrinkResources = true` 的运行时行为（只量了体积）。
 - 小米（掉线）和 Android 11+ 设备。
+
+## 后续（ui3 没做，工作量较大）
+
+- **聊天页主题帮手**：`ChatThemeHelper.getThemeDescriptions(actionBar, listView, contentView, enterView)`，并让 `ChatInputLayout` 自己监听 `didSetNewWallpapper`（第 6 条）。
+- **`BaseChatFragment` / `ChatScreen`**：内置聊天页布局、生命周期转发、主题登记、多选 ActionMode，README 给 30 行以内的最小示例（第 7 条）。
+- **`FilterTabsView.attachTo(ActionBar)`** 帮手（第 8 条，README 已写手动挂法）。
+- **体积**：46 个 Lottie 插图拆成可选的 `tgui-illustrations` 模块；emoji 精灵图改 WebP 或按需下载（第 10 条）。
+- **`MessageContextMenu` 首次打开后按返回键不关**：只复现过一次，未定位。
+- **没测的场景**：不用 `TelegramActivity`（AppCompat + Navigation）、不用 `Theme.TMessages` / 忘调 `TelegramUI.init`、Android 11+ 设备、`isShrinkResources` 的运行时行为、Material 组件和 fork 同屏使用。
+
