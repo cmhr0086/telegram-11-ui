@@ -19,6 +19,16 @@
 - demo：示例消息分成三天并插入日期分隔，滚动时顶部浮出当前日期；示例里有回复文字和回复图片的消息，点引用跳到原消息并闪烁；从输入栏回复面板发出的消息带引用；有一条带链接、@提及和 #话题的消息，单击打开网址，长按弹出“打开 / 复制”。
 - demo：录完语音会生成语音气泡并用 `MediaPlayer` 播放（波形进度跟着走）；示例里加了语音、图片（含说明文字和待下载的一张）、文件消息，点下载按钮模拟下载进度。
 
+- 气泡里的反应：新类 `ReactionsLayoutInBubble`（上游同名类按原数值移植到纯模型：26dp 胶囊、换行排布、`chat_in/outReactionButton*` 颜色、新增 / 移除 / 移动 / 变色动画，静态 Telegram 表情）和 `CounterView`（上游原版，反应计数的数字滚动动画）。文字、语音、图片、文件和纯 emoji 消息都会画反应并相应加高气泡；图片有反应时下面接一条气泡放反应和时间，和上游一样。
+- `TextBubbleMessage.reactions`（`TextBubbleMessage.Reaction`：`emoji`、`count`、`chosen`）、`getReaction(emoji)`、`toggleReaction(emoji)`（上游非 Premium 规则：一人一个反应，再点取消，换一个则替换）。对同一条消息改完 `reactions` 再 `setMessage` 会播放变化动画。
+- `TextBubbleCell.Delegate.onReactionPressed` / `onReactionLongPressed`：单击 / 长按反应胶囊（按下回弹，手势不会再触发整行单击或菜单）。
+- `MessageContextMenu.setSelectedReactions(message)` / `setSelectedReactions(Collection<String>)`：反应条里已选的表情画上游的选中圆底并缩小。
+- `TextBubbleCell.MEDIA_THEME_KEYS` 加上反应胶囊的 6 个颜色 key。
+- demo：示例消息带上反应（文字、语音、图片、文件、纯 emoji 都有），单击胶囊切换自己的反应，长按弹计数提示；菜单反应条显示已选项，选表情会加 / 换 / 取消反应并带动画。
+
+### 变更（不兼容）
+- `TextBubbleMessage.reaction`（单个字符串、固定计数 1 的小胶囊）删除，改用 `reactions` 列表；原来 `message.reaction = emoji.equals(message.reaction) ? null : emoji` 的写法换成 `message.toggleReaction(emoji)`。
+
 ### 修复
 - `Theme.createChatResources` 补上上游的媒体文字字号（`chat_infoPaint`、`chat_docNamePaint`、`chat_audioTimePaint` 等原来是默认字号）和 `chat_filePath`（`MediaActionDrawable.ICON_FILE` 原来画不出来）。
 
