@@ -316,6 +316,14 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         actionBar.setAllowOverlayTitle(true);
         actionBar.setTitle("Chat");
         actionBar.setSubtitle("ChatActivityEnterView");
+        // upstream ChatAvatarContainer: tapping the header opens the profile
+        View.OnClickListener openProfile = v -> {
+            if (!actionBar.isActionModeShowed()) {
+                DemoProfiles.openAlice(this);
+            }
+        };
+        actionBar.getTitleTextView().setOnClickListener(openProfile);
+        actionBar.getSubtitleTextView().setOnClickListener(openProfile);
         actionBar.setAddToContainer(false);
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
@@ -1076,7 +1084,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
 
     /** A generated landscape (sky gradient, sun, two hills) standing in for a decoded photo. */
-    private static Drawable samplePhoto(int width, int height, int variant) {
+    static Drawable samplePhoto(int width, int height, int variant) {
         android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         int[][] skies = {{0xff4fa3e0, 0xffbfe3f7}, {0xff3b2667, 0xffff9a62}, {0xff1d4350, 0xffa3d39c}};

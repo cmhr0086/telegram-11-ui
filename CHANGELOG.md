@@ -33,6 +33,12 @@
 - `DialogsFloatingButton.hide(hide, animated)`：不带动画地隐藏 / 显示。
 - demo：对话列表的放大镜，本地过滤示例对话、一小段消息历史和三个“公开频道”，结果延迟 120ms 回调模拟异步；点结果弹 Toast 并把聊天移到 Recent 顶部，Clear 弹上游确认框。
 
+- 个人资料页：新类 `ProfileFragment`（上游 `ProfileActivity` 的头部按原数值移植到纯模型 `ProfileFragment.Profile`：`needLayout` / `setAvatarExpandProgress` / `needLayoutText` 的几何与缩放、`TopView`、`OverlaysView` 上下渐变；42dp 圆形头像在 ActionBar 区域、名字和在线状态在右侧，上滑时头像 / 名字 / 状态缩进 ActionBar，下拉超过阈值（`expandProgress` ≥ 0.33）时 `expandAnimator` 把头像展开成全宽正方形、名字和状态落到渐变上，松手按上游吸附到展开或收起；点头像也会展开 / 收起；写消息浮动按钮贴在头部底边，按上游 150ms 缩放淡入淡出；认证标记展开时交叉淡入白色版本，静音图标；⋮ 菜单项、写消息按钮由宿主提供，`Delegate` 回调）。只有带照片（`Profile.photo`）的资料能下拉展开，和上游一样。
+- `ProfileFragment.Row`：资料页下方的信息行，用上游的单元格和颜色：`detail`（电话 / 用户名，`TextDetailCell`）、`bio`（多行简介）、`notifications`（`NotificationsCheckCell` 开关，点击先翻转 `checked` 再回调）、`text`（`TextCell` 图标 + 计数，共享媒体入口）、`destructive`（红色“Block user” / “Delete contact”）、`shadow`；每行自带点击回调，改完字段调 `updateRow(row)`，改完资料调 `updateProfile()`。
+- `TextDetailCell`（上游原版）、`CrossfadeDrawable`（上游原版）；`NotificationsCheckCell.updateColors()`（值文字是 `AnimatedTextView`，`ThemeDescription` 改不到）。
+- 资源：`profile_newmsg`、`floating_shadow_profile`、`verified_profile`、`msg_block`、`msg_photos`、`msg_filehq`、`msg_link2`、`msg_gif`、`msg_addcontact`、`msg_qrcode`、`msg_openprofile`。
+- demo：聊天页点标题 / 副标题、对话列表点头像、抽屉新增的 “My Profile” 都会打开资料页；⋮ 菜单里有日 / 夜切换，通知开关会给名字加静音图标，Block user 弹上游确认框。
+
 ### 变更（不兼容）
 - `TextBubbleMessage.reaction`（单个字符串、固定计数 1 的小胶囊）删除，改用 `reactions` 列表；原来 `message.reaction = emoji.equals(message.reaction) ? null : emoji` 的写法换成 `message.toggleReaction(emoji)`。
 

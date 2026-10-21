@@ -189,6 +189,14 @@ public class NotificationsCheckCell extends FrameLayout {
         drawLine = value;
     }
 
+    /** tgui: re-reads the text colors; the AnimatedTextView value is not reachable by ThemeDescription. */
+    public void updateColors() {
+        textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
+        valueTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider));
+        multilineValueTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider));
+        invalidate();
+    }
+
     public void setChecked(boolean checked) {
         checkBox.setChecked(checked, true);
     }
