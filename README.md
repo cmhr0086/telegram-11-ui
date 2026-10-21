@@ -40,7 +40,7 @@ JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew :demo:installDebug
 JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew :tgui:publishToMavenLocal
 ```
 
-坐标 `org.telegram.ui:tgui:11.4.2-ui2`。直接引用 AAR 文件时，宿主需要自己加 `androidx.core:core`、`androidx.annotation:annotation`、`androidx.dynamicanimation:dynamicanimation`、`androidx.customview:customview`、`androidx.collection:collection`、`androidx.interpolator:interpolator`、`androidx.viewpager:viewpager`。RecyclerView 用的是上游自带的 fork，包名改成了 `org.telegram.tgui.recyclerview`（源码在库里），可以和官方 `androidx.recyclerview` 共存，宿主照常引入 Material、preference、viewpager2 等即可。库的列表组件（`RecyclerListView` 等）用的是 fork，宿主代码里的 `RecyclerView` / `LinearLayoutManager` / `DiffUtil` 要从 `org.telegram.tgui.recyclerview` 导入，和库组件混用官方类会类型不匹配。
+坐标 `org.telegram.ui:tgui:11.4.2-ui3`。直接引用 AAR 文件时，宿主需要自己加 `androidx.core:core`、`androidx.annotation:annotation`、`androidx.dynamicanimation:dynamicanimation`、`androidx.customview:customview`、`androidx.collection:collection`、`androidx.interpolator:interpolator`、`androidx.viewpager:viewpager`。RecyclerView 用的是上游自带的 fork，包名改成了 `org.telegram.tgui.recyclerview`（源码在库里），可以和官方 `androidx.recyclerview` 共存，宿主照常引入 Material、preference、viewpager2 等即可。库的列表组件（`RecyclerListView` 等）用的是 fork，宿主代码里的 `RecyclerView` / `LinearLayoutManager` / `DiffUtil` 要从 `org.telegram.tgui.recyclerview` 导入，和库组件混用官方类会类型不匹配。
 
 体积参考（`samples/host-app` 实测，最小宿主 + R8）：release APK 约 10.9 MB，基本都来自 tgui；加 `isShrinkResources = true` 约 9.8 MB，再只留 `abiFilters += "arm64-v8a"` 约 8.6 MB。大头是 `assets/emoji` 精灵图 5.2 MB、`res` 1.3 MB（含 Lottie 插图）、字体 0.8 MB、四个 ABI 的 `libtguilottie.so` 合计 1.45 MB。
 
