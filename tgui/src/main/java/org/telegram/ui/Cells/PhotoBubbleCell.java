@@ -520,6 +520,8 @@ public class PhotoBubbleCell extends TextBubbleCell {
         int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
             if (area) {
+                // RecyclerListView replays the DOWN to the cell before dispatching it: drop the first long press
+                resetPhotoTouch();
                 photoTouch = true;
                 photoTouchX = x;
                 photoTouchY = y;

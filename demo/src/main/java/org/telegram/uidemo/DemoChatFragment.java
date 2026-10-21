@@ -1118,7 +1118,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         ArrayList<MediaViewer.Item> items = new ArrayList<>();
         ArrayList<TextBubbleMessage> sources = new ArrayList<>();
         int index = 0;
-        SimpleDateFormat format = new SimpleDateFormat("d MMM yyyy 'at' HH:mm", Locale.getDefault());
+        SimpleDateFormat format = new SimpleDateFormat("d MMM yyyy 'at' HH:mm", Locale.US);
         for (TextBubbleMessage m : messages) {
             if (m.type != TextBubbleMessage.TYPE_PHOTO || m.mediaState != TextBubbleMessage.MEDIA_READY || m.photo == null && m.videoUri == null) {
                 continue;

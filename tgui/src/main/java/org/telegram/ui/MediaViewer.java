@@ -757,7 +757,7 @@ public class MediaViewer {
     // ---------------------------------------------------------------- touches
 
     private boolean onSingleTap(MotionEvent e) {
-        if (currentItem().video != null && isPlayButtonVisible()) {
+        if (currentItem().video != null && isPlayButtonVisible() && scale == 1f) {
             float cx = containerWidth() / 2f, cy = containerHeight() / 2f;
             if (Math.hypot(e.getX() - cx, e.getY() - cy) < dp(40)) {
                 togglePlay();
@@ -965,9 +965,6 @@ public class MediaViewer {
         if (textureView == null || videoWidth == 0) {
             drawMedia(canvas, item.photo, tmpRect);
         }
-        if (item.video != null && isPlayButtonVisible() && scale == 1 && translationX == 0 && translationY == 0) {
-            drawPlayButton(canvas, width / 2f, height / 2f);
-        }
 
         // neighbours, scale 1, one container width (plus the gap) beside the current page's edge
         float currentHalf = Math.max(tmpRect.width() / 2f, width / 2f);
@@ -1086,6 +1083,16 @@ public class MediaViewer {
         @Override
         protected void onDraw(Canvas canvas) {
             drawViewer(canvas);
+        }
+
+        @Override
+        protected void dispatchDraw(Canvas canvas) {
+            super.dispatchDraw(canvas);
+            // above the TextureView: the play button over a paused / finished video
+            if (transitionProgress >= 1f && !closing && currentItem().video != null && isPlayButtonVisible() && scale == 1f) {
+                float cx = getWidth() / 2f + translationX, cy = getHeight() / 2f + translationY;
+                drawPlayButton(canvas, cx, cy);
+            }
         }
 
         @Override
