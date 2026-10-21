@@ -318,7 +318,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         }
 
         default boolean hasScheduledMessages() {
-            return true;
+            return false;
         }
 
         default void onSendLongClick() {

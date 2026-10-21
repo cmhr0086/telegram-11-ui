@@ -158,12 +158,6 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             public void onSendText(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate) {
                 send(text);
             }
-
-            @Override
-            public boolean hasScheduledMessages() {
-                // the default is true, which shows the scheduled-messages button after the first send
-                return false;
-            }
         });
         enterView.setRecordButtonVisible(false);
         contentView.addView(enterView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
