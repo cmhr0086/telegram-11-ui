@@ -6122,6 +6122,16 @@ public class Theme {
             applyChatTheme(fontsOnly, false);
         }
 
+        // tgui: media bubble paints (upstream createChatResources, same sizes)
+        if (!fontsOnly && chat_infoPaint != null) {
+            chat_infoPaint.setTextSize(dp(12));
+            chat_infoBoldPaint.setTextSize(dp(12));
+            chat_docNamePaint.setTextSize(dp(15));
+            chat_audioTimePaint.setTextSize(dp(12));
+            chat_audioTitlePaint.setTextSize(dp(16));
+            chat_durationPaint.setTextSize(dp(12));
+        }
+
         if (chat_msgTextPaint != null) {
             chat_msgTextPaint.setTextSize(dp(SharedConfig.fontSize));
             chat_timePaint.setTextSize(dp(12));

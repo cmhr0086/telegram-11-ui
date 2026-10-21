@@ -12,12 +12,15 @@ import android.text.TextPaint;
 import android.text.TextUtils;
 import android.os.SystemClock;
 import android.view.View;
+
+import java.util.ArrayList;
 import android.view.animation.Interpolator;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Components.CheckBoxBase;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.MsgClockDrawable;
@@ -31,17 +34,17 @@ import org.telegram.ui.Components.MsgClockDrawable;
  */
 public class TextBubbleCell extends View {
 
-    private final Theme.ResourcesProvider resourcesProvider;
+    protected final Theme.ResourcesProvider resourcesProvider;
 
-    private TextBubbleMessage message;
-    private boolean pinnedTop;
-    private boolean pinnedBottom;
+    protected TextBubbleMessage message;
+    protected boolean pinnedTop;
+    protected boolean pinnedBottom;
 
     private StaticLayout textLayout;
-    private StaticLayout timeLayout;
-    private int layoutForWidth = -1;
-    private CharSequence layoutForText;
-    private String layoutForReaction;
+    protected StaticLayout timeLayout;
+    protected int layoutForWidth = -1;
+    protected CharSequence layoutForText;
+    protected String layoutForReaction;
     // chosen reaction chip (ReactionsLayoutInBubble.ReactionButton look: 26dp pill, 20dp emoji, 12dp counter)
     private Drawable reactionDrawable;
     private int reactionWidth;
@@ -52,28 +55,31 @@ public class TextBubbleCell extends View {
 
     // selection mode (ChatMessageCell.setCheckBoxVisible / setChecked / animateCheckboxTranslation / setDrawSelectionBackground)
     private CheckBoxBase checkBox;
-    private boolean checkBoxVisible;
+    protected boolean checkBoxVisible;
     private boolean checkBoxAnimationInProgress;
     private float checkBoxAnimationProgress;
     private long lastCheckBoxAnimationTime;
     private int checkBoxTranslation;
-    private boolean drawSelectionBackground;
+    protected boolean drawSelectionBackground;
     /** Upstream's full-width selected-row band (key_chat_selectedBackground); hosts can turn it back on. */
     public static boolean drawRowHighlight = false;
     private float selectionProgress;
     private long lastSelectionAnimationTime;
-    private int bubbleBottom;
+    protected int bubbleBottom;
     private static android.graphics.Paint selectionPaint;
 
-    private int totalHeight;
-    private int backgroundWidth;
-    private int timeWidth;
+    protected int totalHeight;
+    protected int backgroundWidth;
+    protected int timeWidth;
     private int textX, textY;
     private int textLeftOffset;
     private int timeX;
     private boolean emojiOnlyMode;
     private TextPaint textPaint;
-    private final RectF timeRect = new RectF();
+    protected final RectF timeRect = new RectF();
+    /** The bubble drawable picked by the last {@link #drawBubbleBackground} (media cells hand it to RadialProgress2). */
+    protected Theme.MessageDrawable currentBackgroundDrawable;
+    protected MediaDelegate mediaDelegate;
 
     private int lastState = -1;
     private long lastMessageId = Long.MIN_VALUE;
@@ -131,11 +137,43 @@ public class TextBubbleCell extends View {
         return message;
     }
 
-    private int getThemedColor(int key) {
+    /** Callbacks for the media cells (voice / photo / file); text bubbles never call it. */
+    public interface MediaDelegate {
+        /** The play / download / open button (or the photo, or the file row) was tapped. */
+        void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message);
+
+        /** The voice waveform was dragged to {@code progress} (0..1). */
+        default void onSeek(TextBubbleCell cell, TextBubbleMessage message, float progress) {
+        }
+    }
+
+    /** Theme keys the media bubbles read while drawing (ChatActivity.getThemeDescriptions for voice / photo / file cells). */
+    public static final int[] MEDIA_THEME_KEYS = {
+            Theme.key_chat_inLoader, Theme.key_chat_outLoader, Theme.key_chat_inLoaderSelected, Theme.key_chat_outLoaderSelected,
+            Theme.key_chat_inMediaIcon, Theme.key_chat_outMediaIcon, Theme.key_chat_inMediaIconSelected, Theme.key_chat_outMediaIconSelected,
+            Theme.key_chat_inAudioProgress, Theme.key_chat_outAudioProgress, Theme.key_chat_inAudioSelectedProgress, Theme.key_chat_outAudioSelectedProgress,
+            Theme.key_chat_inAudioDurationText, Theme.key_chat_outAudioDurationText, Theme.key_chat_inAudioDurationSelectedText, Theme.key_chat_outAudioDurationSelectedText,
+            Theme.key_chat_inVoiceSeekbar, Theme.key_chat_outVoiceSeekbar, Theme.key_chat_inVoiceSeekbarFill, Theme.key_chat_outVoiceSeekbarFill,
+            Theme.key_chat_inVoiceSeekbarSelected, Theme.key_chat_outVoiceSeekbarSelected,
+            Theme.key_chat_mediaTimeBackground, Theme.key_chat_mediaTimeText, Theme.key_chat_mediaSentCheck, Theme.key_chat_mediaSentClock,
+    };
+
+    /** Adds a redraw ThemeDescription for every key in {@link #MEDIA_THEME_KEYS}. */
+    public static void addMediaThemeDescriptions(ArrayList<ThemeDescription> descriptions, ThemeDescription.ThemeDescriptionDelegate redraw) {
+        for (int key : MEDIA_THEME_KEYS) {
+            descriptions.add(new ThemeDescription(null, 0, null, null, null, redraw, key));
+        }
+    }
+
+    public void setMediaDelegate(MediaDelegate delegate) {
+        mediaDelegate = delegate;
+    }
+
+    protected int getThemedColor(int key) {
         return Theme.getColor(key, resourcesProvider);
     }
 
-    private int getParentWidth() {
+    protected int getParentWidth() {
         if (getParent() instanceof View) {
             int w = ((View) getParent()).getMeasuredWidth();
             if (w > 0) {
@@ -145,7 +183,14 @@ public class TextBubbleCell extends View {
         return AndroidUtilities.displaySize.x;
     }
 
-    private void buildLayout(int width) {
+    /** Upstream measureTime for a plain time string: fills {@link #timeLayout} / {@link #timeWidth}. */
+    protected void measureTime() {
+        String time = message.time == null ? "" : message.time;
+        timeWidth = (int) Math.ceil(Theme.chat_timePaint.measureText(time));
+        timeLayout = new StaticLayout(time, Theme.chat_timePaint, timeWidth + AndroidUtilities.dp(100), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
+    }
+
+    protected void buildLayout(int width) {
         layoutForWidth = width;
         layoutForText = message.text;
         layoutForReaction = message.reaction;
@@ -172,9 +217,7 @@ public class TextBubbleCell extends View {
         }
         int textMaxWidth = Math.max(AndroidUtilities.dp(1), maxWidth - AndroidUtilities.dp(31));
 
-        String time = message.time == null ? "" : message.time;
-        timeWidth = (int) Math.ceil(Theme.chat_timePaint.measureText(time));
-        timeLayout = new StaticLayout(time, Theme.chat_timePaint, timeWidth + AndroidUtilities.dp(100), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
+        measureTime();
         int timeMore = timeWidth + AndroidUtilities.dp(6);
         if (out) {
             timeMore += AndroidUtilities.dp(20.5f);
@@ -406,7 +449,7 @@ public class TextBubbleCell extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        if (message == null || textLayout == null) {
+        if (message == null || timeLayout == null) {
             return;
         }
         animateCheckboxTranslation();
@@ -442,7 +485,7 @@ public class TextBubbleCell extends View {
         }
     }
 
-    private void drawContent(Canvas canvas) {
+    protected void drawContent(Canvas canvas) {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
         final int layoutHeight = getMeasuredHeight();
@@ -453,7 +496,34 @@ public class TextBubbleCell extends View {
             return;
         }
 
-        // --- background (ChatMessageCell.drawBackground for !mediaBackground)
+        int backgroundLeft = drawBubbleBackground(canvas);
+
+        // --- text
+        if (out) {
+            textX = backgroundLeft + AndroidUtilities.dp(11);
+        } else {
+            textX = backgroundLeft + AndroidUtilities.dp(pinnedBottom ? 11 : 17);
+        }
+        textPaint.setColor(getThemedColor(out ? Theme.key_chat_messageTextOut : Theme.key_chat_messageTextIn));
+        textPaint.linkColor = getThemedColor(out ? Theme.key_chat_messageLinkOut : Theme.key_chat_messageLinkIn);
+        canvas.save();
+        canvas.translate(textX - textLeftOffset, textY);
+        textLayout.draw(canvas);
+        canvas.restore();
+        drawReaction(canvas, textX, out);
+
+        drawTimeAndStatus(canvas);
+    }
+
+    /**
+     * ChatMessageCell.drawBackground for !mediaBackground: picks the (selected / pinned) bubble
+     * drawable, sets its bounds and draws shadow + bubble.
+     * @return the bubble's left edge
+     */
+    protected int drawBubbleBackground(Canvas canvas) {
+        final boolean out = message.isOut;
+        final int layoutWidth = getMeasuredWidth();
+        final int layoutHeight = getMeasuredHeight();
         Theme.MessageDrawable drawable;
         if (drawSelectionBackground) {
             if (pinnedBottom) {
@@ -513,21 +583,15 @@ public class TextBubbleCell extends View {
             shadow.draw(canvas);
         }
         drawable.draw(canvas);
+        currentBackgroundDrawable = drawable;
+        return backgroundLeft;
+    }
 
-        // --- text
-        if (out) {
-            textX = backgroundLeft + AndroidUtilities.dp(11);
-        } else {
-            textX = backgroundLeft + AndroidUtilities.dp(pinnedBottom ? 11 : 17);
-        }
-        textPaint.setColor(getThemedColor(out ? Theme.key_chat_messageTextOut : Theme.key_chat_messageTextIn));
-        textPaint.linkColor = getThemedColor(out ? Theme.key_chat_messageLinkOut : Theme.key_chat_messageLinkIn);
-        canvas.save();
-        canvas.translate(textX - textLeftOffset, textY);
-        textLayout.draw(canvas);
-        canvas.restore();
-        drawReaction(canvas, textX, out);
-
+    /** Upstream drawTimeInternal for !mediaBackground: time at the bubble's bottom right, then the checks. */
+    protected void drawTimeAndStatus(Canvas canvas) {
+        final boolean out = message.isOut;
+        final int layoutWidth = getMeasuredWidth();
+        final int layoutHeight = getMeasuredHeight();
         // --- time
         if (out) {
             timeX = layoutWidth - timeWidth - AndroidUtilities.dp(38.5f);
@@ -546,9 +610,30 @@ public class TextBubbleCell extends View {
         }
     }
 
-    private void drawEmojiOnly(Canvas canvas, boolean out, int layoutWidth, int layoutHeight) {
+    /**
+     * Upstream drawTimeInternal for mediaBackground / TYPE_EMOJIS: the time on a
+     * key_chat_mediaTimeBackground pill whose right / bottom edges are at {@code right} / {@code bottom},
+     * with white checks for outgoing messages.
+     */
+    protected void drawTimePill(Canvas canvas, int right, int bottom) {
+        final boolean out = message.isOut;
         int pillWidth = timeWidth + AndroidUtilities.dp(out ? 32 : 12);
         int pillHeight = AndroidUtilities.dp(17);
+        timeRect.set(right - pillWidth, bottom - pillHeight, right, bottom);
+        Theme.chat_timeBackgroundPaint.setColor(getThemedColor(Theme.key_chat_mediaTimeBackground));
+        canvas.drawRoundRect(timeRect, AndroidUtilities.dp(4), AndroidUtilities.dp(4), Theme.chat_timeBackgroundPaint);
+        Theme.chat_timePaint.setColor(getThemedColor(Theme.key_chat_mediaTimeText));
+        canvas.save();
+        canvas.translate(timeRect.left + AndroidUtilities.dp(6), timeRect.centerY() - timeLayout.getHeight() / 2f);
+        timeLayout.draw(canvas);
+        canvas.restore();
+        if (out) {
+            drawStatus(canvas, right + AndroidUtilities.dp(13), bottom + AndroidUtilities.dp(4), true);
+        }
+    }
+
+    private void drawEmojiOnly(Canvas canvas, boolean out, int layoutWidth, int layoutHeight) {
+        int pillWidth = timeWidth + AndroidUtilities.dp(out ? 32 : 12);
         int contentRight;
         int contentLeft;
         if (out) {
@@ -564,22 +649,11 @@ public class TextBubbleCell extends View {
         canvas.restore();
         drawReaction(canvas, out ? contentRight - reactionWidth : contentLeft, out);
 
-        int pillBottom = layoutHeight - AndroidUtilities.dp(4);
-        timeRect.set(contentRight - pillWidth, pillBottom - pillHeight, contentRight, pillBottom);
-        Theme.chat_timeBackgroundPaint.setColor(getThemedColor(Theme.key_chat_mediaTimeBackground));
-        canvas.drawRoundRect(timeRect, AndroidUtilities.dp(4), AndroidUtilities.dp(4), Theme.chat_timeBackgroundPaint);
-        Theme.chat_timePaint.setColor(getThemedColor(Theme.key_chat_mediaTimeText));
-        canvas.save();
-        canvas.translate(timeRect.left + AndroidUtilities.dp(6), timeRect.centerY() - timeLayout.getHeight() / 2f);
-        timeLayout.draw(canvas);
-        canvas.restore();
-        if (out) {
-            drawStatus(canvas, contentRight + AndroidUtilities.dp(13), pillBottom + AndroidUtilities.dp(4), true);
-        }
+        drawTimePill(canvas, contentRight, layoutHeight - AndroidUtilities.dp(4));
     }
 
     /** Checks / clock with their right edge at {@code layoutWidth - 18dp}; {@code media}: white ones for the time pill. */
-    private void drawStatus(Canvas canvas, int layoutWidth, int layoutHeight, boolean media) {
+    protected void drawStatus(Canvas canvas, int layoutWidth, int layoutHeight, boolean media) {
         int state = message.state;
         float progress = statusProgress;
         boolean useScale = progress != 1f;

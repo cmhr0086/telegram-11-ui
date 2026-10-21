@@ -8,6 +8,7 @@ import android.graphics.Canvas;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
+import android.media.MediaPlayer;
 import android.text.SpannableStringBuilder;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -38,6 +39,7 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Cells.TextBubbleCell;
 import org.telegram.ui.Cells.TextBubbleMessage;
+import org.telegram.ui.Cells.VoiceBubbleCell;
 import org.telegram.ui.Components.ChatActivityEnterView;
 import org.telegram.ui.Components.ChatBubbleItemAnimator;
 import org.telegram.ui.Components.ChatInputLayout;
@@ -53,6 +55,7 @@ import org.telegram.ui.TelegramUI;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Locale;
 
 /**
@@ -102,6 +105,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     // simulated round video recording (the camera belongs to the host app)
     private Runnable fakeVideoAmplitude;
 
+    // voice playback: recorded files play with MediaPlayer, the sample voice message only runs a timer
+    private final HashMap<Long, String> voicePaths = new HashMap<>();
+    private TextBubbleMessage playingVoice;
+    private MediaPlayer voicePlayer;
+    private long fakePlayStart;
+    private final Runnable voiceProgressUpdater = this::updateVoiceProgress;
+
     @Override
     public boolean onFragmentCreate() {
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.didSetNewWallpapper);
@@ -112,6 +122,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         addSample("Bubbles are Theme.MessageDrawable", true, "10:03", TextBubbleMessage.STATE_READ);
         addSample("with time and check marks drawn like ChatMessageCell 🙂", true, "10:04", TextBubbleMessage.STATE_READ);
         addSample("Hold the microphone to record a voice message, slide left to cancel or up to lock.", false, "10:05", TextBubbleMessage.STATE_NONE);
+        TextBubbleMessage voice = TextBubbleMessage.voice(nextId++, false, "10:05", TextBubbleMessage.STATE_NONE, 7, sampleWaveform());
+        voice.contentUnread = true;
+        messages.add(voice);
         addSample("Tap a message for the menu and reactions, long-press to select messages.", false, "10:05", TextBubbleMessage.STATE_NONE);
         addSample("Emoji use Telegram's own set 😎🔥🎉 in bubbles and in the input field", false, "10:06", TextBubbleMessage.STATE_NONE);
         addSample("👋", false, "10:06", TextBubbleMessage.STATE_NONE);
@@ -127,6 +140,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             enterView.onDestroy();
         }
         stopFakeVideo();
+        stopVoice();
         super.onFragmentDestroy();
     }
 
@@ -389,8 +403,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     private void updateActionModeTitle(boolean animated) {
         selectedMessagesCountTextView.setNumber(selectedMessages.size(), animated);
-        boolean canEdit = selectedMessages.size() == 1 && selectedMessages.get(0).isOut;
+        boolean canEdit = selectedMessages.size() == 1 && selectedMessages.get(0).isOut && selectedMessages.get(0).type == TextBubbleMessage.TYPE_TEXT;
         actionBar.createActionMode().setItemVisibility(ACTION_EDIT, canEdit ? View.VISIBLE : View.GONE);
+        boolean canCopy = false;
+        for (TextBubbleMessage message : selectedMessages) {
+            canCopy |= !android.text.TextUtils.isEmpty(message.text);
+        }
+        actionBar.createActionMode().setItemVisibility(ACTION_COPY, canCopy ? View.VISIBLE : View.GONE);
     }
 
     private void clearSelection() {
@@ -425,6 +444,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         } else if (id == ACTION_COPY) {
             StringBuilder text = new StringBuilder();
             for (TextBubbleMessage message : selected) {
+                if (android.text.TextUtils.isEmpty(message.text)) {
+                    continue;
+                }
                 if (text.length() > 0) {
                     text.append("\n\n");
                 }
@@ -500,12 +522,14 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private void showMessageOptions(View cell, TextBubbleMessage message, float x, float y) {
         MessageContextMenu menu = new MessageContextMenu(getParentActivity(), getResourceProvider());
         menu.addItem(R.drawable.menu_reply, "Reply", () -> startReply(message));
-        menu.addItem(R.drawable.msg_copy, "Copy", () -> {
-            if (AndroidUtilities.addToClipboard(message.text.toString())) {
-                Toast.makeText(getParentActivity(), "Copied to clipboard", Toast.LENGTH_SHORT).show();
-            }
-        });
-        if (message.isOut) {
+        if (!android.text.TextUtils.isEmpty(message.text)) {
+            menu.addItem(R.drawable.msg_copy, "Copy", () -> {
+                if (AndroidUtilities.addToClipboard(message.text.toString())) {
+                    Toast.makeText(getParentActivity(), "Copied to clipboard", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+        if (message.isOut && message.type == TextBubbleMessage.TYPE_TEXT) {
             menu.addItem(R.drawable.msg_edit, "Edit", () -> startEdit(message));
         }
         menu.addItem(R.drawable.msg_delete, "Delete", () -> deleteMessage(message));
@@ -536,6 +560,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             replyingTo = null;
             editing = null;
         }
+        if (message == playingVoice) {
+            stopVoice();
+        }
         messages.remove(index);
         RecyclerView.Adapter<?> adapter = listView.getAdapter();
         if (adapter != null) {
@@ -555,7 +582,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         enterView.setEditingMessageObject(null, false);
         replyingTo = message;
         enterView.setReplyingMessageObject(message);
-        topPanel.showReply(message.isOut ? "You" : "Telegram UI", message.text);
+        topPanel.showReply(message.isOut ? "You" : "Telegram UI", previewText(message));
     }
 
     private void startEdit(TextBubbleMessage message) {
@@ -584,7 +611,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
         @Override
         public void onSendVoice(MediaController.RecordedAudio audio, boolean notify, int scheduleDate) {
-            sendOutgoing("🎤 Voice message · " + AndroidUtilities.formatShortDuration((int) (audio.durationMs / 1000)));
+            TextBubbleMessage message = TextBubbleMessage.voice(nextId++, true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENDING, Math.max(1, Math.round(audio.durationMs / 1000f)), audio.waveform);
+            voicePaths.put(message.id, audio.path);
+            sendOutgoing(message);
         }
 
         @Override
@@ -682,7 +711,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
 
     private void sendOutgoing(CharSequence text) {
-        TextBubbleMessage message = new TextBubbleMessage(nextId++, text, true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENDING);
+        sendOutgoing(new TextBubbleMessage(nextId++, text, true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENDING));
+    }
+
+    private void sendOutgoing(TextBubbleMessage message) {
         appendMessage(message);
         rotateMotionBackground();
         ChatSounds.playOut();
@@ -817,6 +849,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         for (int key : keys) {
             descriptions.add(new ThemeDescription(null, 0, null, null, null, redraw, key));
         }
+        TextBubbleCell.addMediaThemeDescriptions(descriptions, redraw);
         if (enterView != null) {
             descriptions.addAll(enterView.getThemeDescriptions());
         }
@@ -829,6 +862,161 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     @Override
     public boolean isLightStatusBar() {
         return AndroidUtilities.computePerceivedBrightness(Theme.getColor(Theme.key_actionBarDefault)) > 0.721f;
+    }
+
+    /** What the reply panel / copy shows for a message: the text, or a media label like upstream's MessageObject.messageText. */
+    private static CharSequence previewText(TextBubbleMessage message) {
+        if (message.type == TextBubbleMessage.TYPE_VOICE) {
+            return "🎤 Voice message";
+        } else if (message.type == TextBubbleMessage.TYPE_PHOTO) {
+            return android.text.TextUtils.isEmpty(message.text) ? "🖼 Photo" : message.text;
+        } else if (message.type == TextBubbleMessage.TYPE_DOCUMENT) {
+            return "📎 " + message.fileName;
+        }
+        return message.text == null ? "" : message.text;
+    }
+
+    private static byte[] sampleWaveform() {
+        ArrayList<Integer> levels = new ArrayList<>();
+        java.util.Random random = new java.util.Random(7);
+        for (int i = 0; i < 100; i++) {
+            double envelope = Math.sin(Math.PI * i / 100.0) * 0.7 + 0.3;
+            levels.add((int) (envelope * (8 + random.nextInt(24))));
+        }
+        return MediaController.waveformFromLevels(levels);
+    }
+
+    private final TextBubbleCell.MediaDelegate mediaDelegate = new TextBubbleCell.MediaDelegate() {
+        @Override
+        public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) {
+            if (message.type == TextBubbleMessage.TYPE_VOICE) {
+                toggleVoice(message);
+            }
+        }
+
+        @Override
+        public void onSeek(TextBubbleCell cell, TextBubbleMessage message, float progress) {
+            if (message == playingVoice && voicePlayer != null) {
+                voicePlayer.seekTo((int) (progress * voicePlayer.getDuration()));
+            } else if (message == playingVoice) {
+                fakePlayStart = System.currentTimeMillis() - (long) (progress * message.duration * 1000);
+            }
+            message.audioProgressSec = (int) (progress * message.duration);
+            refreshVoice(message);
+        }
+    };
+
+    private void toggleVoice(TextBubbleMessage message) {
+        if (playingVoice == message) {
+            if (voicePlayer != null) {
+                // pause / resume the same file (upstream MediaController.pauseMessage / playMessage)
+                if (message.playing) {
+                    voicePlayer.pause();
+                } else {
+                    voicePlayer.start();
+                }
+            } else if (!message.playing) {
+                fakePlayStart = System.currentTimeMillis() - (long) (message.audioProgress * message.duration * 1000);
+            }
+            message.playing = !message.playing;
+            AndroidUtilities.cancelRunOnUIThread(voiceProgressUpdater);
+            if (message.playing) {
+                AndroidUtilities.runOnUIThread(voiceProgressUpdater);
+            }
+            refreshVoice(message);
+            return;
+        }
+        stopVoice();
+        String path = voicePaths.get(message.id);
+        if (path != null) {
+            try {
+                voicePlayer = new MediaPlayer();
+                voicePlayer.setDataSource(path);
+                voicePlayer.prepare();
+                if (message.audioProgress > 0 && message.audioProgress < 1) {
+                    voicePlayer.seekTo((int) (message.audioProgress * voicePlayer.getDuration()));
+                }
+                voicePlayer.setOnCompletionListener(mp -> finishVoice());
+                voicePlayer.start();
+            } catch (Exception e) {
+                voicePlayer = null;
+                Toast.makeText(getParentActivity(), "Can't play " + path, Toast.LENGTH_SHORT).show();
+                return;
+            }
+        } else {
+            fakePlayStart = System.currentTimeMillis() - (long) (message.audioProgress * message.duration * 1000);
+        }
+        playingVoice = message;
+        message.playing = true;
+        message.contentUnread = false;
+        AndroidUtilities.runOnUIThread(voiceProgressUpdater);
+        refreshVoice(message);
+    }
+
+    private void updateVoiceProgress() {
+        TextBubbleMessage message = playingVoice;
+        if (message == null || !message.playing) {
+            return;
+        }
+        float progress;
+        int seconds;
+        if (voicePlayer != null) {
+            int duration = Math.max(1, voicePlayer.getDuration());
+            int position = voicePlayer.getCurrentPosition();
+            progress = position / (float) duration;
+            seconds = position / 1000;
+        } else {
+            long elapsed = System.currentTimeMillis() - fakePlayStart;
+            progress = elapsed / (message.duration * 1000f);
+            seconds = (int) (elapsed / 1000);
+            if (progress >= 1f) {
+                finishVoice();
+                return;
+            }
+        }
+        message.audioProgress = Math.min(1f, progress);
+        message.audioProgressSec = seconds;
+        refreshVoice(message);
+        AndroidUtilities.runOnUIThread(voiceProgressUpdater, 32);
+    }
+
+    /** Playback reached the end: back to the play icon with the waveform reset (upstream cleanupPlayer). */
+    private void finishVoice() {
+        TextBubbleMessage message = playingVoice;
+        stopVoice();
+        if (message != null) {
+            refreshVoice(message);
+        }
+    }
+
+    private void stopVoice() {
+        AndroidUtilities.cancelRunOnUIThread(voiceProgressUpdater);
+        if (voicePlayer != null) {
+            try {
+                voicePlayer.release();
+            } catch (Exception ignore) {
+            }
+            voicePlayer = null;
+        }
+        if (playingVoice != null) {
+            playingVoice.playing = false;
+            playingVoice.audioProgress = 0;
+            playingVoice.audioProgressSec = 0;
+            playingVoice = null;
+        }
+    }
+
+    /** Pushes the message's playback state into its visible cell without a rebind (no item animation). */
+    private void refreshVoice(TextBubbleMessage message) {
+        if (listView == null) {
+            return;
+        }
+        for (int i = 0; i < listView.getChildCount(); i++) {
+            View child = listView.getChildAt(i);
+            if (child instanceof VoiceBubbleCell && ((VoiceBubbleCell) child).getMessage() == message) {
+                ((VoiceBubbleCell) child).updatePlayingMessageProgress();
+            }
+        }
     }
 
     private class Adapter extends RecyclerListView.SelectionAdapter {
@@ -844,10 +1032,21 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             return true;
         }
 
+        @Override
+        public int getItemViewType(int position) {
+            return messages.get(position).type;
+        }
+
         @NonNull
         @Override
         public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            TextBubbleCell cell = new TextBubbleCell(context, getResourceProvider());
+            TextBubbleCell cell;
+            if (viewType == TextBubbleMessage.TYPE_VOICE) {
+                cell = new VoiceBubbleCell(context, getResourceProvider());
+            } else {
+                cell = new TextBubbleCell(context, getResourceProvider());
+            }
+            cell.setMediaDelegate(mediaDelegate);
             cell.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             return new RecyclerListView.Holder(cell);
         }
