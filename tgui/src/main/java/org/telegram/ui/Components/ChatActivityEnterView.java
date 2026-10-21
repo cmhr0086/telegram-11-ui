@@ -8299,7 +8299,11 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
     private void attachEmojiView() {
         if (emojiView.getParent() == null) {
-            int index = sizeNotifierLayout.getChildCount() - 5;
+            // tgui: upstream used getChildCount() - 5, which only matches ChatActivity's own children;
+            // in a host layout it put the panel at a wrong z-position (hidden) as soon as a host added
+            // another view. Insert it right above the input instead.
+            int self = sizeNotifierLayout.indexOfChild(this);
+            int index = self >= 0 ? self + 1 : sizeNotifierLayout.getChildCount();
             if (!shouldDrawBackground) {
                 index = sizeNotifierLayout.getChildCount();
             }

@@ -132,6 +132,12 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
         if (enterView == null || enterView.panelAnimationInProgress()) {
             return;
         }
+        if (enterView.isPopupShowing()) {
+            // the emoji panel owns the space under the input; following a zero IME inset here
+            // pushed the panel (and the input) off screen, leaving an empty area
+            setKeyboardMotion(0);
+            return;
+        }
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
         if (insets == null) {
             setKeyboardMotion(0);
