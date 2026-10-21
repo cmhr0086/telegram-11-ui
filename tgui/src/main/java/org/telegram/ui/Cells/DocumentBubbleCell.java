@@ -184,7 +184,7 @@ public class DocumentBubbleCell extends TextBubbleCell {
             photoHeight += AndroidUtilities.dp(4);
         }
 
-        namesOffset = 0;
+        namesOffset = buildReplyLayout(backgroundWidth - AndroidUtilities.dp(31) - AndroidUtilities.dp(message.isOut ? 30 : 20), false);
         totalHeight = photoHeight + AndroidUtilities.dp(14) + namesOffset;
         if (pinnedTop) {
             namesOffset -= AndroidUtilities.dp(2);
@@ -226,6 +226,7 @@ public class DocumentBubbleCell extends TextBubbleCell {
             return;
         }
         drawBubbleBackground(canvas);
+        drawReply(canvas, false);
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
         // onLayout

@@ -191,7 +191,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         }
 
         // totalHeight / photoImage y (no name / forward header)
-        namesOffset = 0;
+        namesOffset = buildReplyLayout(backgroundWidth - AndroidUtilities.dp(mediaBackground ? 22 : 31) - AndroidUtilities.dp(out ? 30 : 20), false);
         totalHeight = photoHeight + AndroidUtilities.dp(14) + namesOffset + additionHeight;
         if (pinnedTop) {
             namesOffset -= AndroidUtilities.dp(1);
@@ -210,6 +210,9 @@ public class PhotoBubbleCell extends TextBubbleCell {
         }
         if (captionLayout != null) {
             bl = br = minRad;
+        }
+        if (replyNameLayout != null) {
+            tl = tr = minRad;
         }
         if (pinnedTop) {
             if (out) {
@@ -305,6 +308,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         }
         drawable.draw(canvas);
         currentBackgroundDrawable = drawable;
+        drawHighlightBubble(canvas, out ? Theme.chat_msgOutMediaSelectedDrawable : Theme.chat_msgInMediaSelectedDrawable, parentWidth, parentHeight);
         return backgroundLeft;
     }
 
@@ -313,6 +317,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
         drawBubbleBackground(canvas);
+        drawReply(canvas, mediaBackground);
 
         // onLayout: photo x
         int x;

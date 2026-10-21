@@ -95,6 +95,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private long nextId = 1;
     private int replyIndex;
     private TextBubbleMessage replyingTo;
+    /** Set by scrollToMessage: the row flashes when it is bound / found after the scroll. */
+    private long highlightMessageId;
     private TextBubbleMessage editing;
     // multi-select (ChatActivity selectedMessagesIds / actionModeViews / bottomMessagesActionContainer)
     private final ArrayList<TextBubbleMessage> selectedMessages = new ArrayList<>();
@@ -121,7 +123,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         ChatSounds.preload();
         addSample("Hey! This is the chat background from the current theme.", false, "10:02", TextBubbleMessage.STATE_NONE);
         addSample("The input below is upstream ChatActivityEnterView: select text for bold / italic / links, tap the smiley to switch to the emoji panel.", false, "10:02", TextBubbleMessage.STATE_NONE);
-        addSample("Looks just like Telegram", true, "10:03", TextBubbleMessage.STATE_READ);
+        TextBubbleMessage looksLike = addSample("Looks just like Telegram", true, "10:03", TextBubbleMessage.STATE_READ);
         addSample("Bubbles are Theme.MessageDrawable", true, "10:03", TextBubbleMessage.STATE_READ);
         addSample("with time and check marks drawn like ChatMessageCell 🙂", true, "10:04", TextBubbleMessage.STATE_READ);
         addSample("Hold the microphone to record a voice message, slide left to cancel or up to lock.", false, "10:05", TextBubbleMessage.STATE_NONE);
@@ -133,10 +135,16 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         addSample("👋", false, "10:06", TextBubbleMessage.STATE_NONE);
         addSample("😂❤️👍", true, "10:07", TextBubbleMessage.STATE_READ);
         addSample("ok", true, "10:07", TextBubbleMessage.STATE_SENT);
+        // replies: the quote is upstream's reply panel; tapping it scrolls to the original and flashes it
+        TextBubbleMessage quoted = addSample("It does! Tap this quote to jump to the original message.", false, "10:07", TextBubbleMessage.STATE_NONE);
+        quoted.replyTo = TextBubbleMessage.ReplyTo.of(looksLike, "You");
         // photos: the host hands in a Drawable (here generated, no network); one waits for a tap to "download"
         messages.add(TextBubbleMessage.photo(nextId++, false, "10:08", TextBubbleMessage.STATE_NONE, samplePhoto(1280, 853, 0), null));
         TextBubbleMessage portrait = TextBubbleMessage.photo(nextId++, true, "10:09", TextBubbleMessage.STATE_READ, samplePhoto(720, 960, 1), "Sunset from the hill 🌅");
         messages.add(portrait);
+        TextBubbleMessage photoReply = addSample("Beautiful 😍 where is that?", false, "10:09", TextBubbleMessage.STATE_NONE);
+        photoReply.replyTo = TextBubbleMessage.ReplyTo.of(portrait, "You");
+        photoReply.replyTo.colorId = 5;
         TextBubbleMessage download = TextBubbleMessage.photo(nextId++, false, "10:10", TextBubbleMessage.STATE_NONE, samplePhoto(1280, 720, 2), null);
         download.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
         messages.add(download);
@@ -731,6 +739,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
 
     private void sendOutgoing(TextBubbleMessage message) {
+        if (replyingTo != null && message.replyTo == null) {
+            // sent from the input's reply panel: the bubble quotes the message (onMessageSend clears replyingTo afterwards)
+            message.replyTo = TextBubbleMessage.ReplyTo.of(replyingTo, replyingTo.isOut ? "You" : "Telegram UI");
+        }
         appendMessage(message);
         rotateMotionBackground();
         ChatSounds.playOut();
@@ -972,6 +984,56 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         return MediaController.waveformFromLevels(levels);
     }
 
+    private final TextBubbleCell.Delegate cellDelegate = new TextBubbleCell.Delegate() {
+        @Override
+        public void onReplyPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.ReplyTo replyTo) {
+            if (actionBar.isActionModeShowed()) {
+                processRowSelect(message);
+                return;
+            }
+            scrollToMessage(replyTo.messageId);
+        }
+
+        @Override
+        public void onBubbleLongPressed(TextBubbleCell cell, TextBubbleMessage message) {
+            int position = listView.getChildAdapterPosition(cell);
+            if (position < 0 || position >= messages.size()) {
+                return;
+            }
+            if (!actionBar.isActionModeShowed()) {
+                showActionMode(message);
+            } else {
+                processRowSelect(message);
+            }
+        }
+    };
+
+    /** ChatActivity.scrollToMessageId + highlightMessageId: brings the message to the middle and flashes it. */
+    private void scrollToMessage(long messageId) {
+        int position = -1;
+        for (int i = 0; i < messages.size(); i++) {
+            if (messages.get(i).id == messageId) {
+                position = i;
+                break;
+            }
+        }
+        if (position < 0) {
+            Toast.makeText(getParentActivity(), "The original message was deleted", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        highlightMessageId = messageId;
+        layoutManager.scrollToPositionWithOffset(position, listView.getMeasuredHeight() / 3, false);
+        listView.post(() -> {
+            for (int i = 0; i < listView.getChildCount(); i++) {
+                View child = listView.getChildAt(i);
+                if (child instanceof TextBubbleCell && ((TextBubbleCell) child).getMessage() != null && ((TextBubbleCell) child).getMessage().id == highlightMessageId) {
+                    ((TextBubbleCell) child).setHighlightedAnimated();
+                    highlightMessageId = 0;
+                }
+            }
+        });
+    }
+
     private final TextBubbleCell.MediaDelegate mediaDelegate = new TextBubbleCell.MediaDelegate() {
         @Override
         public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) {
@@ -1139,6 +1201,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 cell = new TextBubbleCell(context, getResourceProvider());
             }
             cell.setMediaDelegate(mediaDelegate);
+            cell.setDelegate(cellDelegate);
             cell.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             return new RecyclerListView.Holder(cell);
         }
@@ -1152,6 +1215,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             cell.setMessage(message, pinnedTop, pinnedBottom);
             cell.setCheckBoxVisible(actionBar.isActionModeShowed(), false);
             cell.setChecked(selectedMessages.contains(message), false);
+            if (highlightMessageId != 0 && message.id == highlightMessageId) {
+                highlightMessageId = 0;
+                cell.setHighlightedAnimated();
+            }
         }
 
         @Override

@@ -60,6 +60,56 @@ public class TextBubbleMessage {
     public String fileName;
     public long fileSize;
 
+    /** Quote of the message this one replies to, drawn at the top of the bubble (null = not a reply). */
+    public ReplyTo replyTo;
+
+    /** upstream replyMessageObject reduced to what the reply panel draws. */
+    public static class ReplyTo {
+        /** Id of the replied-to message, handed back by {@link TextBubbleCell.Delegate#onReplyPressed}. */
+        public long messageId;
+        public CharSequence name;
+        /** One-line preview; Telegram emoji are replaced, new lines become spaces. */
+        public CharSequence text;
+        /** Optional thumbnail (photo replies), drawn centre-cropped with 4dp corners. */
+        public Drawable thumb;
+        /** The preview describes media ("Photo", "Voice message"): drawn in the reply media colour like upstream. */
+        public boolean media;
+        /** 0..6 picks a peer name colour (Theme.keys_avatar_nameInMessage) for incoming bubbles, -1 the theme reply colour. */
+        public int colorId = -1;
+
+        public ReplyTo(long messageId, CharSequence name, CharSequence text) {
+            this.messageId = messageId;
+            this.name = name;
+            this.text = text;
+        }
+
+        /** Builds the quote for {@code message}: text, or caption / media description with the photo as thumbnail. */
+        public static ReplyTo of(TextBubbleMessage message, CharSequence name) {
+            CharSequence text = message.text;
+            boolean media = false;
+            if (message.type != TYPE_TEXT && (text == null || text.length() == 0)) {
+                media = true;
+                switch (message.type) {
+                    case TYPE_VOICE:
+                        text = "Voice message";
+                        break;
+                    case TYPE_PHOTO:
+                        text = "Photo";
+                        break;
+                    default:
+                        text = message.fileName != null ? message.fileName : "File";
+                        break;
+                }
+            }
+            ReplyTo reply = new ReplyTo(message.id, name, text);
+            reply.media = media;
+            if (message.type == TYPE_PHOTO) {
+                reply.thumb = message.photo;
+            }
+            return reply;
+        }
+    }
+
     public TextBubbleMessage(long id, CharSequence text, boolean isOut, String time, int state) {
         this.id = id;
         this.text = text;

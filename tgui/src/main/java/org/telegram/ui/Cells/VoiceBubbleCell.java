@@ -87,8 +87,13 @@ public class VoiceBubbleCell extends TextBubbleCell implements SeekBar.SeekBarDe
         String timeString = AndroidUtilities.formatLongDuration(message.duration);
         int w = (int) Math.ceil(Theme.chat_audioTimePaint.measureText(timeString));
         backgroundWidth = Math.min(maxWidth, minSize + w);
-        totalHeight = AndroidUtilities.dp(70);
-        namesOffset = pinnedTop ? -AndroidUtilities.dp(1) : 0;
+        // reply panel: namesOffset grows, the bubble widens up to maxWidth for the quote
+        int replyOffset = buildReplyLayout(backgroundWidth - AndroidUtilities.dp(31) - AndroidUtilities.dp(message.isOut ? 30 : 20), false);
+        if (replyNameLayout != null) {
+            backgroundWidth = Math.min(maxWidth, Math.max(backgroundWidth, Math.max(replyNameWidth, replyTextWidth) + AndroidUtilities.dp(31)));
+        }
+        totalHeight = AndroidUtilities.dp(70) + replyOffset;
+        namesOffset = replyOffset + (pinnedTop ? -AndroidUtilities.dp(1) : 0);
         // updateSeekBarWaveformWidth: backgroundWidth - 92dp (no transcribe button)
         seekBarWaveform.setSize(backgroundWidth - AndroidUtilities.dp(92), AndroidUtilities.dp(30));
         lastTime = -1;
@@ -176,6 +181,7 @@ public class VoiceBubbleCell extends TextBubbleCell implements SeekBar.SeekBarDe
             return;
         }
         drawBubbleBackground(canvas);
+        drawReply(canvas, false);
         updatePositions();
         final boolean out = message.isOut;
         // onDraw: seekBarWaveform colors (setMessageObject draws with the theme's voice seekbar keys)
