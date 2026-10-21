@@ -31,6 +31,8 @@ public class TextBubbleMessage {
     public CharSequence text;
     public boolean isOut;
     public String time;
+    /** Unix time in seconds (0 = unknown); hosts use it for date separators ({@link ChatActionCell#formatDate}). */
+    public long date;
     public int state;
     /** Emoji of the reaction chosen by the user, shown as a chip under the text (null = none). */
     public String reaction;

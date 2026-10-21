@@ -222,7 +222,10 @@ public class TextBubbleCell extends View {
         }
     }
 
-    /** Theme keys the media bubbles read while drawing (ChatActivity.getThemeDescriptions for voice / photo / file cells). */
+    /**
+     * Theme keys the media bubbles, reply quotes, links and date separators read while drawing
+     * (ChatActivity.getThemeDescriptions for those cells).
+     */
     public static final int[] MEDIA_THEME_KEYS = {
             Theme.key_chat_inLoader, Theme.key_chat_outLoader, Theme.key_chat_inLoaderSelected, Theme.key_chat_outLoaderSelected,
             Theme.key_chat_inMediaIcon, Theme.key_chat_outMediaIcon, Theme.key_chat_inMediaIconSelected, Theme.key_chat_outMediaIconSelected,
@@ -236,6 +239,13 @@ public class TextBubbleCell extends View {
             Theme.key_chat_inFileNameText, Theme.key_chat_outFileNameText, Theme.key_chat_inFileInfoText, Theme.key_chat_outFileInfoText,
             Theme.key_chat_inFileInfoSelectedText, Theme.key_chat_outFileInfoSelectedText,
             Theme.key_chat_inMenu, Theme.key_chat_outMenu, Theme.key_chat_inMenuSelected, Theme.key_chat_outMenuSelected,
+            // reply quote, links and date separators (ChatActionCell)
+            Theme.key_chat_inReplyLine, Theme.key_chat_outReplyLine, Theme.key_chat_inReplyNameText, Theme.key_chat_outReplyNameText,
+            Theme.key_chat_inReplyMessageText, Theme.key_chat_outReplyMessageText,
+            Theme.key_chat_inReplyMediaMessageText, Theme.key_chat_outReplyMediaMessageText,
+            Theme.key_chat_inReplyMediaMessageSelectedText, Theme.key_chat_outReplyMediaMessageSelectedText,
+            Theme.key_chat_linkSelectBackground, Theme.key_chat_outLinkSelectBackground,
+            Theme.key_chat_serviceText, Theme.key_chat_serviceBackground,
     };
 
     /** Adds a redraw ThemeDescription for every key in {@link #MEDIA_THEME_KEYS}. */

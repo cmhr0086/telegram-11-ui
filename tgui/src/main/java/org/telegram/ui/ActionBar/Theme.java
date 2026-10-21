@@ -109,6 +109,7 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.tgui.R;
+import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.SharedConfig;
 
 import org.telegram.messenger.UserConfig;
@@ -6160,6 +6161,11 @@ public class Theme {
             chat_msgTextPaint.setTextSize(dp(SharedConfig.fontSize));
             chat_timePaint.setTextSize(dp(12));
         }
+        if (chat_actionTextPaint != null) {
+            // service messages / date separators (upstream createChatResources)
+            chat_actionTextPaint.setTextSize(dp(Math.max(16, SharedConfig.fontSize) - 2));
+            chat_actionTextPaint2.setTextSize(dp(Math.max(16, SharedConfig.fontSize) - 2));
+        }
     }
 
     public static void applyChatTheme(boolean fontsOnly, boolean bg) {
@@ -6178,6 +6184,126 @@ public class Theme {
             setDrawableColorByKey(chat_composeShadowDrawable, key_chat_messagePanelShadow);
             chat_composeBackgroundPaint.setColor(getColor(key_chat_messagePanelBackground));
             chat_timeBackgroundPaint.setColor(getColor(key_chat_mediaTimeBackground));
+
+            if (!bg && !disallowChangeServiceMessageColor) {
+                applyChatServiceMessageColor();
+            }
+        }
+    }
+
+    public static void applyChatServiceMessageColor() {
+        if (wallpaper != null) {
+            applyChatServiceMessageColor(null, null, wallpaper);
+        }
+    }
+
+    public static void applyChatServiceMessageColor(int[] custom, Drawable wallpaperOverride) {
+        applyChatServiceMessageColor(custom, wallpaperOverride, wallpaper);
+    }
+
+    /**
+     * upstream applyChatServiceMessageColor: service message / date pill colours follow the wallpaper.
+     * A MotionBackgroundDrawable wallpaper gives the paint its bitmap as a shader (with upstream's colour
+     * matrix), other wallpapers the average colour from calcBackgroundColor. tgui: only the paints the
+     * library has (action text / background), BitmapDrawable wallpapers are not blurred into a shader.
+     */
+    public static void applyChatServiceMessageColor(int[] custom, Drawable wallpaperOverride, Drawable currentWallpaper) {
+        if (chat_actionBackgroundPaint == null) {
+            return;
+        }
+        int serviceColor;
+        int servicePressedColor;
+        serviceMessageColor = serviceMessageColorBackup;
+        serviceSelectedMessageColor = serviceSelectedMessageColorBackup;
+        if (custom != null && custom.length >= 2) {
+            serviceColor = custom[0];
+            servicePressedColor = custom[1];
+            serviceMessageColor = custom[0];
+            serviceSelectedMessageColor = custom[1];
+        } else {
+            int serviceIndex = currentColors.indexOfKey(key_chat_serviceBackground);
+            if (serviceIndex >= 0) {
+                serviceColor = currentColors.valueAt(serviceIndex);
+            } else {
+                serviceColor = serviceMessageColor;
+            }
+
+            int servicePressedIndex = currentColors.indexOfKey(key_chat_serviceBackgroundSelected);
+            if (servicePressedIndex >= 0) {
+                servicePressedColor = currentColors.valueAt(servicePressedIndex);
+            } else {
+                servicePressedColor = serviceSelectedMessageColor;
+            }
+        }
+        Drawable drawable = wallpaperOverride != null ? wallpaperOverride : currentWallpaper;
+        boolean drawServiceGradient = drawable instanceof MotionBackgroundDrawable && SharedConfig.getDevicePerformanceClass() != SharedConfig.PERFORMANCE_CLASS_LOW && LiteMode.isEnabled(LiteMode.FLAG_CHAT_BACKGROUND);
+        Bitmap newBitmap = drawServiceGradient ? ((MotionBackgroundDrawable) drawable).getBitmap() : null;
+        if (newBitmap != null) {
+            if (serviceBitmap != newBitmap) {
+                serviceBitmap = newBitmap;
+                serviceBitmapShader = new BitmapShader(serviceBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    serviceBitmapShader.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
+                }
+                if (serviceBitmapMatrix == null) {
+                    serviceBitmapMatrix = new Matrix();
+                }
+            }
+            chat_actionTextPaint.setColor(0xffffffff);
+            chat_actionTextPaint2.setColor(0xffffffff);
+            chat_actionTextPaint.linkColor = 0xffffffff;
+        } else {
+            serviceBitmap = null;
+            serviceBitmapShader = null;
+
+            chat_actionTextPaint.setColor(getColor(key_chat_serviceText));
+            chat_actionTextPaint2.setColor(getColor(key_chat_serviceText));
+            chat_actionTextPaint.linkColor = getColor(key_chat_serviceLink);
+        }
+
+        chat_actionBackgroundPaint.setColor(serviceColor);
+        chat_actionBackgroundSelectedPaint.setColor(servicePressedColor);
+
+        if (serviceBitmapShader != null && (currentColors.indexOfKey(key_chat_serviceBackground) < 0 || drawable instanceof MotionBackgroundDrawable || drawable instanceof BitmapDrawable)) {
+            ColorMatrix colorMatrix = new ColorMatrix();
+            if (drawable instanceof MotionBackgroundDrawable) {
+                float intensity = ((MotionBackgroundDrawable) drawable).getIntensity();
+                if (intensity >= 0) {
+                    colorMatrix.setSaturation(1.6f);
+                    AndroidUtilities.multiplyBrightnessColorMatrix(colorMatrix, isCurrentThemeDark() ? .97f : .92f);
+                    AndroidUtilities.adjustBrightnessColorMatrix(colorMatrix, isCurrentThemeDark() ? +.12f : -.06f);
+                } else {
+                    colorMatrix.setSaturation(1.1f);
+                    AndroidUtilities.multiplyBrightnessColorMatrix(colorMatrix, isCurrentThemeDark() ? .4f : .8f);
+                    AndroidUtilities.adjustBrightnessColorMatrix(colorMatrix, isCurrentThemeDark() ? +.08f : -.06f);
+                }
+            } else {
+                colorMatrix.setSaturation(1.6f);
+                AndroidUtilities.multiplyBrightnessColorMatrix(colorMatrix, isCurrentThemeDark() ? .9f : .84f);
+                AndroidUtilities.adjustBrightnessColorMatrix(colorMatrix, isCurrentThemeDark() ? -.04f : +.06f);
+            }
+
+            chat_actionBackgroundPaint.setFilterBitmap(true);
+            chat_actionBackgroundPaint.setShader(serviceBitmapShader);
+            chat_actionBackgroundPaint.setColorFilter(new ColorMatrixColorFilter(colorMatrix));
+            chat_actionBackgroundPaint.setAlpha(0xff);
+
+            chat_actionBackgroundSelectedPaint.setFilterBitmap(true);
+            chat_actionBackgroundSelectedPaint.setShader(serviceBitmapShader);
+            colorMatrix = new ColorMatrix(colorMatrix);
+            AndroidUtilities.adjustSaturationColorMatrix(colorMatrix, +.26f);
+            AndroidUtilities.multiplyBrightnessColorMatrix(colorMatrix, isCurrentThemeDark() ? .92f : .92f);
+            chat_actionBackgroundSelectedPaint.setColorFilter(new ColorMatrixColorFilter(colorMatrix));
+            chat_actionBackgroundSelectedPaint.setAlpha(0xff);
+
+            chat_actionBackgroundGradientDarkenPaint.setAlpha(0);
+        } else {
+            chat_actionBackgroundPaint.setColorFilter(null);
+            chat_actionBackgroundPaint.setShader(null);
+            chat_actionBackgroundSelectedPaint.setColorFilter(null);
+            chat_actionBackgroundSelectedPaint.setShader(null);
+
+            chat_actionBackgroundGradientDarkenPaint.setAlpha(0x15);
         }
     }
 
@@ -6649,8 +6775,11 @@ public class Theme {
                 isPatternWallpaper = drawable instanceof MotionBackgroundDrawable && ((MotionBackgroundDrawable) drawable).hasPattern();
                 isCustomTheme = !(theme.firstAccentIsDefault && theme.currentAccentId == DEFALT_THEME_ACCENT_ID);
             }
+            // upstream setWallpaper: calcBackgroundColor(drawable, 1) + applyChatServiceMessageColor()
+            calcBackgroundColor(drawable, 1);
             AndroidUtilities.runOnUIThread(() -> {
                 wallpaperLoadTask = null;
+                applyChatServiceMessageColor();
                 NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.didSetNewWallpapper);
             });
         };

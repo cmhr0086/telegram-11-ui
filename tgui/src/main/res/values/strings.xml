@@ -187,4 +187,9 @@
     <string name="NewMessageTitle">New Message</string>
     <string name="AccSwipeForArchive">Swipe down for archive</string>
     <string name="AccReleaseForArchive">Release for archive</string>
+    <!-- date separators (ChatActionCell.formatDate; chatDate / chatFullDate as upstream) -->
+    <string name="chatDate">MMMM d</string>
+    <string name="chatFullDate">MMMM d, yyyy</string>
+    <string name="ChatDateToday">Today</string>
+    <string name="ChatDateYesterday">Yesterday</string>
 </resources>

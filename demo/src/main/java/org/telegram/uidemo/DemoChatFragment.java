@@ -41,6 +41,7 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Cells.TextBubbleCell;
 import org.telegram.ui.Cells.TextBubbleMessage;
+import org.telegram.ui.Cells.ChatActionCell;
 import org.telegram.ui.Cells.DocumentBubbleCell;
 import org.telegram.ui.Cells.PhotoBubbleCell;
 import org.telegram.ui.Cells.VoiceBubbleCell;
@@ -96,6 +97,14 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private long nextId = 1;
     private int replyIndex;
     private TextBubbleMessage replyingTo;
+    /** Adapter rows: a TextBubbleMessage, or a Long (start of day, unix seconds) for a date separator. */
+    private final ArrayList<Object> rows = new ArrayList<>();
+    private static final int VIEW_TYPE_DATE = 100;
+    private ChatActionCell floatingDateView;
+    private boolean floatingDateVisible;
+    private final Runnable hideFloatingDate = () -> showFloatingDate(false);
+    /** Day of the next sample messages (0 = today), see sampleDate. */
+    private int sampleDaysAgo;
     /** Set by scrollToMessage: the row flashes when it is bound / found after the scroll. */
     private long highlightMessageId;
     private TextBubbleMessage editing;
@@ -122,17 +131,20 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     public boolean onFragmentCreate() {
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.didSetNewWallpapper);
         ChatSounds.preload();
+        sampleDaysAgo = 3;
         addSample("Hey! This is the chat background from the current theme.", false, "10:02", TextBubbleMessage.STATE_NONE);
         addSample("The input below is upstream ChatActivityEnterView: select text for bold / italic / links, tap the smiley to switch to the emoji panel.", false, "10:02", TextBubbleMessage.STATE_NONE);
+        sampleDaysAgo = 1;
         TextBubbleMessage looksLike = addSample("Looks just like Telegram", true, "10:03", TextBubbleMessage.STATE_READ);
         addSample("Bubbles are Theme.MessageDrawable", true, "10:03", TextBubbleMessage.STATE_READ);
         addSample("with time and check marks drawn like ChatMessageCell 🙂", true, "10:04", TextBubbleMessage.STATE_READ);
         addSample("Hold the microphone to record a voice message, slide left to cancel or up to lock.", false, "10:05", TextBubbleMessage.STATE_NONE);
         TextBubbleMessage voice = TextBubbleMessage.voice(nextId++, false, "10:05", TextBubbleMessage.STATE_NONE, 7, sampleWaveform());
         voice.contentUnread = true;
-        messages.add(voice);
+        addSample(voice);
         addSample("Tap a message for the menu and reactions, long-press to select messages.", false, "10:05", TextBubbleMessage.STATE_NONE);
         addSample("Emoji use Telegram's own set 😎🔥🎉 in bubbles and in the input field", false, "10:06", TextBubbleMessage.STATE_NONE);
+        sampleDaysAgo = 0;
         addSample("Links work too: https://telegram.org, core.telegram.org/api and mentions like @durov or #hashtags. Long-press a link to copy it.", false, "10:06", TextBubbleMessage.STATE_NONE);
         addSample("👋", false, "10:06", TextBubbleMessage.STATE_NONE);
         addSample("😂❤️👍", true, "10:07", TextBubbleMessage.STATE_READ);
@@ -141,21 +153,22 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         TextBubbleMessage quoted = addSample("It does! Tap this quote to jump to the original message.", false, "10:07", TextBubbleMessage.STATE_NONE);
         quoted.replyTo = TextBubbleMessage.ReplyTo.of(looksLike, "You");
         // photos: the host hands in a Drawable (here generated, no network); one waits for a tap to "download"
-        messages.add(TextBubbleMessage.photo(nextId++, false, "10:08", TextBubbleMessage.STATE_NONE, samplePhoto(1280, 853, 0), null));
+        addSample(TextBubbleMessage.photo(nextId++, false, "10:08", TextBubbleMessage.STATE_NONE, samplePhoto(1280, 853, 0), null));
         TextBubbleMessage portrait = TextBubbleMessage.photo(nextId++, true, "10:09", TextBubbleMessage.STATE_READ, samplePhoto(720, 960, 1), "Sunset from the hill 🌅");
-        messages.add(portrait);
+        addSample(portrait);
         TextBubbleMessage photoReply = addSample("Beautiful 😍 where is that?", false, "10:09", TextBubbleMessage.STATE_NONE);
         photoReply.replyTo = TextBubbleMessage.ReplyTo.of(portrait, "You");
         photoReply.replyTo.colorId = 5;
         TextBubbleMessage download = TextBubbleMessage.photo(nextId++, false, "10:10", TextBubbleMessage.STATE_NONE, samplePhoto(1280, 720, 2), null);
         download.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
-        messages.add(download);
+        addSample(download);
         // files: name / size / state from the host, the round button reports taps
-        messages.add(TextBubbleMessage.document(nextId++, false, "10:11", TextBubbleMessage.STATE_NONE, "Telegram_UI_Guide.pdf", 2_457_600));
+        addSample(TextBubbleMessage.document(nextId++, false, "10:11", TextBubbleMessage.STATE_NONE, "Telegram_UI_Guide.pdf", 2_457_600));
         TextBubbleMessage archive = TextBubbleMessage.document(nextId++, false, "10:11", TextBubbleMessage.STATE_NONE, "tgui-11.4.2-ui3-release-with-a-very-long-file-name-sources.zip", 48_234_496);
         archive.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
-        messages.add(archive);
-        messages.add(TextBubbleMessage.document(nextId++, true, "10:12", TextBubbleMessage.STATE_READ, "notes.txt", 12_288));
+        addSample(archive);
+        addSample(TextBubbleMessage.document(nextId++, true, "10:12", TextBubbleMessage.STATE_READ, "notes.txt", 12_288));
+        rebuildRows();
         return super.onFragmentCreate();
     }
 
@@ -172,8 +185,110 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     private TextBubbleMessage addSample(CharSequence text, boolean out, String time, int state) {
         TextBubbleMessage message = new TextBubbleMessage(nextId++, text, out, time, state);
-        messages.add(message);
+        addSample(message);
         return message;
+    }
+
+    private void addSample(TextBubbleMessage message) {
+        message.date = sampleDate(sampleDaysAgo, message.time);
+        messages.add(message);
+    }
+
+    private static long sampleDate(int daysAgo, String time) {
+        java.util.Calendar calendar = java.util.Calendar.getInstance();
+        calendar.add(java.util.Calendar.DAY_OF_YEAR, -daysAgo);
+        String[] hm = time.split(":");
+        calendar.set(java.util.Calendar.HOUR_OF_DAY, Integer.parseInt(hm[0]));
+        calendar.set(java.util.Calendar.MINUTE, Integer.parseInt(hm[1]));
+        return calendar.getTimeInMillis() / 1000;
+    }
+
+    private static long dayStart(long date) {
+        java.util.Calendar calendar = java.util.Calendar.getInstance();
+        calendar.setTimeInMillis(date * 1000);
+        calendar.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        calendar.set(java.util.Calendar.MINUTE, 0);
+        calendar.set(java.util.Calendar.SECOND, 0);
+        calendar.set(java.util.Calendar.MILLISECOND, 0);
+        return calendar.getTimeInMillis() / 1000;
+    }
+
+    /** ChatActivity's date messages: a separator row before the first message of every day. */
+    private void rebuildRows() {
+        rows.clear();
+        long lastDay = Long.MIN_VALUE;
+        for (TextBubbleMessage message : messages) {
+            long day = dayStart(message.date);
+            if (day != lastDay) {
+                rows.add(day);
+                lastDay = day;
+            }
+            rows.add(message);
+        }
+    }
+
+    private TextBubbleMessage messageAt(int position) {
+        if (position < 0 || position >= rows.size()) {
+            return null;
+        }
+        Object row = rows.get(position);
+        return row instanceof TextBubbleMessage ? (TextBubbleMessage) row : null;
+    }
+
+    private int rowOf(TextBubbleMessage message) {
+        return rows.indexOf(message);
+    }
+
+    /**
+     * ChatActivity.updateMessagesVisiblePart's floatingDateView: the date of the topmost visible row,
+     * shown while the list scrolls and faded out a second after it stops; hidden when a real
+     * separator sits at the top.
+     */
+    private void updateFloatingDate(boolean scrolling) {
+        if (floatingDateView == null || listView.getChildCount() == 0) {
+            return;
+        }
+        int top = listView.getPaddingTop();
+        View topChild = null;
+        for (int i = 0; i < listView.getChildCount(); i++) {
+            View child = listView.getChildAt(i);
+            if (child.getBottom() > top && (topChild == null || child.getTop() < topChild.getTop())) {
+                topChild = child;
+            }
+        }
+        if (topChild == null) {
+            return;
+        }
+        int position = listView.getChildAdapterPosition(topChild);
+        long day = Long.MIN_VALUE;
+        for (int i = Math.min(position, rows.size() - 1); i >= 0; i--) {
+            if (rows.get(i) instanceof Long) {
+                day = (Long) rows.get(i);
+                break;
+            }
+        }
+        if (day == Long.MIN_VALUE) {
+            return;
+        }
+        floatingDateView.setCustomDate(day);
+        // the real separator of this day is on screen right below the header: let it show instead
+        boolean separatorAtTop = topChild instanceof ChatActionCell && topChild.getTop() > top - topChild.getHeight();
+        if (scrolling && !separatorAtTop) {
+            AndroidUtilities.cancelRunOnUIThread(hideFloatingDate);
+            showFloatingDate(true);
+            AndroidUtilities.runOnUIThread(hideFloatingDate, 1000);
+        } else if (separatorAtTop) {
+            showFloatingDate(false);
+        }
+    }
+
+    private void showFloatingDate(boolean show) {
+        if (floatingDateView == null || floatingDateVisible == show) {
+            return;
+        }
+        floatingDateVisible = show;
+        floatingDateView.animate().cancel();
+        floatingDateView.animate().alpha(show ? 1f : 0f).setDuration(150).start();
     }
 
     @Override
@@ -235,6 +350,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             @Override
             public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
                 listView.invalidateViews();
+                updateFloatingDate(dy != 0);
             }
         });
         // like ChatActivity: no list selector on message rows, clicks fire on finger up
@@ -246,29 +362,37 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         listView.setSelectorDrawableColor(0);
         // tap: context menu (createMenu(view, single = true)); in selection mode it toggles the row
         listView.setOnItemClickListener((RecyclerListView.OnItemClickListenerExtended) (view, position, x, y) -> {
-            if (position < 0 || position >= messages.size()) {
+            TextBubbleMessage message = messageAt(position);
+            if (message == null) {
                 return;
             }
             if (actionBar.isActionModeShowed()) {
-                processRowSelect(messages.get(position));
+                processRowSelect(message);
             } else {
-                showMessageOptions(view, messages.get(position), x, y);
+                showMessageOptions(view, message, x, y);
             }
         });
         // long press: selection mode (createMenu(view, single = false) + startMultiselect)
         listView.setOnItemLongClickListener((RecyclerListView.OnItemLongClickListenerExtended) (view, position, x, y) -> {
-            if (position < 0 || position >= messages.size()) {
+            TextBubbleMessage message = messageAt(position);
+            if (message == null) {
                 return false;
             }
             if (!actionBar.isActionModeShowed()) {
-                showActionMode(messages.get(position));
+                showActionMode(message);
             } else {
-                processRowSelect(messages.get(position));
+                processRowSelect(message);
             }
             startMultiselect(position);
             return true;
         });
         contentView.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        // sticky date while scrolling (ChatActivity floatingDateView, 4dp under the action bar)
+        floatingDateView = new ChatActionCell(context, getResourceProvider());
+        floatingDateView.setFloating(true);
+        floatingDateView.setAlpha(0f);
+        contentView.addView(floatingDateView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.LEFT, 0, 4, 0, 0));
+        floatingDateView.setTranslationY(ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0));
         contentView.setContentView(listView);
 
         enterView = new ChatActivityEnterView(getParentActivity(), contentView, this, true, getResourceProvider());
@@ -289,7 +413,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             @Override
             public void onClick(int mode) {
                 TextBubbleMessage target = mode == ChatInputTopPanel.MODE_EDIT ? editing : replyingTo;
-                int index = target == null ? -1 : messages.indexOf(target);
+                int index = target == null ? -1 : rowOf(target);
                 if (index >= 0) {
                     listView.smoothScrollToPosition(index);
                 }
@@ -451,10 +575,11 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         for (int i = 0; i < listView.getChildCount(); i++) {
             View child = listView.getChildAt(i);
             int position = listView.getChildAdapterPosition(child);
-            if (child instanceof TextBubbleCell && position >= 0 && position < messages.size()) {
+            TextBubbleMessage message = messageAt(position);
+            if (child instanceof TextBubbleCell && message != null) {
                 TextBubbleCell cell = (TextBubbleCell) child;
                 cell.setCheckBoxVisible(selectionMode, true);
-                cell.setChecked(selectedMessages.contains(messages.get(position)), true);
+                cell.setChecked(selectedMessages.contains(message), true);
             }
         }
     }
@@ -494,7 +619,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
 
     private void startMultiselect(int position) {
-        final boolean unselect = !selectedMessages.contains(messages.get(position));
+        final boolean unselect = !selectedMessages.contains(messageAt(position));
         final ArrayList<TextBubbleMessage> alreadySelected = new ArrayList<>(selectedMessages);
         listView.startMultiselect(position, false, new RecyclerListView.onMultiSelectionChanged() {
             @Override
@@ -502,10 +627,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 if (unselect) {
                     selected = !selected;
                 }
-                if (position < 0 || position >= messages.size()) {
+                TextBubbleMessage message = messageAt(position);
+                if (message == null) {
                     return;
                 }
-                TextBubbleMessage message = messages.get(position);
                 if (selected == selectedMessages.contains(message)) {
                     return;
                 }
@@ -514,10 +639,11 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
             @Override
             public boolean canSelect(int position) {
-                if (position < 0 || position >= messages.size()) {
+                TextBubbleMessage message = messageAt(position);
+                if (message == null) {
                     return false;
                 }
-                boolean already = alreadySelected.contains(messages.get(position));
+                boolean already = alreadySelected.contains(message);
                 return unselect == already;
             }
 
@@ -564,7 +690,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             @Override
             public void onReactionClick(String emoji) {
                 message.reaction = emoji.equals(message.reaction) ? null : emoji;
-                int index = messages.indexOf(message);
+                int index = rowOf(message);
                 if (index >= 0 && listView.getAdapter() != null) {
                     listView.getAdapter().notifyItemChanged(index);
                 }
@@ -589,16 +715,25 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         if (message == playingVoice) {
             stopVoice();
         }
+        int row = rowOf(message);
         messages.remove(index);
+        // the day's separator goes too when this was its only message
+        boolean removeSeparator = row > 0 && rows.get(row - 1) instanceof Long && (row + 1 >= rows.size() || rows.get(row + 1) instanceof Long);
+        rebuildRows();
         RecyclerView.Adapter<?> adapter = listView.getAdapter();
-        if (adapter != null) {
-            adapter.notifyItemRemoved(index);
-            // neighbours may gain or lose their tail / grouped corners
-            if (index > 0) {
-                adapter.notifyItemChanged(index - 1);
+        if (adapter != null && row >= 0) {
+            if (removeSeparator) {
+                adapter.notifyItemRangeRemoved(row - 1, 2);
+                row--;
+            } else {
+                adapter.notifyItemRemoved(row);
             }
-            if (index < messages.size()) {
-                adapter.notifyItemChanged(index);
+            // neighbours may gain or lose their tail / grouped corners
+            if (row > 0) {
+                adapter.notifyItemChanged(row - 1);
+            }
+            if (row < rows.size()) {
+                adapter.notifyItemChanged(row);
             }
         }
     }
@@ -659,7 +794,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     MediaDataController.addTextStyleRuns(entities, text, styled);
                 }
                 editing.text = styled;
-                int index = messages.indexOf(editing);
+                int index = rowOf(editing);
                 if (index >= 0 && listView.getAdapter() != null) {
                     listView.getAdapter().notifyItemChanged(index);
                 }
@@ -760,15 +895,21 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
 
     private void appendMessage(TextBubbleMessage message) {
+        if (message.date == 0) {
+            message.date = System.currentTimeMillis() / 1000;
+        }
         messages.add(message);
+        int oldCount = rows.size();
+        rebuildRows();
         if (listView == null || listView.getAdapter() == null) {
             return;
         }
-        int position = messages.size() - 1;
-        listView.getAdapter().notifyItemInserted(position);
-        if (position > 0) {
+        int position = rows.size() - 1;
+        // a new day starts with its date separator
+        listView.getAdapter().notifyItemRangeInserted(oldCount, rows.size() - oldCount);
+        if (oldCount > 0) {
             // the previous bubble loses its tail when the new one is from the same side
-            listView.getAdapter().notifyItemChanged(position - 1);
+            listView.getAdapter().notifyItemChanged(oldCount - 1);
         }
         layoutManager.scrollToPositionWithOffset(position, 0, true);
     }
@@ -778,7 +919,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         if (listView == null) {
             return;
         }
-        int index = messages.indexOf(message);
+        int index = rowOf(message);
         if (index >= 0 && listView.getAdapter() != null) {
             listView.getAdapter().notifyItemChanged(index);
         }
@@ -804,6 +945,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             }
             contentView.invalidateBackground();
             listView.invalidateViews();
+            floatingDateView.invalidate();
         }
     }
 
@@ -848,6 +990,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         ThemeDescription.ThemeDescriptionDelegate redraw = () -> {
             if (listView != null) {
                 listView.invalidateViews();
+            }
+            if (floatingDateView != null) {
+                floatingDateView.invalidate();
             }
             if (contentView != null) {
                 contentView.invalidateBackground();
@@ -1025,8 +1170,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
         @Override
         public void onBubbleLongPressed(TextBubbleCell cell, TextBubbleMessage message) {
-            int position = listView.getChildAdapterPosition(cell);
-            if (position < 0 || position >= messages.size()) {
+            if (messageAt(listView.getChildAdapterPosition(cell)) == null) {
                 return;
             }
             if (!actionBar.isActionModeShowed()) {
@@ -1054,8 +1198,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     /** ChatActivity.scrollToMessageId + highlightMessageId: brings the message to the middle and flashes it. */
     private void scrollToMessage(long messageId) {
         int position = -1;
-        for (int i = 0; i < messages.size(); i++) {
-            if (messages.get(i).id == messageId) {
+        for (int i = 0; i < rows.size(); i++) {
+            TextBubbleMessage message = messageAt(i);
+            if (message != null && message.id == messageId) {
                 position = i;
                 break;
             }
@@ -1222,17 +1367,23 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
         @Override
         public boolean isEnabled(RecyclerView.ViewHolder holder) {
-            return true;
+            return holder.getItemViewType() != VIEW_TYPE_DATE;
         }
 
         @Override
         public int getItemViewType(int position) {
-            return messages.get(position).type;
+            TextBubbleMessage message = messageAt(position);
+            return message == null ? VIEW_TYPE_DATE : message.type;
         }
 
         @NonNull
         @Override
         public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            if (viewType == VIEW_TYPE_DATE) {
+                ChatActionCell dateCell = new ChatActionCell(context, getResourceProvider());
+                dateCell.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                return new RecyclerListView.Holder(dateCell);
+            }
             TextBubbleCell cell;
             if (viewType == TextBubbleMessage.TYPE_VOICE) {
                 cell = new VoiceBubbleCell(context, getResourceProvider());
@@ -1251,9 +1402,15 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
         @Override
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
-            TextBubbleMessage message = messages.get(position);
-            boolean pinnedTop = position > 0 && messages.get(position - 1).isOut == message.isOut;
-            boolean pinnedBottom = position < messages.size() - 1 && messages.get(position + 1).isOut == message.isOut;
+            if (holder.itemView instanceof ChatActionCell) {
+                ((ChatActionCell) holder.itemView).setCustomDate((Long) rows.get(position));
+                return;
+            }
+            TextBubbleMessage message = messageAt(position);
+            TextBubbleMessage prev = messageAt(position - 1);
+            TextBubbleMessage next = messageAt(position + 1);
+            boolean pinnedTop = prev != null && prev.isOut == message.isOut;
+            boolean pinnedBottom = next != null && next.isOut == message.isOut;
             TextBubbleCell cell = (TextBubbleCell) holder.itemView;
             cell.setMessage(message, pinnedTop, pinnedBottom);
             cell.setCheckBoxVisible(actionBar.isActionModeShowed(), false);
@@ -1266,7 +1423,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
         @Override
         public int getItemCount() {
-            return messages.size();
+            return rows.size();
         }
     }
 }
