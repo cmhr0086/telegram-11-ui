@@ -136,25 +136,36 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         addSample("The input below is upstream ChatActivityEnterView: select text for bold / italic / links, tap the smiley to switch to the emoji panel.", false, "10:02", TextBubbleMessage.STATE_NONE);
         sampleDaysAgo = 1;
         TextBubbleMessage looksLike = addSample("Looks just like Telegram", true, "10:03", TextBubbleMessage.STATE_READ);
+        // reactions: pills inside the bubble (ReactionsLayoutInBubble), tap one to toggle yours
+        react(looksLike, "👍", 3, true);
+        react(looksLike, "❤", 1, false);
         addSample("Bubbles are Theme.MessageDrawable", true, "10:03", TextBubbleMessage.STATE_READ);
         addSample("with time and check marks drawn like ChatMessageCell 🙂", true, "10:04", TextBubbleMessage.STATE_READ);
         addSample("Hold the microphone to record a voice message, slide left to cancel or up to lock.", false, "10:05", TextBubbleMessage.STATE_NONE);
         TextBubbleMessage voice = TextBubbleMessage.voice(nextId++, false, "10:05", TextBubbleMessage.STATE_NONE, 7, sampleWaveform());
         voice.contentUnread = true;
+        react(voice, "🔥", 2, false);
         addSample(voice);
         addSample("Tap a message for the menu and reactions, long-press to select messages.", false, "10:05", TextBubbleMessage.STATE_NONE);
-        addSample("Emoji use Telegram's own set 😎🔥🎉 in bubbles and in the input field", false, "10:06", TextBubbleMessage.STATE_NONE);
+        TextBubbleMessage emojiSet = addSample("Emoji use Telegram's own set 😎🔥🎉 in bubbles and in the input field", false, "10:06", TextBubbleMessage.STATE_NONE);
+        react(emojiSet, "👍", 5, true);
+        react(emojiSet, "😁", 2, false);
+        react(emojiSet, "🎉", 1, false);
         sampleDaysAgo = 0;
         addSample("Links work too: https://telegram.org, core.telegram.org/api and mentions like @durov or #hashtags. Long-press a link to copy it.", false, "10:06", TextBubbleMessage.STATE_NONE);
-        addSample("👋", false, "10:06", TextBubbleMessage.STATE_NONE);
+        react(addSample("👋", false, "10:06", TextBubbleMessage.STATE_NONE), "❤", 1, false);
         addSample("😂❤️👍", true, "10:07", TextBubbleMessage.STATE_READ);
         addSample("ok", true, "10:07", TextBubbleMessage.STATE_SENT);
         // replies: the quote is upstream's reply panel; tapping it scrolls to the original and flashes it
         TextBubbleMessage quoted = addSample("It does! Tap this quote to jump to the original message.", false, "10:07", TextBubbleMessage.STATE_NONE);
         quoted.replyTo = TextBubbleMessage.ReplyTo.of(looksLike, "You");
         // photos: the host hands in a Drawable (here generated, no network); one waits for a tap to "download"
-        addSample(TextBubbleMessage.photo(nextId++, false, "10:08", TextBubbleMessage.STATE_NONE, samplePhoto(1280, 853, 0), null));
+        TextBubbleMessage landscape = TextBubbleMessage.photo(nextId++, false, "10:08", TextBubbleMessage.STATE_NONE, samplePhoto(1280, 853, 0), null);
+        react(landscape, "🥰", 4, false);
+        react(landscape, "👏", 1, true);
+        addSample(landscape);
         TextBubbleMessage portrait = TextBubbleMessage.photo(nextId++, true, "10:09", TextBubbleMessage.STATE_READ, samplePhoto(720, 960, 1), "Sunset from the hill 🌅");
+        react(portrait, "❤", 7, false);
         addSample(portrait);
         TextBubbleMessage photoReply = addSample("Beautiful 😍 where is that?", false, "10:09", TextBubbleMessage.STATE_NONE);
         photoReply.replyTo = TextBubbleMessage.ReplyTo.of(portrait, "You");
@@ -163,7 +174,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         download.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
         addSample(download);
         // files: name / size / state from the host, the round button reports taps
-        addSample(TextBubbleMessage.document(nextId++, false, "10:11", TextBubbleMessage.STATE_NONE, "Telegram_UI_Guide.pdf", 2_457_600));
+        TextBubbleMessage guide = TextBubbleMessage.document(nextId++, false, "10:11", TextBubbleMessage.STATE_NONE, "Telegram_UI_Guide.pdf", 2_457_600);
+        react(guide, "👍", 2, false);
+        addSample(guide);
         TextBubbleMessage archive = TextBubbleMessage.document(nextId++, false, "10:11", TextBubbleMessage.STATE_NONE, "tgui-11.4.2-ui3-release-with-a-very-long-file-name-sources.zip", 48_234_496);
         archive.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
         addSample(archive);
@@ -181,6 +194,11 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         stopFakeVideo();
         stopVoice();
         super.onFragmentDestroy();
+    }
+
+    private static TextBubbleMessage react(TextBubbleMessage message, String emoji, int count, boolean chosen) {
+        message.reactions.add(new TextBubbleMessage.Reaction(emoji, count, chosen));
+        return message;
     }
 
     private TextBubbleMessage addSample(CharSequence text, boolean out, String time, int state) {
@@ -686,17 +704,23 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         }
         menu.addItem(R.drawable.msg_delete, "Delete", () -> deleteMessage(message));
         menu.setReactions(MessageContextMenu.DEFAULT_REACTIONS);
+        menu.setSelectedReactions(message);
         menu.setDelegate(new MessageContextMenu.Delegate() {
             @Override
             public void onReactionClick(String emoji) {
-                message.reaction = emoji.equals(message.reaction) ? null : emoji;
-                int index = rowOf(message);
-                if (index >= 0 && listView.getAdapter() != null) {
-                    listView.getAdapter().notifyItemChanged(index);
-                }
+                toggleReaction(message, emoji);
             }
         });
         menu.show(cell, x, y);
+    }
+
+    /** ChatActivity.selectReaction: toggles my reaction and rebinds the row, which animates the pills. */
+    private void toggleReaction(TextBubbleMessage message, String emoji) {
+        message.toggleReaction(emoji);
+        int index = rowOf(message);
+        if (index >= 0 && listView.getAdapter() != null) {
+            listView.getAdapter().notifyItemChanged(index);
+        }
     }
 
     private void deleteMessage(TextBubbleMessage message) {
@@ -1132,6 +1156,24 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
 
     private final TextBubbleCell.Delegate cellDelegate = new TextBubbleCell.Delegate() {
+        @Override
+        public void onReactionPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Reaction reaction) {
+            if (actionBar.isActionModeShowed()) {
+                processRowSelect(message);
+                return;
+            }
+            toggleReaction(message, reaction.emoji);
+        }
+
+        @Override
+        public void onReactionLongPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Reaction reaction) {
+            if (actionBar.isActionModeShowed()) {
+                return;
+            }
+            // upstream opens the list of who reacted; the demo has no users
+            Toast.makeText(getParentActivity(), reaction.emoji + " × " + reaction.count + (reaction.chosen ? " (including you)" : ""), Toast.LENGTH_SHORT).show();
+        }
+
         @Override
         public void onReplyPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.ReplyTo replyTo) {
             if (actionBar.isActionModeShowed()) {

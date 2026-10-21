@@ -194,10 +194,11 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             listView.getAdapter().notifyItemRemoved(index);
         });
         menu.setReactions(MessageContextMenu.DEFAULT_REACTIONS);
+        menu.setSelectedReactions(message);
         menu.setDelegate(new MessageContextMenu.Delegate() {
             @Override
             public void onReactionClick(String emoji) {
-                message.reaction = emoji.equals(message.reaction) ? null : emoji;
+                message.toggleReaction(emoji);
                 listView.getAdapter().notifyItemChanged(messages.indexOf(message));
             }
         });

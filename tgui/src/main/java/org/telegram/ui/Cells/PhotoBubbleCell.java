@@ -112,7 +112,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
     protected void buildLayout(int width) {
         layoutForWidth = width;
         layoutForText = message.text;
-        layoutForReaction = message.reaction;
+        setReactionsLayout();
         final boolean out = message.isOut;
         int imageW = message.photoWidth;
         int imageH = message.photoHeight;
@@ -148,7 +148,8 @@ public class PhotoBubbleCell extends TextBubbleCell {
         }
 
         CharSequence caption = TextUtils.isEmpty(message.text) ? null : Emoji.replaceEmoji(message.text, Theme.chat_msgTextPaint.getFontMetricsInt(), false);
-        mediaBackground = caption == null;
+        // shouldDrawTimeOnMedia(): reactions put the photo in a bubble with the time under it, like a caption
+        mediaBackground = caption == null && reactionsLayoutInBubble.isEmpty;
         photoWidth = w;
         photoHeight = h;
         int widthForCaption;
@@ -180,7 +181,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
             int addedCaptionHeight = captionHeight + AndroidUtilities.dp(9);
             int widthToCheck = Math.max(captionWidth, photoWidth - AndroidUtilities.dp(10));
             int lastLineWidth = (int) Math.ceil(captionLayout.getLineWidth(captionLayout.getLineCount() - 1));
-            if (widthToCheck + AndroidUtilities.dp(2) - lastLineWidth < timeWidthTotal) {
+            if (reactionsLayoutInBubble.isEmpty && widthToCheck + AndroidUtilities.dp(2) - lastLineWidth < timeWidthTotal) {
                 addedCaptionHeight += AndroidUtilities.dp(14);
             }
             additionHeight += addedCaptionHeight;
@@ -188,6 +189,25 @@ public class PhotoBubbleCell extends TextBubbleCell {
                 photoWidth = captionWidth + AndroidUtilities.dp(10);
                 backgroundWidth = photoWidth + AndroidUtilities.dp(8) + AndroidUtilities.dp(9);
             }
+        }
+
+        if (!reactionsLayoutInBubble.isEmpty) {
+            // setMessageContent, photos: pills under the photo / caption, the time after the last row or below it
+            int maxWidth = Math.max(backgroundWidth - AndroidUtilities.dp(36), widthForCaption);
+            reactionsLayoutInBubble.measure(maxWidth, android.view.Gravity.LEFT);
+            int heightLocal = reactionsLayoutInBubble.height + AndroidUtilities.dp(12);
+            if (captionLayout == null) {
+                heightLocal += AndroidUtilities.dp(4);
+            } else {
+                reactionsLayoutInBubble.positionOffsetY += AndroidUtilities.dp(12);
+            }
+            reactionsLayoutInBubble.totalHeight = heightLocal;
+            int widthToCheck = Math.min(maxWidth, reactionsLayoutInBubble.width + timeWidthTotal + AndroidUtilities.dp(2));
+            if (widthToCheck - reactionsLayoutInBubble.lastLineX < timeWidthTotal) {
+                reactionsLayoutInBubble.totalHeight += AndroidUtilities.dp(14);
+                reactionsLayoutInBubble.positionOffsetY -= AndroidUtilities.dp(14);
+            }
+            additionHeight += reactionsLayoutInBubble.totalHeight;
         }
 
         // totalHeight / photoImage y (no name / forward header)
@@ -208,7 +228,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         if (minRad > tl) {
             minRad = tl;
         }
-        if (captionLayout != null) {
+        if (captionLayout != null || !reactionsLayoutInBubble.isEmpty) {
             bl = br = minRad;
         }
         if (replyNameLayout != null) {
@@ -221,7 +241,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
                 tl = nearRad;
             }
         }
-        if (pinnedBottom && captionLayout == null) {
+        if (pinnedBottom && mediaBackground) {
             if (out) {
                 br = nearRad;
             } else {
@@ -316,7 +336,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
     protected void drawContent(Canvas canvas) {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
-        drawBubbleBackground(canvas);
+        int backgroundLeft = drawBubbleBackground(canvas);
         drawReply(canvas, mediaBackground);
 
         // onLayout: photo x
@@ -348,6 +368,10 @@ public class PhotoBubbleCell extends TextBubbleCell {
             canvas.translate(x + AndroidUtilities.dp(5), y + photoHeight + AndroidUtilities.dp(6));
             captionLayout.draw(canvas);
             canvas.restore();
+        }
+        if (!mediaBackground) {
+            // updateReactionLayoutPosition: a caption pulls the pills up 14dp
+            drawReactionsInBubble(canvas, backgroundLeft, captionLayout != null ? -AndroidUtilities.dp(14) : 0);
             drawTimeAndStatus(canvas);
         } else {
             // drawTimeInternal on media: pill bottom = photo bottom - 6dp, right edge 5dp inside the photo

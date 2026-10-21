@@ -43,6 +43,7 @@ import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.LinkPath;
 import org.telegram.ui.Components.LinkSpanDrawable;
 import org.telegram.ui.Components.MsgClockDrawable;
+import org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble;
 import org.telegram.ui.Components.ReplyMessageLine;
 import org.telegram.ui.Components.URLSpanNoUnderline;
 import org.telegram.ui.Components.URLSpanReplacement;
@@ -69,14 +70,15 @@ public class TextBubbleCell extends View {
     protected StaticLayout timeLayout;
     protected int layoutForWidth = -1;
     protected CharSequence layoutForText;
-    protected String layoutForReaction;
-    // chosen reaction chip (ReactionsLayoutInBubble.ReactionButton look: 26dp pill, 20dp emoji, 12dp counter)
-    private Drawable reactionDrawable;
-    private int reactionWidth;
-    private int reactionY;
-    private final RectF reactionRect = new RectF();
-    private static TextPaint reactionCounterPaint;
-    private static android.graphics.Paint reactionPaint;
+    // reaction pills (ChatMessageCell.reactionsLayoutInBubble); layoutForReactions is reactionsKey() of the built layout
+    protected final ReactionsLayoutInBubble reactionsLayoutInBubble;
+    protected String layoutForReactions;
+    /** Text bubbles: the time got its own line under the last reactions row (ChatMessageCell.hasNewLineForTime). */
+    protected boolean hasNewLineForTime;
+    private boolean pendingReactionsAnimation;
+    /** transitionParams.animateChangeProgress for the reactions: 0..1 while pills appear / move / disappear. */
+    protected float reactionsChangeProgress = 1f;
+    private ValueAnimator reactionsAnimator;
 
     // selection mode (ChatMessageCell.setCheckBoxVisible / setChecked / animateCheckboxTranslation / setDrawSelectionBackground)
     private CheckBoxBase checkBox;
@@ -163,6 +165,113 @@ public class TextBubbleCell extends View {
         Theme.createChatResources(context, false);
         // upstream ChatMessageCell redraws when emoji bitmaps finish loading
         NotificationCenter.listenEmojiLoading(this);
+        reactionsLayoutInBubble = new ReactionsLayoutInBubble(this);
+        reactionsLayoutInBubble.setDelegate((reaction, longPress, x, y) -> {
+            if (getParent() != null) {
+                getParent().requestDisallowInterceptTouchEvent(false);
+            }
+            if (delegate == null || message == null) {
+                return;
+            }
+            if (longPress) {
+                delegate.onReactionLongPressed(this, message, reaction);
+            } else {
+                playSoundEffect(SoundEffectConstants.CLICK);
+                delegate.onReactionPressed(this, message, reaction);
+            }
+        });
+    }
+
+    /** Signature of {@code message.reactions}: a change rebuilds the layout and animates the pills. */
+    protected static String reactionsKey(TextBubbleMessage message) {
+        if (message == null || message.reactions.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < message.reactions.size(); i++) {
+            TextBubbleMessage.Reaction r = message.reactions.get(i);
+            sb.append(r.emoji).append(':').append(r.count).append(r.chosen ? '+' : '-').append(';');
+        }
+        return sb.toString();
+    }
+
+    /** Fills {@link #reactionsLayoutInBubble} from the message (call from buildLayout before measuring it). */
+    protected void setReactionsLayout() {
+        layoutForReactions = reactionsKey(message);
+        reactionsLayoutInBubble.setReactions(message.reactions, message.isOut, resourcesProvider);
+    }
+
+    /**
+     * Draws the pills at {@code reactionsLayoutInBubble.x / y} (set by the caller), starting the
+     * change animation recorded by {@link #setMessage} once the new positions are known.
+     */
+    protected void drawReactions(Canvas canvas) {
+        if (pendingReactionsAnimation) {
+            pendingReactionsAnimation = false;
+            if (reactionsLayoutInBubble.animateChange()) {
+                startReactionsAnimation();
+            } else {
+                reactionsLayoutInBubble.resetAnimation();
+            }
+        }
+        reactionsLayoutInBubble.draw(canvas, reactionsChangeProgress);
+    }
+
+    /**
+     * ChatMessageCell.updateReactionLayoutPosition for bubbles with a background: 11dp (17dp for an
+     * incoming bubble with a tail) from the bubble's left edge, 10dp above its bottom, then
+     * {@code offsetY} and positionOffsetY.
+     */
+    protected void drawReactionsInBubble(Canvas canvas, int backgroundLeft, int offsetY) {
+        if (!hasReactionsToDraw()) {
+            return;
+        }
+        reactionsLayoutInBubble.x = backgroundLeft + AndroidUtilities.dp(message.isOut || pinnedBottom ? 11 : 17);
+        reactionsLayoutInBubble.y = bubbleBottom - AndroidUtilities.dp(10) - reactionsLayoutInBubble.height + offsetY + reactionsLayoutInBubble.positionOffsetY;
+        drawReactions(canvas);
+    }
+
+    /** Pills to draw: some reactions, or the last ones still animating out. */
+    protected boolean hasReactionsToDraw() {
+        return !reactionsLayoutInBubble.isEmpty || reactionsChangeProgress != 1f || pendingReactionsAnimation;
+    }
+
+    private void startReactionsAnimation() {
+        if (reactionsAnimator != null) {
+            reactionsAnimator.cancel();
+        }
+        reactionsChangeProgress = 0f;
+        // ChatListItemAnimator: DEFAULT_DURATION 250ms, DEFAULT_INTERPOLATOR
+        reactionsAnimator = ValueAnimator.ofFloat(0f, 1f);
+        reactionsAnimator.addUpdateListener(a -> {
+            reactionsChangeProgress = (float) a.getAnimatedValue();
+            invalidate();
+        });
+        reactionsAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                if (reactionsAnimator == animation) {
+                    reactionsAnimator = null;
+                    reactionsChangeProgress = 1f;
+                    reactionsLayoutInBubble.resetAnimation();
+                    invalidate();
+                }
+            }
+        });
+        reactionsAnimator.setDuration(250);
+        reactionsAnimator.setInterpolator(CubicBezierInterpolator.DEFAULT);
+        reactionsAnimator.start();
+    }
+
+    private void cancelReactionsAnimation() {
+        pendingReactionsAnimation = false;
+        if (reactionsAnimator != null) {
+            ValueAnimator animator = reactionsAnimator;
+            reactionsAnimator = null;
+            animator.cancel();
+        }
+        reactionsChangeProgress = 1f;
+        reactionsLayoutInBubble.resetAnimation();
     }
 
     /**
@@ -172,7 +281,21 @@ public class TextBubbleCell extends View {
     public void setMessage(TextBubbleMessage message, boolean pinnedTop, boolean pinnedBottom) {
         boolean sameMessage = this.message != null && message != null && lastMessageId == message.id;
         boolean animateStatus = sameMessage && lastState == TextBubbleMessage.STATE_SENDING && message.state != TextBubbleMessage.STATE_SENDING && isAttachedToWindow();
-        if (this.message != message || this.pinnedTop != pinnedTop || this.pinnedBottom != pinnedBottom || layoutForText != (message == null ? null : message.text) || !TextUtils.equals(layoutForReaction, message == null ? null : message.reaction) || layoutForReply != (message == null ? null : message.replyTo)) {
+        boolean reactionsChanged = layoutForWidth > 0 && !TextUtils.equals(layoutForReactions, reactionsKey(message));
+        if (sameMessage && reactionsChanged && isAttachedToWindow()) {
+            // ChatListItemAnimator.animateChange -> reactionsLayoutInBubble.recordDrawingState / animateChange
+            if (reactionsAnimator != null) {
+                reactionsAnimator.cancel();
+                reactionsAnimator = null;
+            }
+            reactionsChangeProgress = 1f;
+            reactionsLayoutInBubble.resetAnimation();
+            reactionsLayoutInBubble.recordDrawingState();
+            pendingReactionsAnimation = true;
+        } else if (!sameMessage) {
+            cancelReactionsAnimation();
+        }
+        if (this.message != message || this.pinnedTop != pinnedTop || this.pinnedBottom != pinnedBottom || layoutForText != (message == null ? null : message.text) || reactionsChanged || layoutForReply != (message == null ? null : message.replyTo)) {
             layoutForWidth = -1;
             requestLayout();
         }
@@ -246,6 +369,10 @@ public class TextBubbleCell extends View {
             Theme.key_chat_inReplyMediaMessageSelectedText, Theme.key_chat_outReplyMediaMessageSelectedText,
             Theme.key_chat_linkSelectBackground, Theme.key_chat_outLinkSelectBackground,
             Theme.key_chat_serviceText, Theme.key_chat_serviceBackground,
+            // reaction pills (ReactionsLayoutInBubble)
+            Theme.key_chat_inReactionButtonBackground, Theme.key_chat_outReactionButtonBackground,
+            Theme.key_chat_inReactionButtonText, Theme.key_chat_outReactionButtonText,
+            Theme.key_chat_inReactionButtonTextSelected, Theme.key_chat_outReactionButtonTextSelected,
     };
 
     /** Adds a redraw ThemeDescription for every key in {@link #MEDIA_THEME_KEYS}. */
@@ -279,6 +406,17 @@ public class TextBubbleCell extends View {
         /** A link was long-pressed (didPressUrl with longPress, where upstream shows the open / copy sheet). */
         default void onLinkLongPressed(TextBubbleCell cell, TextBubbleMessage message, String url) {
             onBubbleLongPressed(cell, message);
+        }
+
+        /**
+         * A reaction pill was tapped (ChatMessageCellDelegate.didPressReaction). Hosts usually call
+         * {@link TextBubbleMessage#toggleReaction} and set the message again, which animates the change.
+         */
+        default void onReactionPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Reaction reaction) {
+        }
+
+        /** A reaction pill was long-pressed (didPressReaction with longPress: upstream lists who reacted). */
+        default void onReactionLongPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Reaction reaction) {
         }
     }
 
@@ -821,33 +959,34 @@ public class TextBubbleCell extends View {
         if (message == null || isCheckBoxVisible()) {
             return super.onTouchEvent(event);
         }
-        if (checkReplyTouchEvent(event) || checkLinkTouchEvent(event)) {
+        if (checkReactionsTouchEvent(event) || checkReplyTouchEvent(event) || checkLinkTouchEvent(event)) {
             return true;
         }
         return super.onTouchEvent(event);
+    }
+
+    /**
+     * upstream ReactionsLayoutInBubble.checkTouchEvent: a press on a pill claims the gesture (no row
+     * tap / menu) and hands it back on move, long press or release.
+     */
+    protected boolean checkReactionsTouchEvent(MotionEvent event) {
+        boolean wasPressed = reactionsLayoutInBubble.pressed;
+        boolean pressed = reactionsLayoutInBubble.checkTouchEvent(event);
+        if (pressed && event.getAction() == MotionEvent.ACTION_DOWN && getParent() != null) {
+            getParent().requestDisallowInterceptTouchEvent(true);
+        } else if (wasPressed && !pressed && getParent() != null) {
+            getParent().requestDisallowInterceptTouchEvent(false);
+        }
+        return pressed || wasPressed;
     }
 
     protected void buildLayout(int width) {
         resetPressedLink();
         layoutForWidth = width;
         layoutForText = message.text;
-        layoutForReaction = message.reaction;
         boolean out = message.isOut;
-        reactionDrawable = null;
-        reactionWidth = 0;
-        if (message.reaction != null) {
-            if (reactionCounterPaint == null) {
-                reactionCounterPaint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
-                reactionCounterPaint.setTextSize(AndroidUtilities.dp(12));
-                reactionCounterPaint.setTypeface(AndroidUtilities.bold());
-                reactionPaint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-            }
-            reactionDrawable = Emoji.getEmojiDrawable(message.reaction);
-            if (reactionDrawable == null) {
-                reactionDrawable = Emoji.getEmojiDrawable(Emoji.fixEmoji(message.reaction));
-            }
-            reactionWidth = AndroidUtilities.dp(8 + 20 + 4 + 10) + (int) Math.ceil(reactionCounterPaint.measureText("1"));
-        }
+        setReactionsLayout();
+        hasNewLineForTime = false;
 
         int maxWidth = Math.min(width, Math.max(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y)) - AndroidUtilities.dp(80);
         if (AndroidUtilities.isTablet()) {
@@ -911,9 +1050,11 @@ public class TextBubbleCell extends View {
             backgroundWidth = maxChildWidth;
             textY = AndroidUtilities.dp(4);
             totalHeight = textY + textHeight + AndroidUtilities.dp(2 + 17 + 4);
-            if (reactionWidth > 0) {
-                reactionY = textY + textHeight + AndroidUtilities.dp(4);
-                totalHeight += AndroidUtilities.dp(26 + 4);
+            // TYPE_EMOJIS: the pills go under the emoji, outside any bubble
+            reactionsLayoutInBubble.measure(maxWidth, android.view.Gravity.LEFT);
+            if (!reactionsLayoutInBubble.isEmpty) {
+                reactionsLayoutInBubble.totalHeight = reactionsLayoutInBubble.height + AndroidUtilities.dp(4);
+                totalHeight += reactionsLayoutInBubble.totalHeight;
             }
             return;
         }
@@ -923,7 +1064,18 @@ public class TextBubbleCell extends View {
         }
         totalHeight = textHeight + AndroidUtilities.dp(19.5f) + namesOffset;
 
+        // setMessageContent, text: reactions under the text inside the bubble, the time after the last row
+        reactionsLayoutInBubble.measure(textMaxWidth, android.view.Gravity.LEFT);
+        if (!reactionsLayoutInBubble.isEmpty) {
+            reactionsLayoutInBubble.totalHeight = reactionsLayoutInBubble.height + AndroidUtilities.dp(8);
+            totalHeight += reactionsLayoutInBubble.totalHeight;
+            // calcBackgroundWidth: lastLineWidth = reactionsLayoutInBubble.lastLineX, no RTL check for the text
+            maxChildWidth = Math.max(maxChildWidth, reactionsLayoutInBubble.width);
+            lastLineWidth = reactionsLayoutInBubble.lastLineX;
+        }
+
         boolean newLineForTime = maxWidth - lastLineWidth < timeMore || hasRtl;
+        hasNewLineForTime = newLineForTime;
         if (newLineForTime) {
             totalHeight += AndroidUtilities.dp(14);
             backgroundWidth = Math.max(maxChildWidth, lastLineWidth) + AndroidUtilities.dp(31);
@@ -941,33 +1093,6 @@ public class TextBubbleCell extends View {
             backgroundWidth = Math.max(backgroundWidth, Math.max(replyNameWidth, replyTextWidth) + AndroidUtilities.dp(31));
         }
         textY = AndroidUtilities.dp(10) + namesOffset;
-        if (reactionWidth > 0) {
-            // the chip gets its own row, the time sits at the end of that row
-            reactionY = textY + textHeight + AndroidUtilities.dp(6);
-            totalHeight = reactionY + AndroidUtilities.dp(26 + 7);
-            backgroundWidth = Math.max(maxChildWidth + AndroidUtilities.dp(31), reactionWidth + AndroidUtilities.dp(8) + timeMore + AndroidUtilities.dp(31));
-            if (replyNameLayout != null) {
-                backgroundWidth = Math.max(backgroundWidth, Math.max(replyNameWidth, replyTextWidth) + AndroidUtilities.dp(31));
-            }
-        }
-    }
-
-    private void drawReaction(Canvas canvas, int x, boolean out) {
-        if (reactionWidth <= 0) {
-            return;
-        }
-        reactionRect.set(x, reactionY, x + reactionWidth, reactionY + AndroidUtilities.dp(26));
-        reactionPaint.setColor(getThemedColor(out ? Theme.key_chat_outReactionButtonBackground : Theme.key_chat_inReactionButtonBackground));
-        canvas.drawRoundRect(reactionRect, reactionRect.height() / 2f, reactionRect.height() / 2f, reactionPaint);
-        if (reactionDrawable != null) {
-            int size = AndroidUtilities.dp(20);
-            int left = x + AndroidUtilities.dp(8);
-            int top = (int) (reactionRect.centerY() - size / 2f);
-            reactionDrawable.setBounds(left, top, left + size, top + size);
-            reactionDrawable.draw(canvas);
-        }
-        reactionCounterPaint.setColor(getThemedColor(out ? Theme.key_chat_outReactionButtonTextSelected : Theme.key_chat_inReactionButtonTextSelected));
-        canvas.drawText("1", x + AndroidUtilities.dp(8 + 20 + 4), reactionRect.centerY() - (reactionCounterPaint.descent() + reactionCounterPaint.ascent()) / 2f, reactionCounterPaint);
     }
 
     /**
@@ -1019,7 +1144,7 @@ public class TextBubbleCell extends View {
             setMeasuredDimension(width, 0);
             return;
         }
-        if (layoutForWidth != width || layoutForText != message.text || !TextUtils.equals(layoutForReaction, message.reaction) || layoutForReply != message.replyTo) {
+        if (layoutForWidth != width || layoutForText != message.text || !TextUtils.equals(layoutForReactions, reactionsKey(message)) || layoutForReply != message.replyTo) {
             buildLayout(width);
         }
         setMeasuredDimension(width, totalHeight);
@@ -1028,6 +1153,7 @@ public class TextBubbleCell extends View {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        cancelReactionsAnimation();
         cancelCheckLongPress();
         resetPressedLink();
         if (checkBox != null) {
@@ -1198,7 +1324,7 @@ public class TextBubbleCell extends View {
         }
         textLayout.draw(canvas);
         canvas.restore();
-        drawReaction(canvas, textX, out);
+        drawReactionsInBubble(canvas, backgroundLeft, hasNewLineForTime ? -AndroidUtilities.dp(16) : 0);
 
         drawTimeAndStatus(canvas);
     }
@@ -1354,7 +1480,12 @@ public class TextBubbleCell extends View {
         canvas.translate(contentLeft - textLeftOffset, textY);
         textLayout.draw(canvas);
         canvas.restore();
-        drawReaction(canvas, out ? contentRight - reactionWidth : contentLeft, out);
+        if (hasReactionsToDraw()) {
+            // TYPE_EMOJIS: outgoing pills end 16dp from the edge, incoming ones start at the emoji
+            reactionsLayoutInBubble.x = out ? layoutWidth - reactionsLayoutInBubble.width - AndroidUtilities.dp(16) : contentLeft;
+            reactionsLayoutInBubble.y = textY + textLayout.getHeight() + AndroidUtilities.dp(4);
+            drawReactions(canvas);
+        }
 
         drawTimePill(canvas, contentRight, layoutHeight - AndroidUtilities.dp(4));
     }

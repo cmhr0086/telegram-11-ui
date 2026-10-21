@@ -96,6 +96,7 @@ public class MessageContextMenu {
     private final Theme.ResourcesProvider resourcesProvider;
     private final ArrayList<Item> items = new ArrayList<>();
     private String[] reactions;
+    private final java.util.HashSet<String> selectedReactions = new java.util.HashSet<>();
     private Delegate delegate;
 
     private ActionBarPopupWindow popupWindow;
@@ -119,6 +120,31 @@ public class MessageContextMenu {
     /** Emoji shown in the reactions bar; null or empty hides the bar. */
     public MessageContextMenu setReactions(String... reactions) {
         this.reactions = reactions;
+        return this;
+    }
+
+    /**
+     * Reactions the user already chose on this message (ReactionsContainerLayout.setSelectedReactions):
+     * drawn smaller on a key_listSelector circle in the bar.
+     */
+    public MessageContextMenu setSelectedReactions(java.util.Collection<String> emoji) {
+        selectedReactions.clear();
+        if (emoji != null) {
+            selectedReactions.addAll(emoji);
+        }
+        return this;
+    }
+
+    /** {@link #setSelectedReactions} with the reactions {@code message} has chosen. */
+    public MessageContextMenu setSelectedReactions(org.telegram.ui.Cells.TextBubbleMessage message) {
+        selectedReactions.clear();
+        if (message != null) {
+            for (int i = 0; i < message.reactions.size(); i++) {
+                if (message.reactions.get(i).chosen) {
+                    selectedReactions.add(message.reactions.get(i).emoji);
+                }
+            }
+        }
         return this;
     }
 
@@ -439,6 +465,7 @@ public class MessageContextMenu {
         private final Drawable[] drawables;
         private final float[] itemProgress;
         private final Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint selectedPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Rect shadowPad = new Rect();
         private final Drawable shadow;
         private final RectF rect = new RectF();
@@ -468,6 +495,7 @@ public class MessageContextMenu {
             shadowPad.left = shadowPad.top = shadowPad.right = shadowPad.bottom = dp(7);
             shadow.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_chat_messagePanelShadow), PorterDuff.Mode.MULTIPLY));
             bgPaint.setColor(getThemedColor(Theme.key_actionBarDefaultSubmenuBackground));
+            selectedPaint.setColor(getThemedColor(Theme.key_listSelector));
             setContentDescription("Reactions");
         }
 
@@ -552,8 +580,14 @@ public class MessageContextMenu {
                 if (d == null || scale <= 0) {
                     continue;
                 }
+                // ReactionHolderView: a chosen reaction sits on a selector circle at 0.76 scale
+                boolean selected = selectedReactions.contains(emoji[i]);
                 canvas.save();
                 canvas.scale(scale, scale, cx, cy);
+                if (selected) {
+                    canvas.drawCircle(cx, cy, dp(ITEM_WIDTH_DP) / 2f - dp(1), selectedPaint);
+                    canvas.scale(0.76f, 0.76f, cx, cy);
+                }
                 d.setBounds((int) (cx - size / 2f), (int) (cy - size / 2f), (int) (cx + size / 2f), (int) (cy + size / 2f));
                 d.draw(canvas);
                 canvas.restore();

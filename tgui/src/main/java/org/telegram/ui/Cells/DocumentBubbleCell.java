@@ -136,7 +136,7 @@ public class DocumentBubbleCell extends TextBubbleCell {
     protected void buildLayout(int width) {
         layoutForWidth = width;
         layoutForText = message.text;
-        layoutForReaction = message.reaction;
+        setReactionsLayout();
         // TYPE_FILE: backgroundWidth = messageObject.getMaxMessageTextWidth() (no avatar / share button)
         int minSize = AndroidUtilities.isTablet() ? AndroidUtilities.getMinTabletSide() : width;
         backgroundWidth = minSize - AndroidUtilities.dp(80);
@@ -177,15 +177,30 @@ public class DocumentBubbleCell extends TextBubbleCell {
         if (docTitleLayout != null && docTitleLayout.getLineCount() > 1) {
             photoHeight += (docTitleLayout.getLineCount() - 1) * AndroidUtilities.dp(16);
         }
+        reactionsLayoutInBubble.measure(backgroundWidth - AndroidUtilities.dp(31), android.view.Gravity.LEFT);
         int timeLeft = backgroundWidth - AndroidUtilities.dp(40 + 18 + 56 + 8) - infoWidth;
-        if (timeLeft < timeWidth) {
-            photoHeight += AndroidUtilities.dp(12);
-        } else if (infoLayout.getLineCount() == 1) {
-            photoHeight += AndroidUtilities.dp(4);
+        if (reactionsLayoutInBubble.isEmpty) {
+            if (timeLeft < timeWidth) {
+                photoHeight += AndroidUtilities.dp(12);
+            } else if (infoLayout.getLineCount() == 1) {
+                photoHeight += AndroidUtilities.dp(4);
+            }
+        }
+        int additionHeight = 0;
+        if (!reactionsLayoutInBubble.isEmpty) {
+            // setMessageContent, TYPE_FILE without a thumbnail: pills under the file row, time after the last row or below it
+            reactionsLayoutInBubble.positionOffsetY += AndroidUtilities.dp(2);
+            reactionsLayoutInBubble.totalHeight = reactionsLayoutInBubble.height + AndroidUtilities.dp(8);
+            int reactionsTimeLeft = backgroundWidth - reactionsLayoutInBubble.lastLineX - AndroidUtilities.dp(42);
+            if (reactionsTimeLeft < timeWidth) {
+                reactionsLayoutInBubble.totalHeight += AndroidUtilities.dp(15);
+                reactionsLayoutInBubble.positionOffsetY -= AndroidUtilities.dp(15);
+            }
+            additionHeight += reactionsLayoutInBubble.totalHeight;
         }
 
         namesOffset = buildReplyLayout(backgroundWidth - AndroidUtilities.dp(31) - AndroidUtilities.dp(message.isOut ? 30 : 20), false);
-        totalHeight = photoHeight + AndroidUtilities.dp(14) + namesOffset;
+        totalHeight = photoHeight + AndroidUtilities.dp(14) + namesOffset + additionHeight;
         if (pinnedTop) {
             namesOffset -= AndroidUtilities.dp(2);
         }
@@ -225,7 +240,7 @@ public class DocumentBubbleCell extends TextBubbleCell {
         if (docTitleLayout == null) {
             return;
         }
-        drawBubbleBackground(canvas);
+        int backgroundLeft = drawBubbleBackground(canvas);
         drawReply(canvas, false);
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
@@ -281,6 +296,7 @@ public class DocumentBubbleCell extends TextBubbleCell {
         radialProgress.setBackgroundDrawable(currentBackgroundDrawable);
         radialProgress.setPressed(buttonPressed != 0, false);
         radialProgress.draw(canvas);
+        drawReactionsInBubble(canvas, backgroundLeft, 0);
 
         drawTimeAndStatus(canvas);
     }

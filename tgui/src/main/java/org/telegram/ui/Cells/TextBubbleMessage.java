@@ -2,6 +2,8 @@ package org.telegram.ui.Cells;
 
 import android.graphics.drawable.Drawable;
 
+import java.util.ArrayList;
+
 /**
  * tgui: plain model for {@link TextBubbleCell} and its media siblings {@link VoiceBubbleCell},
  * {@link PhotoBubbleCell} and {@link DocumentBubbleCell} (replaces upstream MessageObject).
@@ -34,8 +36,12 @@ public class TextBubbleMessage {
     /** Unix time in seconds (0 = unknown); hosts use it for date separators ({@link ChatActionCell#formatDate}). */
     public long date;
     public int state;
-    /** Emoji of the reaction chosen by the user, shown as a chip under the text (null = none). */
-    public String reaction;
+    /**
+     * Reactions drawn as pills inside the bubble (upstream messageOwner.reactions.results), in this
+     * order; empty = none. Change it (or call {@link #toggleReaction}) and set the message again to
+     * animate the pills.
+     */
+    public final ArrayList<Reaction> reactions = new ArrayList<>();
 
     /** Media download / upload state ({@code MEDIA_*}) and its 0..1 progress for MEDIA_LOADING. */
     public int mediaState = MEDIA_READY;
@@ -61,6 +67,62 @@ public class TextBubbleMessage {
     // --- document
     public String fileName;
     public long fileSize;
+
+    /** upstream TLRPC.ReactionCount reduced to a static emoji, its count and whether it is mine. */
+    public static class Reaction {
+        public String emoji;
+        public int count;
+        /** Chosen by the current user: the pill is filled (chat_in/outReactionButtonBackground). */
+        public boolean chosen;
+
+        public Reaction(String emoji, int count, boolean chosen) {
+            this.emoji = emoji;
+            this.count = count;
+            this.chosen = chosen;
+        }
+    }
+
+    /** The reaction with {@code emoji}, or null. */
+    public Reaction getReaction(String emoji) {
+        for (int i = 0; i < reactions.size(); i++) {
+            if (reactions.get(i).emoji.equals(emoji)) {
+                return reactions.get(i);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Upstream SendMessagesHelper.sendReaction for a non-premium user (one reaction per user):
+     * choosing {@code emoji} again removes it, choosing another one replaces the previous choice.
+     * Counts that drop to zero remove the reaction; a new one is appended.
+     * @return true if {@code emoji} is now chosen
+     */
+    public boolean toggleReaction(String emoji) {
+        Reaction target = getReaction(emoji);
+        boolean wasChosen = target != null && target.chosen;
+        for (int i = reactions.size() - 1; i >= 0; i--) {
+            Reaction r = reactions.get(i);
+            if (r.chosen) {
+                r.chosen = false;
+                r.count--;
+                if (r.count <= 0) {
+                    reactions.remove(i);
+                }
+            }
+        }
+        if (wasChosen) {
+            return false;
+        }
+        target = getReaction(emoji);
+        if (target == null) {
+            reactions.add(new Reaction(emoji, 1, true));
+        } else {
+            target.count++;
+            target.chosen = true;
+        }
+        return true;
+    }
 
     /** Quote of the message this one replies to, drawn at the top of the bubble (null = not a reply). */
     public ReplyTo replyTo;
