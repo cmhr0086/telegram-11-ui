@@ -2,8 +2,8 @@ package org.telegram.ui.Components;
 
 import android.view.View;
 
-import androidx.recyclerview.widget.ItemTouchHelper;
-import androidx.recyclerview.widget.RecyclerView;
+import org.telegram.tgui.recyclerview.ItemTouchHelper;
+import org.telegram.tgui.recyclerview.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.SharedConfig;

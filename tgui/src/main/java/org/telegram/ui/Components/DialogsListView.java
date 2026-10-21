@@ -12,9 +12,9 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 
-import androidx.recyclerview.widget.ItemTouchHelper;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
+import org.telegram.tgui.recyclerview.ItemTouchHelper;
+import org.telegram.tgui.recyclerview.LinearLayoutManager;
+import org.telegram.tgui.recyclerview.RecyclerView;
 
 import org.telegram.messenger.LocaleController;
 import org.telegram.tgui.R;

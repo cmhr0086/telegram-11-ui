@@ -6,8 +6,8 @@ import android.animation.ValueAnimator;
 import android.util.SparseArray;
 import android.view.View;
 
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
+import org.telegram.tgui.recyclerview.LinearLayoutManager;
+import org.telegram.tgui.recyclerview.RecyclerView;
 
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.MessagesController;

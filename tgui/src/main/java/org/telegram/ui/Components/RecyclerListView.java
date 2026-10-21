@@ -48,9 +48,9 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.util.Consumer;
-import androidx.recyclerview.widget.DiffUtil;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
+import org.telegram.tgui.recyclerview.DiffUtil;
+import org.telegram.tgui.recyclerview.LinearLayoutManager;
+import org.telegram.tgui.recyclerview.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.FileLog;

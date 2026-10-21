@@ -115,7 +115,7 @@ import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator;
 
-import androidx.recyclerview.widget.LinearLayoutManager;
+import org.telegram.tgui.recyclerview.LinearLayoutManager;
 
 
 import org.telegram.messenger.AndroidUtilities;

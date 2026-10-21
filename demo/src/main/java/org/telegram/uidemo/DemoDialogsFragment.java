@@ -12,7 +12,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
-import androidx.recyclerview.widget.RecyclerView;
+import org.telegram.tgui.recyclerview.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.tgui.R;

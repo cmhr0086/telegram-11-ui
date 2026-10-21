@@ -40,11 +40,11 @@ import android.widget.TextView;
 
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
-import androidx.recyclerview.widget.DefaultItemAnimator;
-import androidx.recyclerview.widget.ItemTouchHelper;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.LinearSmoothScroller;
-import androidx.recyclerview.widget.RecyclerView;
+import org.telegram.tgui.recyclerview.DefaultItemAnimator;
+import org.telegram.tgui.recyclerview.ItemTouchHelper;
+import org.telegram.tgui.recyclerview.LinearLayoutManager;
+import org.telegram.tgui.recyclerview.LinearSmoothScroller;
+import org.telegram.tgui.recyclerview.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Emoji;

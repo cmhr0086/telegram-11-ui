@@ -7,8 +7,8 @@ import android.view.ViewGroup;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
+import org.telegram.tgui.recyclerview.LinearLayoutManager;
+import org.telegram.tgui.recyclerview.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 // library resources live in the library R (host has nonTransitiveRClass=true by default)

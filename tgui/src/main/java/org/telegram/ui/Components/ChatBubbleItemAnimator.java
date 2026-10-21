@@ -5,8 +5,8 @@ import android.animation.AnimatorListenerAdapter;
 import android.view.View;
 import android.view.ViewPropertyAnimator;
 
-import androidx.recyclerview.widget.DefaultItemAnimator;
-import androidx.recyclerview.widget.RecyclerView;
+import org.telegram.tgui.recyclerview.DefaultItemAnimator;
+import org.telegram.tgui.recyclerview.RecyclerView;
 
 /**
  * tgui: simplified take on upstream ChatListItemAnimator for a bottom-anchored message list.

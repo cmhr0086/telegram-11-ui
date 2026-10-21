@@ -19,7 +19,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 
 import androidx.core.content.ContextCompat;
-import androidx.recyclerview.widget.RecyclerView;
+import org.telegram.tgui.recyclerview.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
@@ -177,10 +177,10 @@ public class DialogsFloatingButton extends FrameLayout {
                     return;
                 }
                 RecyclerView.LayoutManager lm = recyclerView.getLayoutManager();
-                if (!(lm instanceof androidx.recyclerview.widget.LinearLayoutManager)) {
+                if (!(lm instanceof org.telegram.tgui.recyclerview.LinearLayoutManager)) {
                     return;
                 }
-                int firstVisiblePosition = ((androidx.recyclerview.widget.LinearLayoutManager) lm).findFirstVisibleItemPosition();
+                int firstVisiblePosition = ((org.telegram.tgui.recyclerview.LinearLayoutManager) lm).findFirstVisibleItemPosition();
                 if (firstVisiblePosition == RecyclerView.NO_POSITION) {
                     return;
                 }

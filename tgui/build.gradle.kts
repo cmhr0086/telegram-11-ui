@@ -56,7 +56,7 @@ tasks.withType<JavaCompile>().configureEach {
 }
 
 dependencies {
-    // RecyclerView is vendored (upstream fork in androidx.recyclerview.widget).
+    // RecyclerView is vendored (upstream fork, moved to org.telegram.tgui.recyclerview).
     api("androidx.core:core:1.13.1")
     api("androidx.annotation:annotation:1.8.0")
     implementation("androidx.dynamicanimation:dynamicanimation:1.0.0")

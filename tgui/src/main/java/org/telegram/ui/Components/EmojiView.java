@@ -44,11 +44,11 @@ import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
 import androidx.core.graphics.ColorUtils;
-import androidx.recyclerview.widget.DefaultItemAnimator;
-import androidx.recyclerview.widget.DiffUtil;
-import androidx.recyclerview.widget.GridLayoutManager;
-import androidx.recyclerview.widget.LinearSmoothScrollerCustom;
-import androidx.recyclerview.widget.RecyclerView;
+import org.telegram.tgui.recyclerview.DefaultItemAnimator;
+import org.telegram.tgui.recyclerview.DiffUtil;
+import org.telegram.tgui.recyclerview.GridLayoutManager;
+import org.telegram.tgui.recyclerview.LinearSmoothScrollerCustom;
+import org.telegram.tgui.recyclerview.RecyclerView;
 import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 

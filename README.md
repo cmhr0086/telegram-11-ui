@@ -40,7 +40,7 @@ JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew :demo:installDebug
 JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew :tgui:publishToMavenLocal
 ```
 
-坐标 `org.telegram.ui:tgui:11.4.2-ui2`。直接引用 AAR 文件时，宿主需要自己加 `androidx.core:core`、`androidx.annotation:annotation`、`androidx.dynamicanimation:dynamicanimation`、`androidx.customview:customview`、`androidx.collection:collection`、`androidx.interpolator:interpolator`、`androidx.viewpager:viewpager`。RecyclerView 用的是上游自带的 fork（`androidx.recyclerview.widget`，源码在库里），**宿主不要再引入官方 `androidx.recyclerview`**，否则类会冲突。
+坐标 `org.telegram.ui:tgui:11.4.2-ui2`。直接引用 AAR 文件时，宿主需要自己加 `androidx.core:core`、`androidx.annotation:annotation`、`androidx.dynamicanimation:dynamicanimation`、`androidx.customview:customview`、`androidx.collection:collection`、`androidx.interpolator:interpolator`、`androidx.viewpager:viewpager`。RecyclerView 用的是上游自带的 fork，包名改成了 `org.telegram.tgui.recyclerview`（源码在库里），可以和官方 `androidx.recyclerview` 共存，宿主照常引入 Material、preference、viewpager2 等即可。库的列表组件（`RecyclerListView` 等）用的是 fork，宿主代码里的 `RecyclerView` / `LinearLayoutManager` / `DiffUtil` 要从 `org.telegram.tgui.recyclerview` 导入，和库组件混用官方类会类型不匹配。
 
 ## 使用
 

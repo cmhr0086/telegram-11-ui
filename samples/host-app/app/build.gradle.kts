@@ -30,4 +30,7 @@ android {
 
 dependencies {
     implementation("org.telegram.ui:tgui:11.4.2-ui2")
+    // tgui's RecyclerView fork has its own package, so Material (which pulls the official
+    // androidx.recyclerview) can sit next to it without excludes.
+    implementation("com.google.android.material:material:1.12.0")
 }

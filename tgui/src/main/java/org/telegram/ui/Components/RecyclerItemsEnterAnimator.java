@@ -9,7 +9,7 @@ import android.util.SparseArray;
 import android.view.View;
 import android.view.ViewTreeObserver;
 
-import androidx.recyclerview.widget.RecyclerView;
+import org.telegram.tgui.recyclerview.RecyclerView;
 
 import java.util.ArrayList;
 import java.util.HashSet;
