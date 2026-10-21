@@ -63,6 +63,11 @@ public class TextBubbleMessage {
     /** Original photo size in pixels (aspect ratio for the bubble); defaults to the drawable's intrinsic size. */
     public int photoWidth;
     public int photoHeight;
+    /**
+     * Set for a video: the bubble draws {@link #photo} as its thumbnail with a play button and the
+     * {@link #duration} pill, and MediaViewer plays this uri.
+     */
+    public android.net.Uri videoUri;
 
     // --- document
     public String fileName;
@@ -158,7 +163,7 @@ public class TextBubbleMessage {
                         text = "Voice message";
                         break;
                     case TYPE_PHOTO:
-                        text = "Photo";
+                        text = message.videoUri != null ? "Video" : "Photo";
                         break;
                     default:
                         text = message.fileName != null ? message.fileName : "File";
@@ -194,6 +199,14 @@ public class TextBubbleMessage {
         TextBubbleMessage message = new TextBubbleMessage(id, caption, isOut, time, state);
         message.type = TYPE_PHOTO;
         message.photo = photo;
+        return message;
+    }
+
+    /** A video message: {@code thumb} is the first frame (or any preview), {@code duration} in seconds. */
+    public static TextBubbleMessage video(long id, boolean isOut, String time, int state, Drawable thumb, android.net.Uri videoUri, int duration, CharSequence caption) {
+        TextBubbleMessage message = photo(id, isOut, time, state, thumb, caption);
+        message.videoUri = videoUri;
+        message.duration = duration;
         return message;
     }
 
