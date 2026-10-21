@@ -40,7 +40,7 @@ JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew :demo:installDebug
 JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew :tgui:publishToMavenLocal
 ```
 
-坐标 `org.telegram.ui:tgui:11.4.2-ui3`。直接引用 AAR 文件时，宿主需要自己加 `androidx.core:core`、`androidx.annotation:annotation`、`androidx.dynamicanimation:dynamicanimation`、`androidx.customview:customview`、`androidx.collection:collection`、`androidx.interpolator:interpolator`、`androidx.viewpager:viewpager`。RecyclerView 用的是上游自带的 fork，包名改成了 `org.telegram.tgui.recyclerview`（源码在库里），可以和官方 `androidx.recyclerview` 共存，宿主照常引入 Material、preference、viewpager2 等即可。库的列表组件（`RecyclerListView` 等）用的是 fork，宿主代码里的 `RecyclerView` / `LinearLayoutManager` / `DiffUtil` 要从 `org.telegram.tgui.recyclerview` 导入，和库组件混用官方类会类型不匹配。
+坐标 `org.telegram.ui:tgui:11.4.2-ui4`。直接引用 AAR 文件时，宿主需要自己加 `androidx.core:core`、`androidx.annotation:annotation`、`androidx.dynamicanimation:dynamicanimation`、`androidx.customview:customview`、`androidx.collection:collection`、`androidx.interpolator:interpolator`、`androidx.viewpager:viewpager`。RecyclerView 用的是上游自带的 fork，包名改成了 `org.telegram.tgui.recyclerview`（源码在库里），可以和官方 `androidx.recyclerview` 共存，宿主照常引入 Material、preference、viewpager2 等即可。库的列表组件（`RecyclerListView` 等）用的是 fork，宿主代码里的 `RecyclerView` / `LinearLayoutManager` / `DiffUtil` 要从 `org.telegram.tgui.recyclerview` 导入，和库组件混用官方类会类型不匹配。
 
 体积参考（`samples/host-app` 实测，最小宿主 + R8）：release APK 约 10.9 MB，基本都来自 tgui；加 `isShrinkResources = true` 约 9.8 MB，再只留 `abiFilters += "arm64-v8a"` 约 8.6 MB。大头是 `assets/emoji` 精灵图 5.2 MB、`res` 1.3 MB（含 Lottie 插图）、字体 0.8 MB、四个 ABI 的 `libtguilottie.so` 合计 1.45 MB。
 
@@ -177,7 +177,7 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 
 ## 已知限制
 
-- 聊天气泡：有文字、语音、图片（单张）、文件四种；没有头像、名字、回复引用、转发、视频 / GIF / 圆形视频 / 音乐 / 贴纸 / 位置等其它媒体、相册（多图分组）、带缩略图的文件、文字选择、链接点击；媒体气泡下面还不画已选反应；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
+- 聊天气泡：有文字、语音、图片（单张）、文件四种；没有头像、名字、转发、视频 / GIF / 圆形视频 / 音乐 / 贴纸 / 位置等其它媒体、相册（多图分组）、带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 输入栏：附件按钮只回调宿主（没有 `ChatAttachAlert`）；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；没有机器人键盘、命令菜单和 WebView 按钮；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 
 - 只支持主题自带的颜色/渐变壁纸和默认图案壁纸，不支持壁纸文件和视差（motion）效果；各强调色原本的不同图案都显示成同一个 `default_pattern`

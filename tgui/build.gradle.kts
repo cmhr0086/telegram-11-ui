@@ -67,13 +67,13 @@ dependencies {
     implementation("androidx.viewpager:viewpager:1.0.0")
 }
 
-// ./gradlew :tgui:publishToMavenLocal  ->  org.telegram.ui:tgui:11.4.2-ui3 (pulls androidx deps transitively)
+// ./gradlew :tgui:publishToMavenLocal  ->  org.telegram.ui:tgui:11.4.2-ui4 (pulls androidx deps transitively)
 publishing {
     publications {
         register<MavenPublication>("release") {
             groupId = "org.telegram.ui"
             artifactId = "tgui"
-            version = "11.4.2-ui3"
+            version = "11.4.2-ui4"
             afterEvaluate {
                 from(components["release"])
             }
