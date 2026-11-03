@@ -120,6 +120,8 @@ public class DemoChatFragment extends ChatFragmentBase {
     private static final int MENU_BOT_COMMANDS = 28;
     private static final int MENU_SEND_PREVIEW = 29;
     private static final int MENU_MEDIA_PLAYBACK = 30;
+    private static final int MENU_GROUP_PROFILE = 31;
+    private static final int MENU_CHANNEL_PROFILE = 32;
     private long firstInlineId;
     private final ArrayList<Runnable> inlineCompletions = new ArrayList<>();
     private long firstDocumentThumbnailId;
@@ -552,6 +554,8 @@ public class DemoChatFragment extends ChatFragmentBase {
                     enterView.getEditField().updateAnimatedEmoji(true);
                 } else if (id == MENU_ALBUM_TEN) {
                     sendOutgoing(sampleAlbum(10, true, true));
+                } else if (id == MENU_GROUP_PROFILE || id == MENU_CHANNEL_PROFILE) {
+                    CommunityProfiles.open(DemoChatFragment.this, id == MENU_CHANNEL_PROFILE);
                 } else if (id == MENU_MEDIA_PLAYBACK) {
                     for (TextBubbleMessage message : messages) {
                         if (message.type == TextBubbleMessage.TYPE_PHOTO && message.videoUri != null) {
@@ -611,6 +615,8 @@ public class DemoChatFragment extends ChatFragmentBase {
         nightItem.setContentDescription("Switch day / night");
         ActionBarMenuItem otherItem = actionBar.createMenu().addItem(0, R.drawable.ic_ab_other);
         otherItem.setContentDescription("More options");
+        otherItem.addSubItem(MENU_GROUP_PROFILE, R.drawable.msg_groups, context.getString(org.telegram.uidemo.R.string.profile_group_menu));
+        otherItem.addSubItem(MENU_CHANNEL_PROFILE, R.drawable.msg_info, context.getString(org.telegram.uidemo.R.string.profile_channel_menu));
         recordButtonItem = otherItem.addSubItem(MENU_RECORD_BUTTON, R.drawable.input_mic, "Voice / video button", true);
         recordButtonItem.setChecked(true);
         otherItem.addSubItem(MENU_LOCAL_EMOJI, R.drawable.msg_emoji_smiles, context.getString(org.telegram.uidemo.R.string.local_emoji_insert));

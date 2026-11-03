@@ -37,6 +37,13 @@ public class RoadmapInstrumentation extends Instrumentation {
                 Intent intent = new Intent(getTargetContext(), MainActivity.class);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 activity = startActivitySync(intent);
+                if ("profile".equals(arguments.getString("component"))) {
+                    ProfileDeviceChecks.run(this, activity);
+                    main(() -> activity.finish());
+                    result.putString("stream", "\nProfileDeviceChecks passed\n");
+                    finish(Activity.RESULT_OK, result);
+                    return;
+                }
                 if ("chat_fragment".equals(arguments.getString("component"))) {
                     ChatFragmentDeviceChecks.run(this, activity);
                     main(() -> activity.finish());
@@ -194,13 +201,14 @@ public class RoadmapInstrumentation extends Instrumentation {
                 MessageSendPreviewDeviceChecks.run(this, activity);
                 MediaViewerDeviceChecks.run(this, activity);
                 ChatFragmentDeviceChecks.run(this, activity);
+                ProfileDeviceChecks.run(this, activity);
                 main(() -> {
                     if (container != null && container.getParent() instanceof ViewGroup) {
                         ((ViewGroup) container.getParent()).removeView(container);
                     }
                     activity.finish();
                 });
-                result.putString("stream", "\nRoadmapInstrumentation: UndoView + AnimatedEmojiDeviceChecks + AlbumDeviceChecks + RoundVideoDeviceChecks + StickerMediaDeviceChecks + StickerBubbleDeviceChecks + EmojiMediaDeviceChecks + AttachmentAccessDeviceChecks + AttachmentDeviceChecks + ChatUnreadDeviceChecks + ServiceMessageDeviceChecks + GroupMessageDeviceChecks + ForwardMessageDeviceChecks + ContactMessageDeviceChecks + MusicMessageDeviceChecks + LocationMessageDeviceChecks + PollMessageDeviceChecks + DocumentMessageDeviceChecks + InlineKeyboardDeviceChecks + ReplyKeyboardDeviceChecks + MentionsDeviceChecks + SuggestEmojiDeviceChecks + BotCommandsDeviceChecks + MessageSendPreviewDeviceChecks + MediaViewerDeviceChecks + ChatFragmentDeviceChecks passed\n");
+                result.putString("stream", "\nRoadmapInstrumentation: UndoView + AnimatedEmojiDeviceChecks + AlbumDeviceChecks + RoundVideoDeviceChecks + StickerMediaDeviceChecks + StickerBubbleDeviceChecks + EmojiMediaDeviceChecks + AttachmentAccessDeviceChecks + AttachmentDeviceChecks + ChatUnreadDeviceChecks + ServiceMessageDeviceChecks + GroupMessageDeviceChecks + ForwardMessageDeviceChecks + ContactMessageDeviceChecks + MusicMessageDeviceChecks + LocationMessageDeviceChecks + PollMessageDeviceChecks + DocumentMessageDeviceChecks + InlineKeyboardDeviceChecks + ReplyKeyboardDeviceChecks + MentionsDeviceChecks + SuggestEmojiDeviceChecks + BotCommandsDeviceChecks + MessageSendPreviewDeviceChecks + MediaViewerDeviceChecks + ChatFragmentDeviceChecks + ProfileDeviceChecks passed\n");
                 finish(Activity.RESULT_OK, result);
             } catch (Throwable failure) {
                 StringWriter trace = new StringWriter();

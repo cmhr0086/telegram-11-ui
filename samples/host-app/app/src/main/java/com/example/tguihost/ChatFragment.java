@@ -234,6 +234,9 @@ public class ChatFragment extends ChatFragmentBase {
     public View createView(Context context) {
         actionBar.setBackButtonDrawable(new BackDrawable(false));
         actionBar.setTitle(title);
+        actionBar.getTitleTextView().setOnClickListener(view -> new org.telegram.ui.ActionBar.AlertDialog.Builder(getParentActivity(), getResourceProvider())
+                .setItems(new CharSequence[]{context.getString(com.example.tguihost.R.string.profile_group_menu), context.getString(com.example.tguihost.R.string.profile_channel_menu)},
+                        (dialog, which) -> CommunityProfiles.open(this, which == 1)).show());
         actionBar.setAddToContainer(false);
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override

@@ -275,4 +275,19 @@
     <string name="VideoPlayerSpeed">Speed</string>
     <string name="Mute">Mute</string>
     <string name="Unmute">Unmute</string>
+
+    <plurals name="tgui_profile_members">
+        <item quantity="one">%1$d member</item>
+        <item quantity="other">%1$d members</item>
+    </plurals>
+    <plurals name="tgui_profile_subscribers">
+        <item quantity="one">%1$d subscriber</item>
+        <item quantity="other">%1$d subscribers</item>
+    </plurals>
+    <plurals name="tgui_profile_online">
+        <item quantity="one">%1$d online</item>
+        <item quantity="other">%1$d online</item>
+    </plurals>
+    <string name="tgui_profile_members_online">%1$s, %2$s</string>
+    <string name="AccDescrOpenChat">Open chat</string>
 </resources>

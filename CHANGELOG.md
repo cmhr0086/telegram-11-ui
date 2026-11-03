@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- 阶段F群组／频道资料：扩展既有ProfileFragment，新增兼容Kind/人数状态、Header/Member行；搬运并裁剪上游UserCell普通成员分支与讨论图标，保留原尺寸/颜色，宿主提供角色、头像和所有操作。demo/sample新增可操作资料示例，旧用户资料和原Row编号不变。
+
 - 修复独立宿主冷启动无法进入聊天：本地动态表情数据不再读取尚未初始化的 Theme 聊天字体，交由气泡绑定时应用字体度量；debug/R8及release实际发送、日夜切换通过。
 
 ### 新增
