@@ -700,6 +700,8 @@ public class TextBubbleCell extends View {
     public interface MediaDelegate {
         /** The play / download / open button (or the photo, or the file row) was tapped. */
         void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message);
+        /** Host action from a contact card; action is one of ContactBubbleCell.ACTION_*. */
+        default void onContactAction(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Contact contact, int action) { }
 
         /** Individual album tile; group selection, caption and time belong to the album row. */
         default void onAlbumMediaPressed(AlbumBubbleCell cell, TextBubbleMessage album, TextBubbleMessage item, int index) {
@@ -734,6 +736,8 @@ public class TextBubbleCell extends View {
             Theme.key_chat_mediaProgress,
             Theme.key_chat_inFileNameText, Theme.key_chat_outFileNameText, Theme.key_chat_inFileInfoText, Theme.key_chat_outFileInfoText,
             Theme.key_chat_inFileInfoSelectedText, Theme.key_chat_outFileInfoSelectedText,
+            Theme.key_chat_inContactBackground, Theme.key_chat_outContactBackground,
+            Theme.key_chat_inContactIcon, Theme.key_chat_outContactIcon,
             Theme.key_chat_inMenu, Theme.key_chat_outMenu, Theme.key_chat_inMenuSelected, Theme.key_chat_outMenuSelected,
             // reply quote, links and date separators (ChatActionCell)
             Theme.key_chat_inReplyLine, Theme.key_chat_outReplyLine, Theme.key_chat_inReplyNameText, Theme.key_chat_outReplyNameText,

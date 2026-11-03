@@ -57,6 +57,32 @@ public class TextBubbleMessage {
     public static final int TYPE_ROUND_VIDEO = 5;
     public static final int TYPE_STICKER = 6;
     public static final int TYPE_GIF = 7;
+    public static final int TYPE_CONTACT = 8;
+
+    /** Host-owned contact snapshot; capability flags select the available actions. */
+    public static final class Contact {
+        public final long id;
+        public final CharSequence name, phone;
+        public final Drawable avatar;
+        public final boolean canMessage, canAdd;
+        public final int colorId;
+        public Contact(long id, CharSequence name, CharSequence phone, Drawable avatar) {
+            this(id, name, phone, avatar, false, false);
+        }
+        public Contact(long id, CharSequence name, CharSequence phone, Drawable avatar, boolean canMessage, boolean canAdd) {
+            this(id, name, phone, avatar, canMessage, canAdd, (int) Math.abs(id % 7));
+        }
+        public Contact(long id, CharSequence name, CharSequence phone, Drawable avatar, boolean canMessage, boolean canAdd, int colorId) {
+            this.id = id; this.name = name; this.phone = phone; this.avatar = avatar;
+            this.canMessage = canMessage; this.canAdd = canAdd; this.colorId = colorId;
+        }
+    }
+    public Contact contact;
+    public static TextBubbleMessage contact(long id, boolean isOut, String time, int state, Contact contact) {
+        if (contact == null) throw new IllegalArgumentException("contact required");
+        TextBubbleMessage result = new TextBubbleMessage(id, null, isOut, time, state);
+        result.type = TYPE_CONTACT; result.contact = contact; return result;
+    }
 
     /** Media is available locally: voice shows play / pause, files show their extension icon. */
     public static final int MEDIA_READY = 0;
@@ -223,6 +249,15 @@ public class TextBubbleMessage {
                     case TYPE_GIF:
                         text = org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.tgui_gif);
                         break;
+                    case TYPE_CONTACT:
+                        if (message.contact != null && !android.text.TextUtils.isEmpty(message.contact.name)) {
+                            text = message.contact.name;
+                        } else if (message.contact != null && !android.text.TextUtils.isEmpty(message.contact.phone)) {
+                            text = message.contact.phone;
+                        } else {
+                            text = org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.AttachContact);
+                        }
+                        break;
                     default:
                         text = message.fileName != null ? message.fileName : "File";
                         break;
@@ -240,6 +275,8 @@ public class TextBubbleMessage {
                 reply.thumb = message.sticker.thumbnail;
             } else if (message.type == TYPE_GIF && message.gif != null) {
                 reply.thumb = message.gif.thumbnail;
+            } else if (message.type == TYPE_CONTACT && message.contact != null) {
+                reply.thumb = message.contact.avatar;
             }
             return reply;
         }

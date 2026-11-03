@@ -111,6 +111,9 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         messages.add(TextBubbleMessage.sticker(nextId++, false, "12:36", TextBubbleMessage.STATE_NONE, sticker));
         messages.add(TextBubbleMessage.gif(nextId++, true, "12:37", TextBubbleMessage.STATE_READ, localGifs.get(0),
                 app.getString(com.example.tguihost.R.string.local_gif_caption)));
+        messages.add(TextBubbleMessage.contact(nextId++, false, "12:38", TextBubbleMessage.STATE_NONE,
+                new TextBubbleMessage.Contact(1, app.getString(com.example.tguihost.R.string.attach_sample_contact_one),
+                        "+1 202 555 0101", null, true, true)));
         for (TextBubbleMessage message : messages) bindGroupSender(message);
         TextBubbleMessage.ForwardedFrom source = new TextBubbleMessage.ForwardedFrom(-100,
                 app.getString(com.example.tguihost.R.string.forward_source_name));
@@ -299,6 +302,9 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 for (Attachment item : selection) {
                     if (item.type == Attachment.Type.FILE) {
                         append(TextBubbleMessage.document(nextId++, true, time, TextBubbleMessage.STATE_SENT, item.name, item.size));
+                    } else if (item.type == Attachment.Type.CONTACT) {
+                        append(TextBubbleMessage.contact(nextId++, true, time, TextBubbleMessage.STATE_SENT,
+                                new TextBubbleMessage.Contact(item.contact.id, item.contact.name, item.contact.phone, item.contact.avatar)));
                     } else {
                         String description;
                         switch (item.type) {
@@ -547,8 +553,16 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             else if (viewType == TextBubbleMessage.TYPE_STICKER) cell = new org.telegram.ui.Cells.StickerBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_GIF) cell = new org.telegram.ui.Cells.GifBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_DOCUMENT) cell = new org.telegram.ui.Cells.DocumentBubbleCell(context, getResourceProvider());
+            else if (viewType == TextBubbleMessage.TYPE_CONTACT) cell = new org.telegram.ui.Cells.ContactBubbleCell(context, getResourceProvider());
             else cell = new TextBubbleCell(context, getResourceProvider());
             cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+                @Override public void onContactAction(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Contact contact, int action) {
+                    if (actionBar.isActionModeShowed()) { toggle(message); return; }
+                    int label = action == org.telegram.ui.Cells.ContactBubbleCell.ACTION_MESSAGE ? org.telegram.tgui.R.string.SharedContactMessage
+                            : action == org.telegram.ui.Cells.ContactBubbleCell.ACTION_ADD ? org.telegram.tgui.R.string.SharedContactAdd : org.telegram.tgui.R.string.ViewContact;
+                    Toast.makeText(context, context.getString(com.example.tguihost.R.string.contact_action,
+                            context.getString(label), contact.name, contact.id), Toast.LENGTH_SHORT).show();
+                }
                 @Override public void onMediaPressed(TextBubbleCell source, TextBubbleMessage item) {
                     if (item.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
                         Toast.makeText(context, com.example.tguihost.R.string.round_video_host, Toast.LENGTH_SHORT).show();

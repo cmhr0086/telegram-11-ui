@@ -102,6 +102,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_SERVICE = 6;
     private static final int MENU_GROUP = 7;
     private static final int MENU_FORWARD = 8;
+    private static final int MENU_CONTACT = 9;
+    private long firstContactId;
     private long firstForwardedId;
     private boolean groupMode;
     private ActionBarMenuSubItem groupItem;
@@ -229,6 +231,16 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.forward_anonymous_name));
         addSample(archive);
         addSample(TextBubbleMessage.document(nextId++, true, "10:12", TextBubbleMessage.STATE_READ, "notes.txt", 12_288));
+        TextBubbleMessage contact = TextBubbleMessage.contact(nextId++, false, "10:12", TextBubbleMessage.STATE_NONE,
+                new TextBubbleMessage.Contact(1, ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.attach_sample_contact_one),
+                        "+1 202 555 0101", null, true, true));
+        contact.forwardedFrom = source;
+        contact.replyTo = TextBubbleMessage.ReplyTo.of(looksLike, "You");
+        firstContactId = contact.id;
+        addSample(contact);
+        addSample(TextBubbleMessage.contact(nextId++, true, "10:12", TextBubbleMessage.STATE_READ,
+                new TextBubbleMessage.Contact(2, ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.attach_sample_contact_two),
+                        "+1 202 555 0102", null)));
         try {
             LocalEmojiSamples.install(ApplicationLoader.applicationContext);
             addSample(LocalEmojiSamples.text(ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.local_emoji_sample)), false, "10:13", TextBubbleMessage.STATE_NONE);
@@ -464,6 +476,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     listView.invalidate();
                 } else if (id == MENU_FORWARD) {
                     scrollToMessage(firstForwardedId);
+                } else if (id == MENU_CONTACT) {
+                    scrollToMessage(firstContactId);
                 }
             }
         });
@@ -480,6 +494,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         groupItem = otherItem.addSubItem(MENU_GROUP, R.drawable.msg_groups, context.getString(org.telegram.uidemo.R.string.group_messages), true);
         groupItem.setChecked(groupMode);
         otherItem.addSubItem(MENU_FORWARD, R.drawable.msg_forward, context.getString(org.telegram.uidemo.R.string.forward_messages));
+        otherItem.addSubItem(MENU_CONTACT, R.drawable.msg_addcontact, context.getString(org.telegram.uidemo.R.string.contact_messages));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -1108,6 +1123,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 for (Attachment item : selection) {
                     if (item.type == Attachment.Type.FILE) {
                         appendMessage(TextBubbleMessage.document(nextId++, true, time, TextBubbleMessage.STATE_SENT, item.name, item.size));
+                    } else if (item.type == Attachment.Type.CONTACT) {
+                        appendMessage(TextBubbleMessage.contact(nextId++, true, time, TextBubbleMessage.STATE_SENT,
+                                new TextBubbleMessage.Contact(item.contact.id, item.contact.name, item.contact.phone, item.contact.avatar)));
                     } else {
                         String description;
                         switch (item.type) {
@@ -1318,6 +1336,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     /** What the reply panel / copy shows for a message: the text, or a media label like upstream's MessageObject.messageText. */
     private static CharSequence previewText(TextBubbleMessage message) {
+        if (message.type == TextBubbleMessage.TYPE_CONTACT && message.contact != null) {
+            return ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.attach_contact_result,
+                    message.contact.name, message.contact.phone);
+        }
         if (message.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
             return ApplicationLoader.applicationContext.getString(R.string.tgui_round_video);
         }
@@ -1688,6 +1710,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
 
     private final TextBubbleCell.MediaDelegate mediaDelegate = new TextBubbleCell.MediaDelegate() {
+        @Override public void onContactAction(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Contact contact, int action) {
+            if (actionBar.isActionModeShowed()) { processRowSelect(message); return; }
+            int label = action == org.telegram.ui.Cells.ContactBubbleCell.ACTION_MESSAGE ? R.string.SharedContactMessage
+                    : action == org.telegram.ui.Cells.ContactBubbleCell.ACTION_ADD ? R.string.SharedContactAdd : R.string.ViewContact;
+            Toast.makeText(getParentActivity(), getParentActivity().getString(org.telegram.uidemo.R.string.contact_action,
+                    getParentActivity().getString(label), contact.name, contact.id), Toast.LENGTH_SHORT).show();
+        }
         @Override
         public void onAlbumMediaPressed(AlbumBubbleCell cell, TextBubbleMessage album, TextBubbleMessage item, int index) {
             if (actionBar.isActionModeShowed()) processRowSelect(album);
@@ -1906,6 +1935,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 cell = new GifBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_DOCUMENT) {
                 cell = new DocumentBubbleCell(context, getResourceProvider());
+            } else if (viewType == TextBubbleMessage.TYPE_CONTACT) {
+                cell = new org.telegram.ui.Cells.ContactBubbleCell(context, getResourceProvider());
             } else {
                 cell = new TextBubbleCell(context, getResourceProvider());
             }
