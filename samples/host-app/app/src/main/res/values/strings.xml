@@ -20,4 +20,8 @@
     <string name="forward_source_selected">Host source callback: %1$s (%2$d)</string>
     <string name="service_user_selected">Host user callback: %1$s</string>
     <string name="service_pin_selected">Host pinned message callback: %1$s</string>
+    <string name="music_sample_title">Local music from the AAR</string>
+    <string name="music_sample_artist">Host application</string>
+    <string name="music_host">Host supplies audio and playback here. The main demo plays a local sample.</string>
+    <string name="music_seek">Host seek callback: %1$.2f</string>
 </resources>

@@ -253,4 +253,7 @@
     <string name="SharedContactAdd">ADD</string>
     <string name="SharedContactMessage">MESSAGE</string>
     <string name="NumberUnknown">Unknown</string>
+    <string name="AttachMusic">Music</string>
+    <string name="AudioUnknownArtist">Unknown artist</string>
+    <string name="AudioUnknownTitle">Unknown title</string>
 </resources>

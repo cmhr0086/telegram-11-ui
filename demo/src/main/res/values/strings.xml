@@ -27,4 +27,11 @@
     <string name="forward_source_selected">Host source callback: %1$s (%2$d)</string>
     <string name="service_group_title">Local UI group</string>
     <string name="service_user_selected">Host user callback: %1$s</string>
+    <string name="music_messages">Music messages</string>
+    <string name="music_sample_title">Twelve seconds in C</string>
+    <string name="music_sample_title_two">Another local track</string>
+    <string name="music_sample_artist">Telegram UI demo</string>
+    <string name="music_sample_caption">Local audio: play, pause and drag the progress bar.</string>
+    <string name="music_sample_download">Download state example</string>
+    <string name="music_playback_error">This local audio could not be played</string>
 </resources>

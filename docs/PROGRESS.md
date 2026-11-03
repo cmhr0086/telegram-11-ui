@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | A 贴纸与 GIF | 已完成，限制见下 | PR #2，库/消费端/仪器及 MuMu 真操作通过；WEBM 首帧降级 |
 | B 附件菜单 | 已实现并推送 PR #3 | 主体/五页/权限/选择/确认与宿主回调；简化交互和人工补验见下 |
-| C 更多消息 | 进行中 | 未读/服务/群聊/转发/联系人已完成；音乐/位置/投票/文件缩略图和键盘待实现 |
+| C 更多消息 | 进行中 | 未读/服务/群聊/转发/联系人/音乐已完成；位置/投票/文件缩略图和键盘待实现 |
 | D 输入增强 | 未开始 | 提及、表情联想、命令、发送预览 |
 | E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
@@ -19,7 +19,7 @@ roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功�
 
 ### 阶段 C 当前交接
 
-- 已提交并推送未读 f4d10cd、服务 7db39c1、群聊 4441ce7、转发864201e；[PR #4](https://github.com/cmhr0086/telegram-11-ui/pull/4) 为 draft，目标 dev/ui-lib，汇总 A–F 状态和未验证部分。C 尚有后续功能，保持 draft；不合并，不改 main。联系人已完成本地验收，本次随独立功能提交推送。
+- 已提交并推送未读 f4d10cd、服务 7db39c1、群聊 4441ce7、转发864201e；[PR #4](https://github.com/cmhr0086/telegram-11-ui/pull/4) 为 draft，目标 dev/ui-lib，汇总 A–F 状态和未验证部分。C 尚有后续功能，保持 draft；不合并，不改 main。联系人cc8d05a已提交推送。音乐已通过本地验收，本次随独立功能提交推送。
 - ChatUnreadCell 经 tools/pull 搬运，保留原尺寸/密度资源/GPL；增加主题刷新、demo 锚点跳转和宿主预览。库release/demo/仪器构建及host debug/R8通过（TEMP/phase-c-unread-build.log、phase-c-unread-demo.log、phase-c-unread-host.log）；设备component=unread通过，实测聊天菜单跳转及夜→日刷新，截图TEMP/unread-night.png、unread-day.png。
 - 服务消息已完成：复用 ChatActionCell 原文字胶囊，移植 MessageObject 文字分支为纯 ServiceMessage（普通群返回/大型群加入、邀请、改名、各媒体类型置顶、自定义），用户/置顶目标通过回调交宿主。demo 菜单定位和点击置顶跳原文、日夜显示通过；host 信息按钮预览。库release/demo/test/publish及host debug/R8通过（TEMP/phase-c-service-build.log、phase-c-service-test-build.log、phase-c-service-host.log）；component=service通过（phase-c-service-device.log）。覆盖模板占位、emoji span、同文字换ID、取消点击、两类群加入、20字符预览、清空layout和日期复用。初次测试把span插入顺序误认为文字顺序，已按真实文本位置排序并依实际layout坐标触摸，生产回调断言保留。截图service-day.png、service-night.png、service-pin.png。未迁移服务卡片/礼物、按压高亮、逐链接无障碍导航。
 - 群聊已完成：Sender/原ID姓名配色、组首姓名、42dp头像/48dp列、300秒同发送者合并，复用既有各类气泡；贴纸/圆视频/纯emoji按无背景分支绘制旁侧名字，列表ChatAvatarDecoration复用上游可视组吸底逻辑。demo菜单可切换，sample使用群聊模型；旧API仍可默认行内绘制。头像padding/透明度、API21比较器和贴纸姓名8dp偏移已修；贴纸/圆视频保持原尺寸上限而非再扣头像列缩小。
@@ -33,7 +33,12 @@ roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功�
 - 联系人：从上游ChatMessageCell TYPE_CONTACT 7485/11301/11698/13929/3062等分支裁剪ContactBubbleCell；46dp头像/22dp圆角、15/13dp字号、270dp宽上限、群聊减102dp、正文宽减111dp、36dp动作/60dp按钮区、原整卡及按钮ripple/bounce。Contact元数据和canMessage/canAdd来自宿主，onContactAction报告VIEW/MESSAGE/ADD；单按钮整卡执行该动作，双按钮整卡VIEW。联系人配色独立于群发送者与转发来源，发出名片按上游覆写outReply色。复用既有回复/转发/反应/选择，未知号码和动作文案使用资源。
 - 联系人验证：库release/demo/test/publish通过（TEMP/phase-c-contact-final-build.log）；独立host debug/R8 release通过（phase-c-contact-final-host.log）；component=contact定向及完整旧功能回归通过（phase-c-contact-device.log、phase-c-contact-full-device.log）。覆盖收发/240和400dp/两套provider色/群聊+转发+回复/46dp头像与bounds恢复/空长号码/单和双按钮身份/取消重绑/清空/选择模式。初次测试缺MediaDelegate抽象方法导致测试编译失败，已补；颜色断言最初固定第0色，与实际联系人ID规则不符，改为按ID核对，生产代码未为错误断言改色。
 - 联系人真操作：日间Message/Add各触发正确宿主回调，夜间群聊模式、长按多选正常；附件Contact选择Alice→预览→Send后出现可点的名片，View Contact回调正确。截图TEMP/contact-day.png、contact-add.png、contact-message.png、contact-night.png、contact-select.png、contact-sent.png、contact-view.png；无AndroidRuntime崩溃输出。文档/demo/sample已更新，无新依赖或通讯录权限，示例动作以Toast展示。vCard解析、电话格式化、实际通讯录操作、动态头像及Premium多色侧线由宿主或后续承担；平板/复杂RTL/大字体需人工补验。
-- 下一项：音乐/位置/投票/文件缩略图、inline/reply keyboard。阶段C仍未完成，D–F未开始；不得把本批五项当作整个目标完成。
+- 音乐完成：MusicBubbleCell 从固定上游 ChatMessageCell DOCUMENT_ATTACH_TYPE_MUSIC 的7632/10592/11655/12211/3567等布局/绘制/触摸分支裁剪，保留原GPL头、270dp上限、82dp主体、44dp播放圆钮、原文字/时长/菜单/颜色及100ms performer→seek过渡。musicTitle/musicPerformer/audioPaused 和既有MediaDelegate回调由宿主驱动，支持说明/反应/群聊/转发/回复；不引入播放器到库或新增运行依赖。
+- 音乐审查修复：caption间距/末行时间换行、静止后首次播放的100ms过渡、按压和选中色、loading取消命中、同对象改方向颜色、下载刷新、拖动预览被tick覆盖、链接色与取消父拦截。LocalMusicPlayer串行seek并保留最新目标，等待OnSeekComplete时不采旧位置；切曲迟到回调按player身份拒绝。首次构建菜单图标未导入，改用既有bot_music后通过。
+- 最终库release/demo/debugAndroidTest/publishToMavenLocal通过（TEMP/phase-c-music-final-build.log），host debug/R8 release通过（phase-c-music-final-host.log）。完整MuMu Android15设备回归通过（phase-c-music-full-device.log），包含之前TGS完整周期/GIF临时重绑和收藏尺寸；音乐覆盖240/400dp收发、群/转发/回复、取消重绑/选择/清空、三种下载状态、拖动时tick与取消、暂停elapsed、同模型方向颜色，以及真实MediaPlayer推进/暂停/连续seek/恢复/切曲/完成释放、焦点丢失和重复stop。主题provider的isDark分支有断言，实际日夜颜色以UI操作核验。
+- MuMu实际音乐操作：菜单定位，播放后0:01、暂停1.5秒不动、拖到0:08、恢复并切另一条到0:02，前一条回演唱者；下载→进度/取消→下载箭头、音乐菜单、长按选中1条、日夜和群聊布局通过，无AndroidRuntime崩溃。截图TEMP/music-{night,play,pause,pause2,seek,switch,download,cancel,day,menu,select,group}.png。未观察真实扬声器输出，不把进度推进写成听觉验证。
+- 音乐限制：无流式mini下载/封面覆盖/歌词/后台服务和通知播放；说明样式显示但无独立链接点击。demo用生成的12秒PCM音阶，只打包demo，与语音/圆视频互斥；页面离开/重建/选择时停止。sample展示AAR与宿主回调，主demo提供真实播放器。其它Android版本、平板/复杂RTL/大字体及更多音频格式需人工检查。
+- 下一项：位置/投票/文件缩略图、inline/reply keyboard。阶段C仍未完成，D–F未开始；不得把已完成项当作整个目标完成。
 
 ### 阶段 B 当前交接
 

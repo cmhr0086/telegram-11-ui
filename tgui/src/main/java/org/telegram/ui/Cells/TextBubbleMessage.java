@@ -58,6 +58,14 @@ public class TextBubbleMessage {
     public static final int TYPE_STICKER = 6;
     public static final int TYPE_GIF = 7;
     public static final int TYPE_CONTACT = 8;
+    public static final int TYPE_MUSIC = 9;
+    public CharSequence musicTitle, musicPerformer;
+    public static TextBubbleMessage music(long id, boolean isOut, String time, int state,
+                                           CharSequence title, CharSequence performer, int duration, CharSequence caption) {
+        TextBubbleMessage result = new TextBubbleMessage(id, caption, isOut, time, state);
+        result.type = TYPE_MUSIC; result.musicTitle = title; result.musicPerformer = performer;
+        result.duration = Math.max(0, duration); return result;
+    }
 
     /** Host-owned contact snapshot; capability flags select the available actions. */
     public static final class Contact {
@@ -116,6 +124,8 @@ public class TextBubbleMessage {
     /** Upstream 5-bit packed waveform (as recorded by MediaController / ChatActivityEnterView), may be null. */
     public byte[] waveform;
     public boolean playing;
+    /** A paused music session remains selected and keeps its seek bar visible. */
+    public boolean audioPaused;
     /** Round video has a prepared but paused session; keeps remaining time/progress visible. */
     public boolean videoPaused;
     public float audioProgress;
@@ -257,6 +267,9 @@ public class TextBubbleMessage {
                         } else {
                             text = org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.AttachContact);
                         }
+                        break;
+                    case TYPE_MUSIC:
+                        text = !android.text.TextUtils.isEmpty(message.musicTitle) ? message.musicTitle : org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.AttachMusic);
                         break;
                     default:
                         text = message.fileName != null ? message.fileName : "File";

@@ -5,6 +5,7 @@
 ## Unreleased
 
 ### 新增
+- 阶段 C：`MusicBubbleCell` 从上游音乐分支裁剪，复用原播放/进度/菜单布局与动画；新增 `TextBubbleMessage.music(...)`、`musicTitle` / `musicPerformer` / `audioPaused`，宿主控制播放及下载，旧 API 兼容。demo 使用本地 MediaPlayer 实播、暂停/拖动/切曲；sample 接入 AAR 回调，无新增运行依赖。
 - 阶段 C：`ContactBubbleCell` / `TextBubbleMessage.Contact` 从上游联系人分支裁剪；保留头像、姓名/号码、名片侧线和底部动作，支持群聊/回复/转发。`MediaDelegate.onContactAction` 将查看、发送消息、添加交给宿主；demo/sample 附件联系人直接显示名片，无通讯录权限或新依赖，旧 API 兼容。
 - 阶段 C：`ForwardedFrom` 与 `onForwardPressed` 支持宿主提供的转发来源；直接搬运 `ForwardBackground`，从 `ChatMessageCell` / `AvatarSpan` 移植两行头、头像、颜色和几何。接入既有文字/语音/照片/文件/相册/GIF/贴纸/圆视频，纯 emoji 保留大号显示；贴纸和圆视频同时支持旁侧回复。demo/sample 均有示例，旧 API 兼容。
 - 阶段 C：既有气泡增加宿主 `Sender`、群聊姓名/42dp头像/48dp让位及纯 `MessageGrouping`；普通姓名头和贴纸/圆视频/纯表情旁侧头沿用上游几何与配色。`ChatAvatarDecoration` 使用现有 RecyclerView fork 支持滚动头像，旧宿主不启用时保留行内模式；demo 可切换，sample 接入群聊。

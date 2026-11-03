@@ -342,6 +342,38 @@ cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
 
 号码由宿主格式化，空号码使用 Android 字符串资源。头像为静态 Drawable，缺省使用首字母或联系人图标。库不查询账号或系统通讯录，不保存联系人、不启动电话或发送消息；示例以 Toast 展示动作，实际操作由宿主接管。demo 的 “Contact messages” 菜单可定位样例，附件菜单选择联系人后显示名片，外部 sample 同样接入。vCard 解析、Premium 多色侧线/背景表情、动态头像尚未移植。
 
+### 音乐消息
+
+```java
+TextBubbleMessage track = TextBubbleMessage.music(id, outgoing, time, state,
+        title, performer, durationSeconds, caption);
+MusicBubbleCell cell = new MusicBubbleCell(context, resourcesProvider);
+cell.setMessage(track, pinnedTop, pinnedBottom);
+cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+    @Override public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) {
+        // Host starts/pauses playback, or downloads/cancels according to mediaState.
+    }
+    @Override public void onSeek(TextBubbleCell cell, TextBubbleMessage message, float progress) {
+        // Seek the host player; progress is in [0, 1].
+    }
+    @Override public void onMenuPressed(TextBubbleCell cell, TextBubbleMessage message, float x, float y) {
+        // Open the host message menu.
+    }
+});
+// From host player updates, on the UI thread:
+track.playing = isPlaying;
+track.audioPaused = hasPausedSession;
+track.audioProgress = positionFraction;
+track.audioProgressSec = elapsedSeconds;
+cell.updatePlayingMessageProgress();
+```
+
+`MusicBubbleCell` 从固定上游 `ChatMessageCell.DOCUMENT_ATTACH_TYPE_MUSIC` 裁剪，保留 270dp 宽上限、82dp 主体、44dp 播放按钮、标题/演唱者/时长颜色与 100ms 演唱者到进度条过渡；支持说明、反应、群聊、转发及回复。暂停时设置 `playing=false, audioPaused=true`，仍显示进度条和已播放秒数；停止会话时两者均为 false。用 `MEDIA_DOWNLOAD` / `MEDIA_LOADING` / `MEDIA_READY` 和 `mediaProgress` 控制下载状态，`updatePlayingMessageProgress()` 同步按钮与进度，无需重绑整个列表。库不持有播放器、文件 URI 或网络加载器。
+
+demo 的 ⋮ “Music messages” 定位三条样例，用系统 `MediaPlayer` 播放项目生成的 12 秒 PCM 音阶，可暂停、拖动、切曲，播完释放；与语音/圆视频互斥，离开页面、重建视图或进入选择时停止。第三条仅模拟下载状态，完成后播放同一本地文件，不访问网络。外部 `samples/host-app` 展示 AAR 气泡和回调，实际播放器接入见主 demo 的 `LocalMusicPlayer`。没有新增运行依赖；WAV 只打包进 demo。
+
+未移植流式 mini 下载按钮、封面覆盖图、播放列表/后台服务/通知控件和歌词时间戳；说明文字显示样式但没有独立链接点击。音频焦点丢失会暂停，需要用户主动恢复。库只渲染宿主提供的元数据，音轨读取、格式支持和 URI 授权由宿主管理。
+
 ## 包含的组件
 
 | 类别 | 类 |
@@ -350,6 +382,7 @@ cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
 | 服务消息 | `ChatActionCell` / `ServiceMessage`：加入、邀请、改名、置顶，用户与消息回调 |
 | 群聊消息 | `TextBubbleMessage.Sender` / `MessageGrouping` / `ChatAvatarDecoration`：原配色姓名、头像列、连续消息及滚动吸底头像 |
 | 转发来源 | `TextBubbleMessage.ForwardedFrom` / `ForwardBackground`：普通与无背景媒体来源头、头像、原按压动画、宿主来源回调；贴纸/圆视频旁侧回复 |
+| 音乐消息 | `MusicBubbleCell` / `TextBubbleMessage.music(...)`：播放/暂停、拖动、下载状态、说明与宿主回调 |
 | 联系人消息 | `ContactBubbleCell` / `TextBubbleMessage.Contact`：原名片布局、查看/发消息/添加按钮及宿主回调 |
 | 附件面板 | `ChatAttachAlert`、`Attachment`、`AttachmentAccess`：相册、文件、联系人、位置与投票选择及宿主回调 |
 | 圆形视频 | `RoundVideoBubbleCell`、`TextBubbleMessage.roundVideo(...)`、上游 `RoundVideoShadow`：圆形预览、时长、未读/下载状态、播放环及宿主回调 |
@@ -414,7 +447,7 @@ cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
 
 主题 `.attheme` 解析同时接受 LF / CRLF，壁纸二进制偏移按原始字节计算；`.gitattributes` 固定新检出的主题资源为 LF。Windows 上此前出现的夜间文字透明/缺失已修复，设备覆盖打包的 night/darkblue 与两种换行格式。
 
-- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸、GIF 和联系人；已有群聊头像、名字和转发来源；没有音乐 / 位置等其它媒体、带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
+- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸、GIF、联系人和音乐；已有群聊头像、名字和转发来源；没有位置 / 投票等其它媒体、带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 查看器 `MediaViewer`：只是简易版——没有缩略图条、分享 / 保存 / 转发 / 删除菜单、图片编辑、画中画、倍速、静音、视频缩略图预览、横屏全屏按钮、多图相册分组；视频用系统 `MediaPlayer`（格式取决于设备解码器，没有缓冲进度、不循环），播放中不能连续翻页预加载；图片直接画宿主给的 `Drawable`（大图要宿主自己先缩放）；打开 / 关闭动画不处理被 ActionBar 或输入栏遮住的那部分（上游会裁剪），起点用整张图片的位置；平板没有专门布局
 - 输入栏：附件按钮由宿主回调打开 `ChatAttachAlert`；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；没有机器人键盘、命令菜单和 WebView 按钮；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 

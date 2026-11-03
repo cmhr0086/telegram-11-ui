@@ -103,6 +103,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_GROUP = 7;
     private static final int MENU_FORWARD = 8;
     private static final int MENU_CONTACT = 9;
+    private static final int MENU_MUSIC = 20;
+    private long firstMusicId;
     private long firstContactId;
     private long firstForwardedId;
     private boolean groupMode;
@@ -159,6 +161,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private TextBubbleMessage playingVoice;
     private MediaPlayer voicePlayer;
     private LocalRoundVideoPlayer roundPlayer;
+    private LocalMusicPlayer musicPlayer;
     private long fakePlayStart;
     private final Runnable voiceProgressUpdater = this::updateVoiceProgress;
 
@@ -241,6 +244,23 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         addSample(TextBubbleMessage.contact(nextId++, true, "10:12", TextBubbleMessage.STATE_READ,
                 new TextBubbleMessage.Contact(2, ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.attach_sample_contact_two),
                         "+1 202 555 0102", null)));
+        TextBubbleMessage song = TextBubbleMessage.music(nextId++, false, "10:12", TextBubbleMessage.STATE_NONE,
+                ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.music_sample_title),
+                ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.music_sample_artist), 12,
+                ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.music_sample_caption));
+        song.forwardedFrom = source;
+        song.replyTo = TextBubbleMessage.ReplyTo.of(looksLike, "You");
+        firstMusicId = song.id;
+        react(song, "👍", 2, false);
+        addSample(song);
+        TextBubbleMessage anotherSong = TextBubbleMessage.music(nextId++, true, "10:12", TextBubbleMessage.STATE_READ,
+                ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.music_sample_title_two),
+                ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.music_sample_artist), 12, null);
+        addSample(anotherSong);
+        TextBubbleMessage downloadSong = TextBubbleMessage.music(nextId++, false, "10:12", TextBubbleMessage.STATE_NONE,
+                ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.music_sample_download), null, 12, null);
+        downloadSong.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
+        addSample(downloadSong);
         try {
             LocalEmojiSamples.install(ApplicationLoader.applicationContext);
             addSample(LocalEmojiSamples.text(ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.local_emoji_sample)), false, "10:13", TextBubbleMessage.STATE_NONE);
@@ -294,6 +314,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         stopFakeVideo();
         stopVoice();
         if (roundPlayer != null) roundPlayer.stop();
+        if (musicPlayer != null) musicPlayer.stop();
         super.onFragmentDestroy();
     }
 
@@ -426,6 +447,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     @Override
     public View createView(Context context) {
         if (roundPlayer != null) roundPlayer.stop();
+        if (musicPlayer != null) musicPlayer.stop();
         // BackDrawable like ChatActivity: the arrow turns into × in selection mode
         actionBar.setBackButtonDrawable(new BackDrawable(false));
         actionBar.setAllowOverlayTitle(true);
@@ -449,7 +471,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     } else {
                         finishFragment();
                     }
-                } else if (id >= ACTION_EDIT) {
+                } else if (id >= ACTION_EDIT && id <= ACTION_DELETE) {
                     processActionModeItem(id);
                 } else if (id == MENU_NIGHT) {
                     TelegramUI.toggleDayNight(nightItem);
@@ -478,6 +500,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     scrollToMessage(firstForwardedId);
                 } else if (id == MENU_CONTACT) {
                     scrollToMessage(firstContactId);
+                } else if (id == MENU_MUSIC) {
+                    scrollToMessage(firstMusicId);
                 }
             }
         });
@@ -495,6 +519,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         groupItem.setChecked(groupMode);
         otherItem.addSubItem(MENU_FORWARD, R.drawable.msg_forward, context.getString(org.telegram.uidemo.R.string.forward_messages));
         otherItem.addSubItem(MENU_CONTACT, R.drawable.msg_addcontact, context.getString(org.telegram.uidemo.R.string.contact_messages));
+        otherItem.addSubItem(MENU_MUSIC, R.drawable.bot_music, context.getString(org.telegram.uidemo.R.string.music_messages));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -566,6 +591,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         floatingDateView.setTranslationY(ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0));
         contentView.setContentView(listView);
         roundPlayer = new LocalRoundVideoPlayer(contentView, listView);
+        musicPlayer = new LocalMusicPlayer(context, this::refreshMusic);
 
         enterView = new ChatActivityEnterView(getParentActivity(), contentView, this, true, getResourceProvider());
         enterView.setDelegate(new EnterViewDelegate());
@@ -683,6 +709,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     private void showActionMode(TextBubbleMessage message) {
         if (roundPlayer != null) roundPlayer.stop();
+        if (musicPlayer != null) musicPlayer.stop();
         createActionMode();
         updateActionModeColors();
         if (enterView.isPopupShowing()) {
@@ -897,6 +924,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         if (message == playingVoice) {
             stopVoice();
         }
+        if (musicPlayer != null && musicPlayer.getPlayingMessage() == message) musicPlayer.stop();
         int row = rowOf(message);
         messages.remove(index);
         // the day's separator goes too when this was its only message
@@ -1265,6 +1293,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     public void onPause() {
         super.onPause();
         if (roundPlayer != null) roundPlayer.stop();
+        if (musicPlayer != null) musicPlayer.stop();
         if (contentView != null) {
             contentView.onPause();
         }
@@ -1336,6 +1365,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     /** What the reply panel / copy shows for a message: the text, or a media label like upstream's MessageObject.messageText. */
     private static CharSequence previewText(TextBubbleMessage message) {
+        if (message.type == TextBubbleMessage.TYPE_MUSIC) {
+            return android.text.TextUtils.isEmpty(message.musicTitle)
+                    ? ApplicationLoader.applicationContext.getString(R.string.AttachMusic) : message.musicTitle;
+        }
         if (message.type == TextBubbleMessage.TYPE_CONTACT && message.contact != null) {
             return ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.attach_contact_result,
                     message.contact.name, message.contact.phone);
@@ -1575,6 +1608,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     ((DocumentBubbleCell) child).updateButtonState(true);
                 } else if (child instanceof RoundVideoBubbleCell) {
                     ((RoundVideoBubbleCell) child).updatePlayingMessageProgress();
+                } else if (child instanceof org.telegram.ui.Cells.MusicBubbleCell) {
+                    ((org.telegram.ui.Cells.MusicBubbleCell) child).updatePlayingMessageProgress();
                 }
             }
         }
@@ -1740,10 +1775,19 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             } else if (message.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
                 if (message.mediaState == TextBubbleMessage.MEDIA_READY) {
                     stopVoice();
+                    if (musicPlayer != null) musicPlayer.stop();
                     roundPlayer.toggle(message);
+                } else toggleFakeDownload(message);
+            } else if (message.type == TextBubbleMessage.TYPE_MUSIC) {
+                if (message.mediaState == TextBubbleMessage.MEDIA_READY) {
+                    stopVoice();
+                    if (roundPlayer != null) roundPlayer.stop();
+                    musicPlayer.toggle(message, android.net.Uri.parse("android.resource://"
+                            + getParentActivity().getPackageName() + "/" + org.telegram.uidemo.R.raw.sample_music));
                 } else toggleFakeDownload(message);
             } else if (message.type == TextBubbleMessage.TYPE_VOICE) {
                 if (roundPlayer != null) roundPlayer.stop();
+                if (musicPlayer != null) musicPlayer.stop();
                 toggleVoice(message);
             } else if (message.type == TextBubbleMessage.TYPE_PHOTO && message.mediaState == TextBubbleMessage.MEDIA_READY) {
                 if (actionBar.isActionModeShowed()) {
@@ -1758,6 +1802,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
         @Override
         public void onSeek(TextBubbleCell cell, TextBubbleMessage message, float progress) {
+            if (message.type == TextBubbleMessage.TYPE_MUSIC && musicPlayer != null) {
+                musicPlayer.seek(message, progress);
+                return;
+            }
             if (message.type == TextBubbleMessage.TYPE_ROUND_VIDEO && roundPlayer != null) {
                 roundPlayer.seek(message, progress);
                 return;
@@ -1864,12 +1912,14 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             }
             voicePlayer = null;
         }
+        TextBubbleMessage oldVoice = playingVoice;
         if (playingVoice != null) {
             playingVoice.playing = false;
             playingVoice.audioProgress = 0;
             playingVoice.audioProgressSec = 0;
             playingVoice = null;
         }
+        if (oldVoice != null) refreshVoice(oldVoice);
     }
 
     /** Pushes the message's playback state into its visible cell without a rebind (no item animation). */
@@ -1881,6 +1931,16 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             View child = listView.getChildAt(i);
             if (child instanceof VoiceBubbleCell && ((VoiceBubbleCell) child).getMessage() == message) {
                 ((VoiceBubbleCell) child).updatePlayingMessageProgress();
+            }
+        }
+    }
+
+    private void refreshMusic() {
+        if (listView == null) return;
+        for (int i = 0; i < listView.getChildCount(); i++) {
+            View child = listView.getChildAt(i);
+            if (child instanceof org.telegram.ui.Cells.MusicBubbleCell) {
+                ((org.telegram.ui.Cells.MusicBubbleCell) child).updatePlayingMessageProgress();
             }
         }
     }
@@ -1935,6 +1995,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 cell = new GifBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_DOCUMENT) {
                 cell = new DocumentBubbleCell(context, getResourceProvider());
+            } else if (viewType == TextBubbleMessage.TYPE_MUSIC) {
+                cell = new org.telegram.ui.Cells.MusicBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_CONTACT) {
                 cell = new org.telegram.ui.Cells.ContactBubbleCell(context, getResourceProvider());
             } else {

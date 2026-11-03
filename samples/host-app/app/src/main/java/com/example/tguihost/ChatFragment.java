@@ -114,6 +114,10 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         messages.add(TextBubbleMessage.contact(nextId++, false, "12:38", TextBubbleMessage.STATE_NONE,
                 new TextBubbleMessage.Contact(1, app.getString(com.example.tguihost.R.string.attach_sample_contact_one),
                         "+1 202 555 0101", null, true, true)));
+        messages.add(TextBubbleMessage.music(nextId++, true, "12:39", TextBubbleMessage.STATE_READ,
+                app.getString(com.example.tguihost.R.string.music_sample_title),
+                app.getString(com.example.tguihost.R.string.music_sample_artist), 12,
+                app.getString(com.example.tguihost.R.string.music_host)));
         for (TextBubbleMessage message : messages) bindGroupSender(message);
         TextBubbleMessage.ForwardedFrom source = new TextBubbleMessage.ForwardedFrom(-100,
                 app.getString(com.example.tguihost.R.string.forward_source_name));
@@ -553,6 +557,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             else if (viewType == TextBubbleMessage.TYPE_STICKER) cell = new org.telegram.ui.Cells.StickerBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_GIF) cell = new org.telegram.ui.Cells.GifBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_DOCUMENT) cell = new org.telegram.ui.Cells.DocumentBubbleCell(context, getResourceProvider());
+            else if (viewType == TextBubbleMessage.TYPE_MUSIC) cell = new org.telegram.ui.Cells.MusicBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_CONTACT) cell = new org.telegram.ui.Cells.ContactBubbleCell(context, getResourceProvider());
             else cell = new TextBubbleCell(context, getResourceProvider());
             cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
@@ -564,13 +569,23 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                             context.getString(label), contact.name, contact.id), Toast.LENGTH_SHORT).show();
                 }
                 @Override public void onMediaPressed(TextBubbleCell source, TextBubbleMessage item) {
-                    if (item.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
+                    if (item.type == TextBubbleMessage.TYPE_MUSIC) {
+                        Toast.makeText(context, com.example.tguihost.R.string.music_host, Toast.LENGTH_SHORT).show();
+                    } else if (item.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
                         Toast.makeText(context, com.example.tguihost.R.string.round_video_host, Toast.LENGTH_SHORT).show();
                     } else if (item.type == TextBubbleMessage.TYPE_STICKER) {
                         showStickerSet(localPack);
                     } else if (item.type == TextBubbleMessage.TYPE_GIF) {
                         showMenu(source, item, source.getWidth() / 2f, source.getHeight() / 2f);
                     }
+                }
+                @Override public void onSeek(TextBubbleCell source, TextBubbleMessage item, float progress) {
+                    if (item.type == TextBubbleMessage.TYPE_MUSIC) {
+                        Toast.makeText(context, context.getString(com.example.tguihost.R.string.music_seek, progress), Toast.LENGTH_SHORT).show();
+                    }
+                }
+                @Override public void onMenuPressed(TextBubbleCell source, TextBubbleMessage item, float x, float y) {
+                    showMenu(source, item, x, y);
                 }
                 @Override public void onAlbumMediaPressed(org.telegram.ui.Cells.AlbumBubbleCell source,
                         TextBubbleMessage album, TextBubbleMessage item, int index) {
