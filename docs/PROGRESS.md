@@ -2,7 +2,7 @@
 
 ## 新任务 A–F（2026-11-03）
 
-用户已合并 PR #1；远端 `dev/ui-lib` 基线为 `3834565`。当前工作分支 `codex/phase-d`，基于阶段 C 的 `1bbf01f`。每阶段结束推送并创建目标为 `dev/ui-lib` 的 PR；下阶段从上一阶段分支继续，不等待合并，不自行合并，不改 main。下文旧路线图的“未合并”是当时记录，已由此状态更新。
+用户已合并 PR #1；远端 `dev/ui-lib` 基线为 `3834565`。当前工作分支 `codex/phase-e`，基于阶段 D 的 `a1a95a4`。每阶段结束推送并创建目标为 `dev/ui-lib` 的 PR；下阶段从上一阶段分支继续，不等待合并，不自行合并，不改 main。下文旧路线图的“未合并”是当时记录，已由此状态更新。
 
 上游再次核实为 `release-11.4.2-5469`。基线 `:tgui:assembleRelease :demo:assembleDebug` 通过（TEMP/phase-a-baseline.log）。继续复用 tgui、原包名、RecyclerView fork 与 GPL 头，不引入网络层或平行模块。
 
@@ -12,10 +12,20 @@
 | B 附件菜单 | 已实现并推送 PR #3 | 主体/五页/权限/选择/确认与宿主回调；简化交互和人工补验见下 |
 | C 更多消息 | 已完成，限制见下 | PR #4；11项功能已实现，库/消费端/完整设备回归通过，人工补验见各项记录 |
 | D 输入增强 | 已完成，限制见下 | PR #5；@提及、表情联想、命令菜单和发送预览，库/消费端/完整MuMu回归通过 |
-| E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
+| E 查看器升级 | 进行中 | 缩略图条/相册分组完成；宿主操作和播放控制待做 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
 
-roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；阶段 C 已完成本任务的11项功能，PR #4已转为可审查；阶段D四项已完成，E–F未开始。
+roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；阶段 C 已完成本任务的11项功能，PR #4已转为可审查；阶段D四项已完成，E进行中、F未开始。
+
+### 阶段 E 当前交接
+
+- 从阶段D的a1a95a4创建codex/phase-e，PR #5已ready且未合并。当前已完成相册缩略图/分组翻页，下一项分享/保存/删除宿主菜单，再做倍速/静音；F未开始，目标仍未完成。
+- tools/pull搬入固定上游GroupedPhotosListView，保留42×56dp、1dp间隔、2dp圆角、选中宽度展开、100/200ms动画及Scroller手势。Entry快照/稳定绝对索引和宿主Drawable替代TL/账号/ImageReceiver；查看器使用上游68dp高/10dp顶距，手机横屏隐藏，caption位于条上、视频控制位于条下。
+- Item.groupId连续非零组、Provider.forceAllInGroup、getGroupedPhotosListView和setCurrentIndex为兼容新增API。保留附近最多20项及同窗口稳定，退出组200ms淡出后折叠；点击/拖动双向同步，拖动结束再准备视频。demo现有相册及发送10图可操作，sample三图相册接入并按当前cell/重绑维护隐藏格。
+- 审查/设备修复：原查看器drawMedia会改宿主Drawable bounds和BitmapDrawable滤波，现finally恢复；缩略图tap需立即播放视频，只有实际scroll才延期；相册窗口不随每次选择重建；切组淡出期间保留旧图并在结束折叠。首次仪器滑页仅一个MOVE未跨过手势建立后的实际位移，改为真实多MOVE轨迹，保留页索引断言。
+- 最终库release/demo/debugAndroidTest/publish通过（TEMP/phase-e-thumbnails-final-build.log），独立host debug/R8通过（phase-e-thumbnails-host.log）；专项phase-e-thumbnails-final-device.log与完整MuMu Android15回归phase-e-thumbnails-full-device.log通过，包含旧TGS完整末段/循环后续播、GIF临时重绑和收藏尺寸。新增专项验证真实Dialog缩放/滑页/缩略图触摸、源恢复、null图/两组/淡出重入/32项窗口、实际本地MediaPlayer tap/scroll准备及共享Drawable状态。
+- 真操作：夜间10图28/28打开，缩略图点击/拖动到24/28；返回相册格恢复，日间再打开并滑页到27/28，无AndroidRuntime错误。证据TEMP/thumbnail-{check,night-scroll,return-day,day-page}.png。sample只构建未安装；其它Android版本、平板/横屏、复杂RTL/大字体仍需人工检查。
+- 限制：静态Drawable缩略图，无网络或视频抽帧；保留现有MediaViewer底部caption/strip/video组合，照片没有上游空48dp工具栏。查看器仍非完整PhotoViewer，未移植编辑/PiP/预加载，后续菜单/播放控制尚未完成；README/CHANGELOG已同步。
 
 ### 阶段 D 当前交接
 

@@ -5,6 +5,7 @@
 ## Unreleased
 
 ### 新增
+- 阶段 E：搬运 `GroupedPhotosListView`，`MediaViewer.Item.groupId` / `Provider.forceAllInGroup()` 提供相册缩略图、点击/拖动与滑页同步；保留上游尺寸/动画和绝对页索引。demo/sample相册接入；修复查看器绘制后未恢复宿主Drawable bounds/滤波状态，无新增依赖或旧API破坏。
 - 阶段 D：搬运 `MessageSendPreview` 与 `ReactionsContainerLayout` 效果选择分支；复用既有气泡，新增宿主 `MessageEffect`、本地JSON/TGS单轮预览、取消保留草稿和生命周期/迟到发送隔离。`onSendTextWithEffect` / `onSendVoiceWithEffect` 默认转调旧回调；demo/sample接入，无新运行依赖或网络层。
 - 行为变更：文字/语音长按发送默认打开预览，`setSendPreviewEnabled(false)` 可恢复旧弹出菜单；未删除旧API。气泡新增默认开启的 `setDrawTime` 与只读时间坐标，供预览隐藏时间/状态并定位效果。未移植的逐字/相机/超宽缩放转场见README。
 - 阶段 D：搬运 `BotCommandsMenuView` / `BotCommandsMenuContainer`，恢复输入栏 Menu 入口、滚动与下拉关闭；宿主 `BotCommand` 快照和 `onBotCommandSelected` 回调取代机器人资料/发送业务，默认复用既有 `onSendText`，长按填入命令供编辑。demo/sample接入，无新增运行依赖、网络或权限。

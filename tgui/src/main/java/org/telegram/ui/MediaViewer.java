@@ -54,6 +54,7 @@ import org.telegram.tgui.R;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.GroupedPhotosListView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -94,6 +95,8 @@ public class MediaViewer {
         public CharSequence date;
         /** Free for the host (e.g. the message). */
         public Object tag;
+        /** Stable host album ID. Zero is an ungrouped item; groups must be contiguous. */
+        public long groupId;
 
         public static Item photo(Drawable photo, CharSequence sender, CharSequence date, CharSequence caption) {
             Item item = new Item();
@@ -127,6 +130,8 @@ public class MediaViewer {
 
     /** The host side (upstream PhotoViewerProvider). */
     public interface Provider {
+        /** Show the complete supplied gallery as one thumbnail group (e.g. a host album picker). */
+        default boolean forceAllInGroup() { return false; }
         /**
          * Where item {@code index} is on screen (getLocationOnScreen coordinates) and its corner
          * radii (8 values like Path.addRoundRect, may be left untouched); false if it is not visible,
@@ -163,6 +168,9 @@ public class MediaViewer {
     private PlayPauseView playPauseView;
     private VideoSeekBarView seekBarView;
     private TextView videoTimeView;
+    private GroupedPhotosListView groupedPhotosListView;
+    private int groupStart = -1, groupEnd = -1;
+    private boolean selectingFromThumbnails;
 
     private int currentIndex;
     private int hiddenIndex = -1;
@@ -250,6 +258,15 @@ public class MediaViewer {
 
     public int getCurrentIndex() {
         return currentIndex;
+    }
+
+    public GroupedPhotosListView getGroupedPhotosListView() { return groupedPhotosListView; }
+
+    /** Changes page on the UI thread, preserving source visibility and releasing the old player. */
+    public void setCurrentIndex(int index) {
+        if (!isShowing() || closing || transitionProgress < 1f || index < 0 || index >= items.size() || index == currentIndex) return;
+        cancelMoveZoomAnimation();
+        switchToIndex(index);
     }
 
     // ---------------------------------------------------------------- window
@@ -367,6 +384,22 @@ public class MediaViewer {
         captionView.setPadding(dp(16), dp(8), dp(16), dp(8));
         bottomLayout.addView(captionView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
+        // PhotoViewer 5681: top padding 10dp, 68dp strip above the existing bottom controls.
+        groupedPhotosListView = new GroupedPhotosListView(activity, dp(10));
+        groupedPhotosListView.setDrawBackground(false); // bottomLayout already supplies 0x7f000000.
+        groupedPhotosListView.setDelegate(new GroupedPhotosListView.Delegate() {
+            @Override public void onIndexSelected(int index) {
+                if (closing || transitionProgress < 1f) return;
+                selectingFromThumbnails = groupedPhotosListView.isScrolling();
+                try { setCurrentIndex(index); } finally { selectingFromThumbnails = false; }
+            }
+            @Override public void onHideAnimationEnd() { updateThumbnailVisibility(); }
+            @Override public void onStopScrolling() {
+                if (!closing && currentItem().video != null && !playerPrepared) preparePlayer(true);
+            }
+        });
+        bottomLayout.addView(groupedPhotosListView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 68));
+
         videoControls = new FrameLayout(activity);
         videoControls.setClickable(true);
         playPauseView = new PlayPauseView(activity);
@@ -431,7 +464,8 @@ public class MediaViewer {
             captionView.setVisibility(View.VISIBLE);
         }
         videoControls.setVisibility(item.video != null ? View.VISIBLE : View.GONE);
-        bottomHasContent = captionView.getVisibility() == View.VISIBLE || item.video != null;
+        updateThumbnailGroup();
+        updateThumbnailVisibility();
         applyBarsAlpha();
         if (!closing) {
             if (hiddenIndex != currentIndex) {
@@ -447,10 +481,48 @@ public class MediaViewer {
         playerFinished = false;
         updateVideoProgress();
         playPauseView.setPlaying(false);
-        if (item.video != null && transitionProgress >= 1f) {
+        if (item.video != null && transitionProgress >= 1f && !selectingFromThumbnails) {
             preparePlayer(true);
         }
         containerView.invalidate();
+    }
+
+    private void updateThumbnailGroup() {
+        int start = currentIndex, end = currentIndex;
+        long group = currentItem().groupId;
+        if (provider.forceAllInGroup()) {
+            start = 0; end = items.size() - 1;
+        } else if (group != 0 && groupStart >= 0 && currentIndex >= groupStart && currentIndex <= groupEnd
+                && items.get(groupStart).groupId == group && items.get(groupEnd).groupId == group) {
+            start = groupStart; end = groupEnd;
+        } else if (group != 0) {
+            // Upstream only examines adjacent members, at most ten on either side.
+            int min = Math.max(0, currentIndex - 10), max = Math.min(items.size() - 1, currentIndex + 9);
+            while (start > min && items.get(start - 1).groupId == group) start--;
+            while (end < max && items.get(end + 1).groupId == group) end++;
+        }
+        if (start == end) {
+            if (groupStart != -1) groupedPhotosListView.setItems(java.util.Collections.emptyList(), -1);
+            groupStart = groupEnd = -1;
+        } else if (start != groupStart || end != groupEnd) {
+            ArrayList<GroupedPhotosListView.Entry> thumbnails = new ArrayList<>();
+            for (int i = start; i <= end; i++) {
+                Item item = items.get(i);
+                thumbnails.add(new GroupedPhotosListView.Entry(i, item.photo, item.mediaWidth(), item.mediaHeight()));
+            }
+            groupStart = start; groupEnd = end;
+            groupedPhotosListView.setItems(thumbnails, currentIndex);
+        } else {
+            groupedPhotosListView.setCurrentIndex(currentIndex);
+        }
+    }
+
+    private void updateThumbnailVisibility() {
+        boolean portrait = containerView.getHeight() == 0 || containerView.getHeight() > containerView.getWidth();
+        boolean visible = groupedPhotosListView.getCount() > 1 && (AndroidUtilities.isTablet() || portrait);
+        groupedPhotosListView.setVisibility(visible ? View.VISIBLE : View.GONE);
+        bottomHasContent = captionView.getVisibility() == View.VISIBLE || currentItem().video != null || visible;
+        applyBarsAlpha();
     }
 
     private void switchToIndex(int index) {
@@ -612,6 +684,7 @@ public class MediaViewer {
     }
 
     private void finish() {
+        groupedPhotosListView.destroy();
         if (hiddenIndex >= 0) {
             provider.setSourceVisible(hiddenIndex, true);
             hiddenIndex = -1;
@@ -749,6 +822,11 @@ public class MediaViewer {
     }
 
     private void onTransformChanged() {
+        if (groupedPhotosListView != null && !zooming && !zoomAnimation && scale >= 1f) {
+            float progress = translationX > maxX + dp(5) ? (translationX - maxX) / containerWidth()
+                    : translationX < minX - dp(5) ? (translationX - minX) / containerWidth() : 0;
+            groupedPhotosListView.setMoveProgress(Math.max(-1f, Math.min(1f, progress)));
+        }
         updateTextureTransform();
         applyBarsAlpha();
         containerView.invalidate();
@@ -996,11 +1074,17 @@ public class MediaViewer {
         if (drawable == null) {
             return;
         }
-        drawable.setBounds((int) rect.left, (int) rect.top, (int) Math.ceil(rect.right), (int) Math.ceil(rect.bottom));
-        if (drawable instanceof BitmapDrawable) {
-            ((BitmapDrawable) drawable).setFilterBitmap(true);
+        android.graphics.Rect oldBounds = new android.graphics.Rect(drawable.getBounds());
+        BitmapDrawable bitmap = drawable instanceof BitmapDrawable ? (BitmapDrawable) drawable : null;
+        boolean oldFilter = bitmap != null && bitmap.getPaint().isFilterBitmap();
+        try {
+            drawable.setBounds((int) rect.left, (int) rect.top, (int) Math.ceil(rect.right), (int) Math.ceil(rect.bottom));
+            if (bitmap != null) bitmap.setFilterBitmap(true);
+            drawable.draw(canvas);
+        } finally {
+            drawable.setBounds(oldBounds);
+            if (bitmap != null) bitmap.setFilterBitmap(oldFilter);
         }
-        drawable.draw(canvas);
     }
 
     /** openPhoto / closePhoto frame: clip and image interpolate between the source rect and the screen rect. */
@@ -1071,6 +1155,7 @@ public class MediaViewer {
         @Override
         protected void onSizeChanged(int w, int h, int oldw, int oldh) {
             super.onSizeChanged(w, h, oldw, oldh);
+            updateThumbnailVisibility();
             if (oldw != 0 && (w != oldw || h != oldh)) {
                 cancelMoveZoomAnimation();
                 scale = 1f;

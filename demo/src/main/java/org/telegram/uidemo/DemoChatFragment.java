@@ -1714,6 +1714,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             item.width = m.photoWidth;
             item.height = m.photoHeight;
             item.tag = m;
+            item.groupId = owner == m ? 0 : owner.id;
             items.add(item);
             sources.add(m);
         }
