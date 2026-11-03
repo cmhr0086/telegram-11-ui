@@ -118,6 +118,11 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 app.getString(com.example.tguihost.R.string.music_sample_title),
                 app.getString(com.example.tguihost.R.string.music_sample_artist), 12,
                 app.getString(com.example.tguihost.R.string.music_host)));
+        messages.add(TextBubbleMessage.location(nextId++, false, "12:40", TextBubbleMessage.STATE_NONE,
+                new TextBubbleMessage.Location(0, 0, app.getString(com.example.tguihost.R.string.location_sample_title),
+                        app.getString(com.example.tguihost.R.string.location_sample_address), sampleAttachmentMap(app))));
+        messages.add(TextBubbleMessage.location(nextId++, true, "12:40", TextBubbleMessage.STATE_READ,
+                new TextBubbleMessage.Location(0, 0, null, null, sampleAttachmentMap(app))));
         for (TextBubbleMessage message : messages) bindGroupSender(message);
         TextBubbleMessage.ForwardedFrom source = new TextBubbleMessage.ForwardedFrom(-100,
                 app.getString(com.example.tguihost.R.string.forward_source_name));
@@ -298,7 +303,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 map.setBackground(sampleAttachmentMap(context)); map.setText(com.example.tguihost.R.string.attach_sample_map);
                 map.setShadowLayer(3, 1, 1, android.graphics.Color.BLACK);
                 map.setOnClickListener(v -> callback.onLocationSelected(new Attachment.Location(0, 0,
-                        context.getString(com.example.tguihost.R.string.attach_sample_location), null)));
+                        context.getString(com.example.tguihost.R.string.attach_sample_location), sampleAttachmentMap(context))));
                 return map;
             }
             @Override public void onSend(List<Attachment> selection, CharSequence caption) {
@@ -309,6 +314,10 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                     } else if (item.type == Attachment.Type.CONTACT) {
                         append(TextBubbleMessage.contact(nextId++, true, time, TextBubbleMessage.STATE_SENT,
                                 new TextBubbleMessage.Contact(item.contact.id, item.contact.name, item.contact.phone, item.contact.avatar)));
+                    } else if (item.type == Attachment.Type.LOCATION) {
+                        append(TextBubbleMessage.location(nextId++, true, time, TextBubbleMessage.STATE_SENT,
+                                new TextBubbleMessage.Location(item.location.latitude, item.location.longitude,
+                                        item.location.title, null, item.location.mapImage)));
                     } else {
                         String description;
                         switch (item.type) {
@@ -337,7 +346,6 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         paint.setColor(0xffe7e3cf); paint.setStrokeWidth(18);
         canvas.drawLine(0, 70, 480, 155, paint); canvas.drawLine(105, 0, 195, 240, paint);
         canvas.drawLine(330, 0, 270, 240, paint);
-        paint.setColor(0xffc65050); canvas.drawCircle(240, 120, 14, paint);
         return new android.graphics.drawable.BitmapDrawable(context.getResources(), bitmap);
     }
 
@@ -558,9 +566,15 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             else if (viewType == TextBubbleMessage.TYPE_GIF) cell = new org.telegram.ui.Cells.GifBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_DOCUMENT) cell = new org.telegram.ui.Cells.DocumentBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_MUSIC) cell = new org.telegram.ui.Cells.MusicBubbleCell(context, getResourceProvider());
+            else if (viewType == TextBubbleMessage.TYPE_LOCATION) cell = new org.telegram.ui.Cells.LocationBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_CONTACT) cell = new org.telegram.ui.Cells.ContactBubbleCell(context, getResourceProvider());
             else cell = new TextBubbleCell(context, getResourceProvider());
             cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+                @Override public void onLocationPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Location location) {
+                    if (actionBar.isActionModeShowed()) { toggle(message); return; }
+                    Toast.makeText(context, context.getString(com.example.tguihost.R.string.location_action,
+                            location.latitude, location.longitude), Toast.LENGTH_SHORT).show();
+                }
                 @Override public void onContactAction(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Contact contact, int action) {
                     if (actionBar.isActionModeShowed()) { toggle(message); return; }
                     int label = action == org.telegram.ui.Cells.ContactBubbleCell.ACTION_MESSAGE ? org.telegram.tgui.R.string.SharedContactMessage

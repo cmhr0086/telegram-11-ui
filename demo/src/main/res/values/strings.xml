@@ -34,4 +34,9 @@
     <string name="music_sample_caption">Local audio: play, pause and drag the progress bar.</string>
     <string name="music_sample_download">Download state example</string>
     <string name="music_playback_error">This local audio could not be played</string>
+    <string name="location_messages">Location messages</string>
+    <string name="location_sample_title">Example meeting point</string>
+    <string name="location_sample_address">Illustration only · not a real map</string>
+    <string name="location_sample_missing">Host map image unavailable</string>
+    <string name="location_action">Host location callback: %1$.3f, %2$.3f</string>
 </resources>

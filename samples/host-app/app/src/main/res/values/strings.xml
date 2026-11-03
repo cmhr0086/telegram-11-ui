@@ -24,4 +24,9 @@
     <string name="music_sample_artist">Host application</string>
     <string name="music_host">Host supplies audio and playback here. The main demo plays a local sample.</string>
     <string name="music_seek">Host seek callback: %1$.2f</string>
+    <string name="location_messages">Location messages</string>
+    <string name="location_sample_title">Example meeting point</string>
+    <string name="location_sample_address">Illustration only · not a real map</string>
+    <string name="location_sample_missing">Host map image unavailable</string>
+    <string name="location_action">Host location callback: %1$.3f, %2$.3f</string>
 </resources>

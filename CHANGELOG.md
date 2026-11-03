@@ -5,6 +5,7 @@
 ## Unreleased
 
 ### 新增
+- 阶段 C：`LocationBubbleCell` / `TextBubbleMessage.Location` 从上游普通坐标/地点分支裁剪，宿主提供地图 Drawable，保留原地图尺寸/图钉/圆角/标题地址和消息头；`onLocationPressed` 默认兼容既有媒体回调。demo/sample 附件发送位置气泡，无地图 SDK、GPS 或网络依赖。
 - 阶段 C：`MusicBubbleCell` 从上游音乐分支裁剪，复用原播放/进度/菜单布局与动画；新增 `TextBubbleMessage.music(...)`、`musicTitle` / `musicPerformer` / `audioPaused`，宿主控制播放及下载，旧 API 兼容。demo 使用本地 MediaPlayer 实播、暂停/拖动/切曲；sample 接入 AAR 回调，无新增运行依赖。
 - 阶段 C：`ContactBubbleCell` / `TextBubbleMessage.Contact` 从上游联系人分支裁剪；保留头像、姓名/号码、名片侧线和底部动作，支持群聊/回复/转发。`MediaDelegate.onContactAction` 将查看、发送消息、添加交给宿主；demo/sample 附件联系人直接显示名片，无通讯录权限或新依赖，旧 API 兼容。
 - 阶段 C：`ForwardedFrom` 与 `onForwardPressed` 支持宿主提供的转发来源；直接搬运 `ForwardBackground`，从 `ChatMessageCell` / `AvatarSpan` 移植两行头、头像、颜色和几何。接入既有文字/语音/照片/文件/相册/GIF/贴纸/圆视频，纯 emoji 保留大号显示；贴纸和圆视频同时支持旁侧回复。demo/sample 均有示例，旧 API 兼容。

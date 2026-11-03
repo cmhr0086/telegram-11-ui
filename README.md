@@ -256,7 +256,7 @@ new ChatAttachAlert(activity, new ChatAttachAlert.Delegate() {
 
 面板包含相册、文件、联系人、位置和投票页，当前页的选择通过 `Attachment` 模型返回；联系人由 `getContacts()` 提供，位置页通过 `createLocationView(Context, LocationCallback)` 注入宿主地图并回传位置，投票由本地表单创建。`onPermissionResult` 可接收相册权限及部分授权状态。库不读取系统联系人，也不提供地图或上传服务。
 
-相册使用 MediaStore，并按系统版本申请媒体读取权限；Android 14 的部分照片访问可重新选择。文件页使用系统文档选择器，返回的 `Uri` 及其授权取决于提供方；宿主需要处理访问失败，并在需要长期使用时保存可持久授权或复制内容。选择器进行中如果 Activity 重建，待处理选择会取消，需要重新打开。demo 当前将选择的图片和视频以 URI 文字摘要展示；文件使用文件气泡，联系人使用名片气泡，位置和投票显示示例摘要，说明文字单独显示。
+相册使用 MediaStore，并按系统版本申请媒体读取权限；Android 14 的部分照片访问可重新选择。文件页使用系统文档选择器，返回的 `Uri` 及其授权取决于提供方；宿主需要处理访问失败，并在需要长期使用时保存可持久授权或复制内容。选择器进行中如果 Activity 重建，待处理选择会取消，需要重新打开。demo 当前将选择的图片和视频以 URI 文字摘要展示；文件使用文件气泡，联系人使用名片气泡，位置显示地图气泡，投票显示示例摘要，说明文字单独显示。
 
 附件预览是精简列表，不包含 `PhotoViewer` 图片编辑功能；顶部手柄支持拖动，但不包含上游完整的整页联动。贴纸 WEBM 的首帧降级限制见上节。
 
@@ -374,6 +374,29 @@ demo 的 ⋮ “Music messages” 定位三条样例，用系统 `MediaPlayer` �
 
 未移植流式 mini 下载按钮、封面覆盖图、播放列表/后台服务/通知控件和歌词时间戳；说明文字显示样式但没有独立链接点击。音频焦点丢失会暂停，需要用户主动恢复。库只渲染宿主提供的元数据，音轨读取、格式支持和 URI 授权由宿主管理。
 
+### 位置消息
+
+```java
+TextBubbleMessage.Location place = new TextBubbleMessage.Location(latitude, longitude,
+        title, address, mapImage); // title empty: plain coordinates; nonempty: venue card
+TextBubbleMessage message = TextBubbleMessage.location(id, outgoing, time, state, place);
+LocationBubbleCell cell = new LocationBubbleCell(context, resourcesProvider);
+cell.setMessage(message, pinnedTop, pinnedBottom);
+cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+    @Override public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) { }
+    @Override public void onLocationPressed(TextBubbleCell cell, TextBubbleMessage message,
+                                          TextBubbleMessage.Location location) {
+        // Host opens its map or handles the selected coordinates.
+    }
+});
+```
+
+`LocationBubbleCell` 从固定上游 `ChatMessageCell.TYPE_GEO` 的普通坐标与地点分支移植。地图固定 195dp 高、气泡最大 285dp；纯坐标使用媒体背景和图内时间，地点卡片在图下显示 15dp 标题及 13dp 地址。保留原图钉、圆角、群聊/转发/回复、反应和长按选择；无新回调实现时 `onLocationPressed` 默认交给既有 `onMediaPressed`。
+
+地图 `Drawable` 由宿主准备，并按中心裁切；请提供以目标坐标居中、不含图钉的底图，库在中心画原图钉。`mapImage=null` 显示原 `map_placeholder` 的静态回退图，仍可点击；宿主取得图片后替换 `message.location` 并重新绑定。`getMapRect(RectF)` / `getMapRadii()` 提供上次布局的图区域。库不加载地图、不定位、不引入地图 SDK，也不直接启动外部地图应用。
+
+demo 的 ⋮ “Location messages” 有地点、纯坐标及缺图示例；附件位置页选择并确认后直接发送位置气泡。demo 和 sample 的道路图是生成的示意图，坐标 `(0,0)` 仅用于回调演示，不是真实地图服务。暂不含实时位置共享、地图加载渐变/缩放和闪动占位；静态占位采用上游关闭背景动画时的 alpha 70 分支。说明文字通过附件流程作为独立消息发送。
+
 ## 包含的组件
 
 | 类别 | 类 |
@@ -382,6 +405,7 @@ demo 的 ⋮ “Music messages” 定位三条样例，用系统 `MediaPlayer` �
 | 服务消息 | `ChatActionCell` / `ServiceMessage`：加入、邀请、改名、置顶，用户与消息回调 |
 | 群聊消息 | `TextBubbleMessage.Sender` / `MessageGrouping` / `ChatAvatarDecoration`：原配色姓名、头像列、连续消息及滚动吸底头像 |
 | 转发来源 | `TextBubbleMessage.ForwardedFrom` / `ForwardBackground`：普通与无背景媒体来源头、头像、原按压动画、宿主来源回调；贴纸/圆视频旁侧回复 |
+| 位置消息 | `LocationBubbleCell` / `TextBubbleMessage.Location`：宿主地图、纯坐标/地点布局、原图钉与位置回调 |
 | 音乐消息 | `MusicBubbleCell` / `TextBubbleMessage.music(...)`：播放/暂停、拖动、下载状态、说明与宿主回调 |
 | 联系人消息 | `ContactBubbleCell` / `TextBubbleMessage.Contact`：原名片布局、查看/发消息/添加按钮及宿主回调 |
 | 附件面板 | `ChatAttachAlert`、`Attachment`、`AttachmentAccess`：相册、文件、联系人、位置与投票选择及宿主回调 |
@@ -447,7 +471,7 @@ demo 的 ⋮ “Music messages” 定位三条样例，用系统 `MediaPlayer` �
 
 主题 `.attheme` 解析同时接受 LF / CRLF，壁纸二进制偏移按原始字节计算；`.gitattributes` 固定新检出的主题资源为 LF。Windows 上此前出现的夜间文字透明/缺失已修复，设备覆盖打包的 night/darkblue 与两种换行格式。
 
-- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸、GIF、联系人和音乐；已有群聊头像、名字和转发来源；没有位置 / 投票等其它媒体、带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
+- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸、GIF、联系人、音乐和位置；已有群聊头像、名字和转发来源；没有投票等其它媒体、带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 查看器 `MediaViewer`：只是简易版——没有缩略图条、分享 / 保存 / 转发 / 删除菜单、图片编辑、画中画、倍速、静音、视频缩略图预览、横屏全屏按钮、多图相册分组；视频用系统 `MediaPlayer`（格式取决于设备解码器，没有缓冲进度、不循环），播放中不能连续翻页预加载；图片直接画宿主给的 `Drawable`（大图要宿主自己先缩放）；打开 / 关闭动画不处理被 ActionBar 或输入栏遮住的那部分（上游会裁剪），起点用整张图片的位置；平板没有专门布局
 - 输入栏：附件按钮由宿主回调打开 `ChatAttachAlert`；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；没有机器人键盘、命令菜单和 WebView 按钮；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 

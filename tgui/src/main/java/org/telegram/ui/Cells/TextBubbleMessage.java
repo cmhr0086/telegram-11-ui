@@ -59,6 +59,24 @@ public class TextBubbleMessage {
     public static final int TYPE_GIF = 7;
     public static final int TYPE_CONTACT = 8;
     public static final int TYPE_MUSIC = 9;
+    public static final int TYPE_LOCATION = 10;
+
+    /** Host-owned static map and coordinates. The map should not contain a marker. */
+    public static final class Location {
+        public final double latitude, longitude;
+        public final CharSequence title, address;
+        public final Drawable mapImage;
+        public Location(double latitude, double longitude, CharSequence title, CharSequence address, Drawable mapImage) {
+            this.latitude = latitude; this.longitude = longitude;
+            this.title = title; this.address = address; this.mapImage = mapImage;
+        }
+    }
+    public Location location;
+    public static TextBubbleMessage location(long id, boolean isOut, String time, int state, Location location) {
+        if (location == null) throw new IllegalArgumentException("location required");
+        TextBubbleMessage result = new TextBubbleMessage(id, null, isOut, time, state);
+        result.type = TYPE_LOCATION; result.location = location; return result;
+    }
     public CharSequence musicTitle, musicPerformer;
     public static TextBubbleMessage music(long id, boolean isOut, String time, int state,
                                            CharSequence title, CharSequence performer, int duration, CharSequence caption) {
@@ -268,6 +286,10 @@ public class TextBubbleMessage {
                             text = org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.AttachContact);
                         }
                         break;
+                    case TYPE_LOCATION:
+                        text = message.location != null && !android.text.TextUtils.isEmpty(message.location.title)
+                                ? message.location.title : org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.ChatLocation);
+                        break;
                     case TYPE_MUSIC:
                         text = !android.text.TextUtils.isEmpty(message.musicTitle) ? message.musicTitle : org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.AttachMusic);
                         break;
@@ -278,7 +300,9 @@ public class TextBubbleMessage {
             }
             ReplyTo reply = new ReplyTo(message.id, name, text);
             reply.media = media;
-            if (message.type == TYPE_PHOTO) {
+            if (message.type == TYPE_LOCATION && message.location != null) {
+                reply.thumb = message.location.mapImage;
+            } else if (message.type == TYPE_PHOTO) {
                 reply.thumb = message.photo;
             } else if (message.type == TYPE_ROUND_VIDEO) {
                 reply.thumb = message.photo;

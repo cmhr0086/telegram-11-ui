@@ -700,6 +700,10 @@ public class TextBubbleCell extends View {
     public interface MediaDelegate {
         /** The play / download / open button (or the photo, or the file row) was tapped. */
         void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message);
+        /** A static location map was tapped. */
+        default void onLocationPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Location location) {
+            onMediaPressed(cell, message);
+        }
         /** Host action from a contact card; action is one of ContactBubbleCell.ACTION_*. */
         default void onContactAction(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Contact contact, int action) { }
 
@@ -736,6 +740,10 @@ public class TextBubbleCell extends View {
             Theme.key_chat_mediaProgress,
             Theme.key_chat_inFileNameText, Theme.key_chat_outFileNameText, Theme.key_chat_inFileInfoText, Theme.key_chat_outFileInfoText,
             Theme.key_chat_inFileInfoSelectedText, Theme.key_chat_outFileInfoSelectedText,
+            Theme.key_chat_inVenueInfoText, Theme.key_chat_outVenueInfoText,
+            Theme.key_chat_inVenueInfoSelectedText, Theme.key_chat_outVenueInfoSelectedText,
+            Theme.key_chat_inBubbleLocationPlaceholder, Theme.key_chat_outBubbleLocationPlaceholder,
+            Theme.key_chat_inLocationIcon, Theme.key_chat_outLocationIcon,
             Theme.key_chat_inContactBackground, Theme.key_chat_outContactBackground,
             Theme.key_chat_inContactIcon, Theme.key_chat_outContactIcon,
             Theme.key_chat_inMenu, Theme.key_chat_outMenu, Theme.key_chat_inMenuSelected, Theme.key_chat_outMenuSelected,
@@ -1872,13 +1880,17 @@ public class TextBubbleCell extends View {
     protected void drawTimeAndStatus(Canvas canvas) {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
+        int x = out ? layoutWidth - timeWidth - AndroidUtilities.dp(38.5f)
+                : backgroundWidth - AndroidUtilities.dp(9) - timeWidth + incomingAvatarInset();
+        drawTimeAndStatus(canvas, x);
+    }
+
+    /** Draw the normal time and status using the upstream layout's computed time X. */
+    protected void drawTimeAndStatus(Canvas canvas, int x) {
+        final boolean out = message.isOut;
+        final int layoutWidth = getMeasuredWidth();
         final int layoutHeight = getMeasuredHeight();
-        // --- time
-        if (out) {
-            timeX = layoutWidth - timeWidth - AndroidUtilities.dp(38.5f);
-        } else {
-            timeX = backgroundWidth - AndroidUtilities.dp(9) - timeWidth + incomingAvatarInset();
-        }
+        timeX = x;
         Theme.chat_timePaint.setColor(getThemedColor(out ? (drawSelectionBackground ? Theme.key_chat_outTimeSelectedText : Theme.key_chat_outTimeText) : (drawSelectionBackground ? Theme.key_chat_inTimeSelectedText : Theme.key_chat_inTimeText)));
         canvas.save();
         canvas.translate(timeX, layoutHeight - AndroidUtilities.dp(pinnedBottom || pinnedTop ? 7.5f : 6.5f) - timeLayout.getHeight());

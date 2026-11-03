@@ -6162,6 +6162,8 @@ public class Theme {
             chat_infoBoldPaint.setTextSize(dp(12));
             chat_docNamePaint.setTextSize(dp(15));
             chat_audioTimePaint.setTextSize(dp(12));
+            chat_locationTitlePaint.setTextSize(dp(15));
+            chat_locationAddressPaint.setTextSize(dp(13));
             chat_audioTitlePaint.setTextSize(dp(16));
             chat_durationPaint.setTextSize(dp(12));
         }

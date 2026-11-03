@@ -60,15 +60,16 @@ public class PhotoBubbleCell extends TextBubbleCell {
     protected final float[] radii = new float[8];
     private final PhotoRenderer photoRenderer = new PhotoRenderer();
 
-    private int photoWidth, photoHeight;
-    private int photoY;
-    private boolean mediaBackground;
+    protected int photoWidth, photoHeight;
+    protected int photoY;
+    protected boolean mediaBackground;
     private StaticLayout captionLayout;
     private int captionHeight;
-    private int namesOffset;
+    protected int namesOffset;
     private int buttonState = -1;
     private boolean photoPressed;
     private boolean photoTouch;
+    private boolean photoInterceptHeld;
     private float photoTouchX, photoTouchY;
     private Runnable photoLongPress;
     private boolean photoVisible = true;
@@ -88,6 +89,8 @@ public class PhotoBubbleCell extends TextBubbleCell {
 
     @Override
     public void setMessage(TextBubbleMessage message, boolean pinnedTop, boolean pinnedBottom) {
+        resetPhotoTouch();
+        releasePhotoIntercept();
         boolean changed = this.message != message;
         if (changed) {
             photoVisible = true;
@@ -538,6 +541,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         if (message != null && message.type == TextBubbleMessage.TYPE_STICKER && !isCheckBoxVisible() && checkReplyTouchEvent(event)) return true;
         if (message == null || isCheckBoxVisible() || mediaDelegate == null) {
             resetPhotoTouch();
+            releasePhotoIntercept();
             return super.onTouchEvent(event);
         }
         // checkPhotoImageMotionEvent: the photo takes the tap (viewer, or download / cancel) and the long
@@ -555,10 +559,12 @@ public class PhotoBubbleCell extends TextBubbleCell {
                 photoPressed = buttonState != TextBubbleMessage.MEDIA_READY;
                 if (getParent() != null) {
                     getParent().requestDisallowInterceptTouchEvent(true);
+                    photoInterceptHeld = true;
                 }
                 photoLongPress = () -> {
                     photoLongPress = null;
                     resetPhotoTouch();
+                    releasePhotoIntercept();
                     onInteractiveLongPress(false);
                     invalidate();
                 };
@@ -569,19 +575,19 @@ public class PhotoBubbleCell extends TextBubbleCell {
         } else if (photoTouch) {
             if (action == MotionEvent.ACTION_UP) {
                 resetPhotoTouch();
+                releasePhotoIntercept();
                 playSoundEffect(SoundEffectConstants.CLICK);
                 onPhotoPressed(x, y);
                 invalidate();
             } else if (action == MotionEvent.ACTION_CANCEL) {
                 resetPhotoTouch();
+                releasePhotoIntercept();
                 invalidate();
             } else if (action == MotionEvent.ACTION_MOVE) {
                 float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
                 if (!area || Math.abs(x - photoTouchX) > slop || Math.abs(y - photoTouchY) > slop) {
                     resetPhotoTouch();
-                    if (getParent() != null) {
-                        getParent().requestDisallowInterceptTouchEvent(false);
-                    }
+                    releasePhotoIntercept();
                     invalidate();
                     return false;
                 }
@@ -595,12 +601,19 @@ public class PhotoBubbleCell extends TextBubbleCell {
         mediaDelegate.onMediaPressed(this, message);
     }
 
-    private void resetPhotoTouch() {
+    protected void resetPhotoTouch() {
         photoTouch = false;
         photoPressed = false;
         if (photoLongPress != null) {
             removeCallbacks(photoLongPress);
             photoLongPress = null;
+        }
+    }
+
+    protected void releasePhotoIntercept() {
+        if (photoInterceptHeld) {
+            photoInterceptHeld = false;
+            if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
         }
     }
 
@@ -615,5 +628,6 @@ public class PhotoBubbleCell extends TextBubbleCell {
         super.onDetachedFromWindow();
         radialProgress.onDetachedFromWindow();
         resetPhotoTouch();
+        releasePhotoIntercept();
     }
 }

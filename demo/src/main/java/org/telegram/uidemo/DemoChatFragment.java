@@ -104,6 +104,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_FORWARD = 8;
     private static final int MENU_CONTACT = 9;
     private static final int MENU_MUSIC = 20;
+    private static final int MENU_LOCATION = 21;
+    private long firstLocationId;
     private long firstMusicId;
     private long firstContactId;
     private long firstForwardedId;
@@ -261,6 +263,20 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.music_sample_download), null, 12, null);
         downloadSong.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
         addSample(downloadSong);
+        Context sampleContext = ApplicationLoader.applicationContext;
+        TextBubbleMessage venue = TextBubbleMessage.location(nextId++, false, "10:12", TextBubbleMessage.STATE_NONE,
+                new TextBubbleMessage.Location(0, 0, sampleContext.getString(org.telegram.uidemo.R.string.location_sample_title),
+                        sampleContext.getString(org.telegram.uidemo.R.string.location_sample_address), sampleAttachmentMap(sampleContext)));
+        venue.forwardedFrom = source;
+        venue.replyTo = TextBubbleMessage.ReplyTo.of(looksLike, "You");
+        firstLocationId = venue.id;
+        react(venue, "👍", 2, false);
+        addSample(venue);
+        addSample(TextBubbleMessage.location(nextId++, true, "10:12", TextBubbleMessage.STATE_READ,
+                new TextBubbleMessage.Location(0, 0, null, null, sampleAttachmentMap(sampleContext))));
+        addSample(TextBubbleMessage.location(nextId++, false, "10:12", TextBubbleMessage.STATE_NONE,
+                new TextBubbleMessage.Location(0, 0, sampleContext.getString(org.telegram.uidemo.R.string.location_sample_missing),
+                        sampleContext.getString(org.telegram.uidemo.R.string.location_sample_address), null)));
         try {
             LocalEmojiSamples.install(ApplicationLoader.applicationContext);
             addSample(LocalEmojiSamples.text(ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.local_emoji_sample)), false, "10:13", TextBubbleMessage.STATE_NONE);
@@ -502,6 +518,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     scrollToMessage(firstContactId);
                 } else if (id == MENU_MUSIC) {
                     scrollToMessage(firstMusicId);
+                } else if (id == MENU_LOCATION) {
+                    scrollToMessage(firstLocationId);
                 }
             }
         });
@@ -520,6 +538,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.addSubItem(MENU_FORWARD, R.drawable.msg_forward, context.getString(org.telegram.uidemo.R.string.forward_messages));
         otherItem.addSubItem(MENU_CONTACT, R.drawable.msg_addcontact, context.getString(org.telegram.uidemo.R.string.contact_messages));
         otherItem.addSubItem(MENU_MUSIC, R.drawable.bot_music, context.getString(org.telegram.uidemo.R.string.music_messages));
+        otherItem.addSubItem(MENU_LOCATION, R.drawable.msg_location, context.getString(org.telegram.uidemo.R.string.location_messages));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -1143,7 +1162,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 map.setText(org.telegram.uidemo.R.string.attach_sample_map);
                 map.setBackground(sampleAttachmentMap(context));
                 map.setOnClickListener(v -> callback.onLocationSelected(new Attachment.Location(0, 0,
-                        context.getString(org.telegram.uidemo.R.string.attach_sample_location), null)));
+                        context.getString(org.telegram.uidemo.R.string.attach_sample_location), sampleAttachmentMap(context))));
                 return map;
             }
             @Override public void onSend(List<Attachment> selection, CharSequence caption) {
@@ -1154,6 +1173,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     } else if (item.type == Attachment.Type.CONTACT) {
                         appendMessage(TextBubbleMessage.contact(nextId++, true, time, TextBubbleMessage.STATE_SENT,
                                 new TextBubbleMessage.Contact(item.contact.id, item.contact.name, item.contact.phone, item.contact.avatar)));
+                    } else if (item.type == Attachment.Type.LOCATION) {
+                        appendMessage(TextBubbleMessage.location(nextId++, true, time, TextBubbleMessage.STATE_SENT,
+                                new TextBubbleMessage.Location(item.location.latitude, item.location.longitude,
+                                        item.location.title, null, item.location.mapImage)));
                     } else {
                         String description;
                         switch (item.type) {
@@ -1182,7 +1205,6 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         paint.setColor(0xffe7e3cf); paint.setStrokeWidth(18);
         canvas.drawLine(0, 70, 480, 155, paint); canvas.drawLine(105, 0, 195, 240, paint);
         canvas.drawLine(330, 0, 270, 240, paint);
-        paint.setColor(0xffc65050); canvas.drawCircle(240, 120, 14, paint);
         return new android.graphics.drawable.BitmapDrawable(context.getResources(), bitmap);
     }
 
@@ -1365,6 +1387,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     /** What the reply panel / copy shows for a message: the text, or a media label like upstream's MessageObject.messageText. */
     private static CharSequence previewText(TextBubbleMessage message) {
+        if (message.type == TextBubbleMessage.TYPE_LOCATION && message.location != null) {
+            return android.text.TextUtils.isEmpty(message.location.title)
+                    ? ApplicationLoader.applicationContext.getString(R.string.ChatLocation) : message.location.title;
+        }
         if (message.type == TextBubbleMessage.TYPE_MUSIC) {
             return android.text.TextUtils.isEmpty(message.musicTitle)
                     ? ApplicationLoader.applicationContext.getString(R.string.AttachMusic) : message.musicTitle;
@@ -1745,6 +1771,11 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
 
     private final TextBubbleCell.MediaDelegate mediaDelegate = new TextBubbleCell.MediaDelegate() {
+        @Override public void onLocationPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Location location) {
+            if (actionBar.isActionModeShowed()) { processRowSelect(message); return; }
+            Toast.makeText(getParentActivity(), getParentActivity().getString(org.telegram.uidemo.R.string.location_action,
+                    location.latitude, location.longitude), Toast.LENGTH_SHORT).show();
+        }
         @Override public void onContactAction(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Contact contact, int action) {
             if (actionBar.isActionModeShowed()) { processRowSelect(message); return; }
             int label = action == org.telegram.ui.Cells.ContactBubbleCell.ACTION_MESSAGE ? R.string.SharedContactMessage
@@ -1997,6 +2028,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 cell = new DocumentBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_MUSIC) {
                 cell = new org.telegram.ui.Cells.MusicBubbleCell(context, getResourceProvider());
+            } else if (viewType == TextBubbleMessage.TYPE_LOCATION) {
+                cell = new org.telegram.ui.Cells.LocationBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_CONTACT) {
                 cell = new org.telegram.ui.Cells.ContactBubbleCell(context, getResourceProvider());
             } else {
