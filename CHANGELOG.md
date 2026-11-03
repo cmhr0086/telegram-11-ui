@@ -5,6 +5,7 @@
 ## Unreleased
 
 ### 新增
+- 阶段 B：新增 `ChatAttachAlert` 附件面板和 `Attachment` 模型，支持相册、系统文件选择、宿主联系人与位置视图、本地投票，以及说明文字和发送回调。相册按系统版本请求权限，文件 URI 的长期授权与内容读取由宿主处理；Activity 重建会取消待处理的选择，需要重新打开。预览为精简列表，不含图片编辑；顶部拖动未实现上游完整整页联动。demo 将媒体显示为 URI 文字摘要。
 - 阶段 A：宿主 `MediaSource` / `StickerSet` / `Sticker` / `Gif`，本地 WEBP/TGS/GIF 渲染和 WEBM 首帧回退，无新增运行依赖；加载取消、复用隔离、隐藏停止及 detach 释放。
 - `StickerBubbleCell` 透明贴纸/service 时间和 `GifBubbleCell` 自动播放，既有照片布局、状态与媒体回调兼容；新增模型类型不改变旧 API。
 - 原 `EmojiView` 恢复 GIF 比例网格、贴纸包封面/最近/收藏与宿主发送；输入栏透传发送和收藏等回调。`StickersAlert` 包预览、`ContentPreviewViewer` 200ms 长按与 120ms 进出、1300ms 操作菜单。demo/发布 AAR sample 均有可操作页面。
@@ -22,6 +23,8 @@
 - demo：点图片 / 视频打开查看器，可在聊天里所有已下载的图片和视频之间翻页；加了一条 6 秒的示例视频消息（`demo/res/raw/sample_video.mp4`，80 KB）。
 
 ### 修复
+- 修复贴纸/GIF 在发送状态更新时被 RecyclerView 临时 detach/rebind 误暂停：恢复可见绘制时继续当前动画；保留显式暂停。设备回归覆盖完整 TGS 周期、重绑和 GIF 像素推进。
+- 贴纸页收藏/最近标签恢复上游 33×36dp、24dp 图标，包封面恢复 26dp，避免原始 38dp 收藏图标被裁切。
 - 将 demo 与 tgui 的 roadmap_strings.xml 合并回各自 strings.xml。
 - 新预览接线发现普通短按被 RecyclerListView 的拦截解除回调取消，现仅在预览接管手势后解除；设备通过真实触摸分发验证发送隔离。
 - 本地 TGS 解压流在成功和异常路径都显式关闭，避免反复加载依赖 GC 释放 inflater；设备用例补充截断 gzip 与超过 4 MiB 解压上限的回退及宿主原件保留。

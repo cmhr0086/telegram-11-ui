@@ -2,22 +2,33 @@
 
 ## 新任务 A–F（2026-11-03）
 
-用户已合并 PR #1；远端 `dev/ui-lib` 基线为 `3834565`。当前工作分支 `codex/phase-a`。每阶段结束推送并创建目标为 `dev/ui-lib` 的 PR；下阶段从上一阶段分支继续，不等待合并，不自行合并，不改 main。下文旧路线图的“未合并”是当时记录，已由此状态更新。
+用户已合并 PR #1；远端 `dev/ui-lib` 基线为 `3834565`。当前工作分支 `codex/phase-b`，基于阶段 A 的 `909c7ab`。每阶段结束推送并创建目标为 `dev/ui-lib` 的 PR；下阶段从上一阶段分支继续，不等待合并，不自行合并，不改 main。下文旧路线图的“未合并”是当时记录，已由此状态更新。
 
 上游再次核实为 `release-11.4.2-5469`。基线 `:tgui:assembleRelease :demo:assembleDebug` 通过（TEMP/phase-a-baseline.log）。继续复用 tgui、原包名、RecyclerView fork 与 GPL 头，不引入网络层或平行模块。
 
 | 阶段 | 状态 | 剩余工作 |
 | --- | --- | --- |
 | A 贴纸与 GIF | 已完成，限制见下 | PR #2，库/消费端/仪器及 MuMu 真操作通过；WEBM 首帧降级 |
-| B 附件菜单 | 未开始 | ChatAttachAlert、相册权限、多选与各附件页 |
+| B 附件菜单 | 已实现，准备发布 PR | 主体/五页/权限/选择/确认与宿主回调；简化交互和人工补验见下 |
 | C 更多消息 | 未开始 | 群聊、转发、服务消息、更多气泡及键盘 |
 | D 输入增强 | 未开始 | 提及、表情联想、命令、发送预览 |
 | E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
 
-roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A 代码已按功能提交，库/demo、消费端及仪器检查已通过；真实页面操作已通过，已推送并创建 PR #2，不能将未开始的 B–F 计为完成。
+roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A 代码已按功能提交，库/demo、消费端及仪器检查已通过；真实页面操作已通过，已推送并创建 PR #2，不能将 B–F 计为完成。
+
+### 阶段 B 当前交接
+
+- ChatAttachAlert 与 Photo/Document/Contacts/Poll/LocationLayout 均先 tools/pull 再裁剪；只使用本地 Attachment 模型与宿主回调。顶部标签是本任务要求的布局调整；把手拖动展开/折叠，原 BottomSheet 负责弹出/关闭。完整列表与弹窗的上游整页拖拽联动尚未移植，不可声称逐像素相同。
+- AttachmentAccess 发起运行时图片/视频权限，兼容 Android14 选中照片授权；文件使用 ACTION_OPEN_DOCUMENT，联系人不申请系统联系人权限，地图由宿主提供。配置变化销毁 Activity 时取消待处理回调，由新宿主重新打开；不冒用旧 Activity 回调。
+- 相册后台查询 content URI、按时间混排照片视频，选择按 URI 隔离；焦点恢复重新检查授权，权限申请中禁止焦点刷新抢占回调。代码已修单类媒体授权被误当完整权限、前1000图片排除视频、迟到回调和销毁后setter更新。
+- 投票保留255/100与2..10、匿名/多选，无quiz/拖动排序；位置无GPS/live/在线POI。发送前预览为精简确认列表及字幕，未迁移PhotoViewer编辑器。
+- 首轮`:tgui:assembleRelease :demo:assembleDebug`通过（TEMP/phase-b-first.log）；后续修改与新测试尚未最终验收，当前B未提交/未创建PR。
 
 ### 阶段 A 实现及验证记录
+
+- 用户反馈修复（在 phase-b 续接）：收藏图标原图 38dp 被 CENTER 裁切，恢复上游 StickerTabView 的 33×36dp 标签/24dp 图标/26dp 包封面。已新增实测尺寸断言。
+- 发送后贴纸冻结已真实复现：180帧素材停在第46帧，4次bind中3次临时detach，10秒无wrap。根因是isShown在临时detach时为false，使renderer暂停，而fork的attachViewToParent不派发window attach；StickerBubbleCell/GifBubbleCell在真实可见绘制时重新同步动画状态，保留显式暂停、不重置进度。修后完整TGS周期/循环及全部现有仪器通过（TEMP/sticker-fix-device.log），发布库/demo/消费端debug+R8通过；GIF三次临时重绑后继续自然像素切换、TGS显式暂停/恢复/离窗释放的追加回归也通过（TEMP/phase-b-final-device.log）。实际发送后连续截图确认从蛋到小鸭完整运动，TEMP/sticker-sent-fixed{,2}.png。修复提交83b85da与578bcf2。
 
 - 分功能提交：字符串合并 `943f5a2`；宿主模型/本地解码 `1aa016a`；贴纸气泡 `0ddb2f8`；GIF 气泡 `04384fe`；长按预览 `18d12d5`；贴纸包弹窗 `2162c22`；原面板恢复与 demo/host 接线 `c2ae32e`。
 - 原 EmojiView pager 恢复三页，复制上游 ExtendedGridLayoutManager/Size 和原 GIF/贴纸图标；72dp 列、82dp 格、66dp 图像、36dp 包栏及 100dp GIF 行，收藏/最近/包由宿主快照驱动。业务删除与加载由 MediaSource/模型/回调替换，无新增第三方运行依赖。
