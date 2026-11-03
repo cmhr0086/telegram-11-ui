@@ -214,20 +214,20 @@ public class StickerMediaPage extends FrameLayout {
                 LocalMediaView cover = new LocalMediaView(getContext());
                 cover.setSticker(section.stickers.get(0));
                 cover.setAnimating(pageActive);
-                tab.addView(cover, new FrameLayout.LayoutParams(AndroidUtilities.dp(30), AndroidUtilities.dp(30), Gravity.CENTER));
+                tab.addView(cover, new FrameLayout.LayoutParams(AndroidUtilities.dp(26), AndroidUtilities.dp(26), Gravity.CENTER));
                 tabMedia.add(cover);
             } else {
                 icon = new ImageView(getContext());
-                icon.setScaleType(ImageView.ScaleType.CENTER);
+                icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
                 icon.setImageResource(section.icon != 0 ? section.icon : R.drawable.smiles_tab_stickers);
-                tab.addView(icon, new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+                tab.addView(icon, new FrameLayout.LayoutParams(AndroidUtilities.dp(24), AndroidUtilities.dp(24), Gravity.CENTER));
             }
             tab.setOnClickListener(v -> {
                 list.stopScroll();
                 stickerLayout.scrollToPositionWithOffset(section.position, 0);
                 syncSection(section.position);
             });
-            tabs.addView(tab, new LinearLayout.LayoutParams(AndroidUtilities.dp(36), LayoutParams.MATCH_PARENT));
+            tabs.addView(tab, new LinearLayout.LayoutParams(AndroidUtilities.dp(33), LayoutParams.MATCH_PARENT));
             tabViews.add(tab);
             tabIcons.add(icon);
         }
