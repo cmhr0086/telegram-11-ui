@@ -75,7 +75,29 @@ Manifest 里给 Activity 加上
 
 主题切换只刷新在 `getThemeDescriptions()` 里登记过的视图，**没登记的页面不会跟着日夜切换**（要退出再进才变）。聊天页至少要登记 ActionBar 的背景 / 标题 / 按钮颜色、`ChatActivityEnterView.getThemeDescriptions()`，以及一个在聊天颜色 key（`chat_inBubble`、`chat_outBubble`、`chat_messageTextIn` 等）变化时重绘列表的回调；壁纸要监听 `NotificationCenter.didSetNewWallpapper` 后重新 `setBackgroundImage(...)`。写法见 demo 的 `DemoChatFragment` 或 `samples/host-app` 的 `ChatFragment`。
 
-搭聊天页（`ChatInputLayout` + `ChatActivityEnterView` + `TextBubbleCell`）目前要照 demo 自己拼，几个容易漏的步骤：
+开箱即用的聊天页可继承 `org.telegram.ui.ChatFragmentBase`，只需提供原fork `RecyclerView.Adapter` 和输入回调；它复用现有组件，不另造气泡或数据层：
+
+```java
+@Override protected RecyclerView.Adapter createMessageAdapter(Context context) {
+    return new MyMessageAdapter(context, messages); // 宿主拥有的数据与绑定逻辑
+}
+@Override protected ChatActivityEnterView.ChatActivityEnterViewDelegate createInputDelegate() {
+    return new ChatActivityEnterView.ChatActivityEnterViewDelegate() {
+        @Override public void onSendText(CharSequence text, ArrayList<TLRPC.MessageEntity> entities,
+                                         boolean notify, int scheduleDate) {
+            sendFromHost(text, entities, notify, scheduleDate);
+        }
+    };
+}
+@Override protected void configureChat(Context context) {
+    actionBar.setTitle("My chat");
+    // 可选：输入权限/贴纸数据/联想、消息点击、宿主选择模式等。
+}
+```
+
+基类装配 `ChatInputLayout`、fork `RecyclerListView`、从底部排列的布局管理器、气泡动画/群头像及 `ChatActivityEnterView`，统一ActionBar/系统栏padding、壁纸/emoji监听、日夜主题描述、输入面板Back与resume/pause/destroy；重建时释放旧输入和adapter并保留文字草稿/spans/选区。protected `contentView/listView/layoutManager/enterView` 可配置，`createMessageList` / `createInputView` 可定制。`configureChat` 在列表/输入创建之后、ActionBar最后挂载之前执行；每次重建都会调用，数据初始化仍放在 `onFragmentCreate`。覆盖生命周期、通知或主题描述时调用super；选择模式可先消费Back再调用super。业务发送、分页、媒体播放器、权限和数据存储仍归宿主；不会自动存录音草稿、回复/编辑目标或业务选择状态。demo与sample现已改为继承，原宿主直接组装方式仍支持。
+
+保留低层写法（`ChatInputLayout` + `ChatActivityEnterView` + `TextBubbleCell`），自行组装时仍需以下步骤：
 - `actionBar.setAddToContainer(false)`，再 `contentView.addView(actionBar)` + `contentView.setActionBar(actionBar)`；
 - `new ChatInputLayout(context, parentLayout)` → `setContentView(listView)` → 加 `enterView` 后 `setEnterView(enterView)`，最后加 ActionBar；
 - 列表顶部 padding 自己算：`ActionBar.getCurrentActionBarHeight() + AndroidUtilities.statusBarHeight + dp(4)`；
@@ -628,6 +650,7 @@ enterView.showMessageSendPreview(); // optional programmatic entry
 | 表情面板 | `EmojiView`：原 pager 的表情/贴纸/GIF 页（宿主快照和发送回调），表情页保留 Telegram 表情网格（最近使用 + 8 个分类，分类标题 `StickerSetNameCell`）、`EmojiTabsStrip` 分类标签（最近使用 + 8 个分类铺满整行，保留 Lottie 图标动画和选中指示；上游可收起的分类胶囊只在后面跟着表情包标签时才有意义，普通表情分类仍使用整行，媒体包另在贴纸页显示；点标签滚动、滚动时选中标签跟随）、滚动时标签栏和底栏收起、长按带肤色的表情弹出 `EmojiColorPickerWindow`（肤色和最近使用由 `Emoji` 保存）、底栏退格（长按连删）；面板高度沿用输入栏记下的键盘高度（`kbd_height`；第一次弹出键盘前，上游固定用 200dp，tgui 改为按屏幕长边的 38% 估算）。面板弹出 / 收起时，`ChatInputLayout` 像上游 ChatActivity 的 `bottomPanelTranslationYChanged` 那样让输入栏和聊天列表跟着面板一起滑动；键盘弹出 / 收起用 tgui 自己的实现（上游 `AdjustPanLayoutHelper` 每帧改整条视图链高度并重绘壁纸，在 Mate 9 上掉帧严重）：点输入框时先按记下的键盘高度把输入栏和聊天列表抬起，窗口真正 resize 时保持屏幕位置、在抬起动画剩下的时间里到位，只改这两个 view 的 `translationY`；动画期间输入栏下方用表情面板底色填充，看起来是键盘区域升起，而不是输入栏悬在半空（以上是 Android 10 及以下）。Android 11+ 用 `WindowInsetsAnimationCompat` 让输入栏和聊天列表逐帧贴着输入法顶边走，表情面板和键盘互换时输入栏保持不动；`DrawerLayoutContainer` 在输入法动画期间先按较大的可用区域布局，结束时再应用新的 inset，避免跟随中的输入栏被裁掉。宿主需要 `androidx.viewpager:viewpager`（发布的 POM 已带上） |
 | 对话列表 | `DialogCell` + `DialogItem`（上游 `DialogCell` 的 `buildLayout` / `onDraw` 按原数值移植到纯模型：名字 + 时间、两行 / 三行预览（`SharedConfig.useThreeLinesLayout`）、发送者前缀、草稿、媒体预览配色、正在输入行（6 种状态图标，与消息行交叉淡入）、未读计数（数字变化动画）、@ 提及、置顶图标与置顶底色、静音、认证、私密聊天锁、发送中 / 已发送 / 已读勾（切换动画）、发送失败、在线圆点、分隔线；收到 `emojiLoaded` 自己重绘）、`AvatarDrawable`（上游原版：首字母 + 上游配色，收藏夹 / 归档（Lottie）/ 回复等特殊头像）、`DialogsListView`（列表 + 上游 `DialogsItemAnimator`：删除折叠、移动、新增；`setArchivePullDelegate` 开启上游隐藏归档：`SharedConfig.archiveHidden` 时归档行藏在列表上方，下拉出现 `PullForegroundDrawable` 提示条，超过 0.85 行高松手后收成归档头像，滚走后自动再藏起，惯性滑动停在第一个对话）、`DialogsViewPager`（上游 `DialogsActivity` 的两个 ViewPage + 左右拖动翻文件夹，`FilterTabsView.selectTabWithId(id, progress)` 跟随指示条，点标签也滑动切换；宿主在 `onBindPage` 里为文件夹填列表）、`DialogsSwipeController`（上游左滑：归档滑出；归档行左滑“隐藏 / 置顶”归档；置顶 / 已读 / 静音 / 删除回弹并回调，阈值 0.45、Lottie 图标、圆形揭露底色；多选时拖动置顶行排序）、`DialogsActionMode`（长按多选：计数 `NumberTextView`、54dp 图标纵向弹出、ActionBar 渐变成白底、返回键转成 ×、⋮ 溢出菜单；头像上的 `CheckBox2` 勾选）、`FilterTabsView`（上游文件夹标签原版：指示条动画、计数、编辑拖动）、`DialogsFloatingButton`（写消息圆形按钮，下滑隐藏 / 上拉出现）、`DialogsSearchController` + `DialogsSearchView`（上游对话搜索：放大镜展开搜索框，文件夹标签淡出收起、写消息按钮隐藏，列表缩到 0.9 淡出、搜索页从 1.05 淡入，有最近记录时白色搜索栏从放大镜处圆形展开；空查询显示 `HintDialogCell` 头像横排和带 “Clear” 的 Recent 分组，有查询显示 `GraySectionCell` 分组下的 `ProfileSearchCell`（名字高亮）和消息结果 `DialogCell`（匹配文字高亮），没有结果显示上游样式的空状态；结果由宿主异步回调）、`DrawerMenuView` + `DrawerProfileCell` + `DrawerActionCell`（侧边抽屉：头像、名字、电话、日 / 夜切换太阳月亮 Lottie → `TelegramUI.toggleDayNight`，菜单项由宿主提供）。用法见 demo 的 `DemoDialogsFragment` |
 | 个人资料 | `ProfileFragment`（上游 `ProfileActivity` 的用户资料页：可折叠头部——头像 / 名字 / 状态随滚动缩放并收进 ActionBar，下拉把头像展开成全宽正方形、名字和状态落在渐变上，松手吸附；写消息浮动按钮的显示 / 隐藏动画；信息行用 `TextDetailCell`、`NotificationsCheckCell`、`TextCell`、红色操作行、`ShadowSectionCell`；⋮ 菜单项和点击回调由宿主提供；滑动返回和日夜切换与其它页面一致） |
+| 聊天页基类 | `ChatFragmentBase`：复用既有列表/输入/壁纸/主题与生命周期，宿主提供adapter和输入回调；demo/sample接入，原直接组装仍可用 |
 | 媒体查看器 | `MediaViewer`（简易全屏图片 / 视频查看器，不是 `PhotoViewer` 移植，只借用上游的外观和手势数值：从气泡图片位置放大打开、缩回关闭（200ms DecelerateInterpolator），下拉 30dp 后跟手、超过 1/6 屏高关闭、背景按 `max(127, 255 × (1 − |dy| / (宽/4)))` 变淡；双指缩放和双击放大到 3 倍（以手指为中心）、放大后拖动带边界回弹；左右翻页（超过 1/3 屏宽或 650dp/s，页间 15dp，250ms DecelerateInterpolator(1.5)）；0x7f000000 顶栏（返回、发送者、日期和“n of m”）和底部说明文字，单击显示 / 隐藏；搬入上游 `GroupedPhotosListView`，相册缩略图点击/拖动与翻页同步，分享/保存/删除由宿主按页授权并回调；视频用系统 `MediaPlayer` + `TextureView`，64dp 播放按钮、播放 / 暂停、可拖动进度条和“当前 / 总时长”、上游倍速滑条/预设与观看静音；Android 9 到 16 边到边，按系统栏和刘海留出顶栏 / 底栏） |
 | 消息菜单与多选 | `MessageContextMenu`：上游 `ChatActivity.createMenu()` 的消息菜单按原数值移植到纯模型——全屏 0.2 黑色遮罩（`dimBehindView`，EASE_OUT_QUINT 320ms），被长按的气泡画在遮罩之上（裁到列表顶部以下）；`ActionBarPopupWindow` + `ActionBarMenuSubItem` 行（`popup_fixed_alert` 背景、200dp 最小宽度、220ms 收起），位置按上游算法以触点为锚、左右 / 上下夹在屏幕内；上方是 `ReactionsContainerLayout` 样式的反应条（药丸 + 阴影 + 两个小气泡圆点，250ms `OvershootInterpolator(0.5)` 从右向左展开，菜单随之放大淡入，表情按上游延迟依次弹出），表情是 `Emoji` 绘制的静态 Telegram 表情（默认 👍 👎 ❤ 🔥 🥰 👏）。用法：`new MessageContextMenu(context, resourcesProvider).addItem(icon, text, [destructive,] onClick)…setReactions(…).setDelegate(…).show(cell, touchX, touchY)`；颜色每次打开时按当前主题取，日夜都跟随。`setSelectedReactions(message)`（或传 emoji 集合）把已选的反应在反应条里画成上游的样子（`key_listSelector` 圆底、表情缩到 0.76）。和上游 ChatActivity 一样：**单击**消息打开这个菜单，**长按**进入多选；消息列表要 `setInstantClick(true)` + `setDisableHighlightState(true)`（不显示列表点按水波）。多选的单元格部分在 `TextBubbleCell.setCheckBoxVisible / setChecked`（上游 `ChatMessageCell`：21dp `CheckBoxBase` 从左侧滑入、来信气泡右移 35dp、200ms EASE_OUT / EASE_IN，选中时整行 `chat_selectedBackground` 高亮、气泡换成 Selected 颜色、时间用 `*TimeSelectedText`）；ActionMode 本身由宿主搭（demo 的 `DemoChatFragment` 照搬 `createActionMode` / `createBottomMessagesActionButtons`：数量 `NumberTextView`、编辑（单选自己的消息时）/ 复制 / 转发 / 删除图标及 250ms 纵向弹出、返回键变 ×、输入栏换成底部“回复 / 转发”栏，单击切换选中、长按后拖动连选 `RecyclerListView.startMultiselect`）。demo 菜单：回复、复制、编辑（仅自己的消息）、删除（带列表动画）、点反应条里的表情给消息加 / 换 / 取消反应（`toggleReaction` + `notifyItemChanged`，气泡里的胶囊带动画变化）；气泡里的胶囊单击同样切换，长按弹出计数提示 |
 | 撤销提示 | `UndoView`：归档/删除（单项和批量）、5 秒期限、删除倒计时圆环、归档动画，apply/undo 由宿主回调 |

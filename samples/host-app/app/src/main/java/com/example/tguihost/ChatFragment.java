@@ -20,7 +20,7 @@ import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenu;
 import org.telegram.ui.ActionBar.BackDrawable;
-import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.ChatFragmentBase;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Cells.TextBubbleCell;
@@ -55,7 +55,7 @@ import java.util.Locale;
 import java.util.List;
 
 /** Chat screen: wallpaper, TextBubbleCell messages, ChatActivityEnterView, tap menu, long-press multi-select. */
-public class ChatFragment extends BaseFragment implements NotificationCenter.NotificationCenterDelegate {
+public class ChatFragment extends ChatFragmentBase {
 
     private static final int MENU_NIGHT = 1;
     private static final int ACTION_DELETE = 10;
@@ -66,10 +66,6 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.US);
     private long nextId = 1;
 
-    private ChatInputLayout contentView;
-    private RecyclerListView listView;
-    private LinearLayoutManager layoutManager;
-    private ChatActivityEnterView enterView;
     private NumberTextView selectedCount;
     private EmojiView emojiPanel;
     private org.telegram.ui.MediaViewer mediaViewer;
@@ -86,8 +82,6 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
 
     @Override
     public boolean onFragmentCreate() {
-        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.emojiLoaded);
-        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.didSetNewWallpapper);
         add("Hi! This chat runs from the published AAR.", false, TextBubbleMessage.STATE_NONE);
         add("Tap a bubble for the menu, long-press to select.", false, TextBubbleMessage.STATE_NONE);
         add("Looks like Telegram 🙂", true, TextBubbleMessage.STATE_READ);
@@ -172,11 +166,6 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
     @Override
     public void onFragmentDestroy() {
         if (mediaViewer != null) mediaViewer.close(false);
-        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.emojiLoaded);
-        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.didSetNewWallpapper);
-        if (enterView != null) {
-            enterView.onDestroy();
-        }
         super.onFragmentDestroy();
     }
 
@@ -308,46 +297,18 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         actionBar.createMenu().addItem(2, R.drawable.msg_emoji_smiles)
                 .setContentDescription(context.getString(com.example.tguihost.R.string.local_emoji_insert));
 
-        contentView = new ChatInputLayout(context, parentLayout);
-        contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
-        fragmentView = contentView;
+        return super.createView(context);
+    }
 
-        listView = new RecyclerListView(context);
-        layoutManager = new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false);
-        layoutManager.setStackFromEnd(true);
-        listView.setLayoutManager(layoutManager);
-        listView.setItemAnimator(new ChatBubbleItemAnimator());
-        listView.addItemDecoration(new org.telegram.ui.Cells.ChatAvatarDecoration());
-        listView.setClipToPadding(false);
-        listView.setPadding(0, ActionBar.getCurrentActionBarHeight() + AndroidUtilities.statusBarHeight + AndroidUtilities.dp(4), 0, AndroidUtilities.dp(3));
-        listView.setAdapter(new Adapter(context));
-        listView.setInstantClick(true);
-        listView.setDisableHighlightState(true);
-        listView.setOnItemClickListener((RecyclerListView.OnItemClickListenerExtended) (view, position, x, y) -> {
-            if (position < 0 || position >= messages.size()) {
-                return;
-            }
-            if (actionBar.isActionModeShowed()) {
-                toggle(messages.get(position));
-            } else {
-                showMenu(view, messages.get(position), x, y);
-            }
-        });
-        listView.setOnItemLongClickListener((RecyclerListView.OnItemLongClickListenerExtended) (view, position, x, y) -> {
-            if (position < 0 || position >= messages.size()) {
-                return false;
-            }
-            if (!actionBar.isActionModeShowed()) {
-                showActionMode();
-            }
-            toggle(messages.get(position));
-            return true;
-        });
-        contentView.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
-        contentView.setContentView(listView);
+    @Override
+    protected RecyclerView.Adapter createMessageAdapter(Context context) {
+        return new Adapter(context);
+    }
 
-        enterView = new ChatActivityEnterView(getParentActivity(), contentView, this, true, getResourceProvider());
-        enterView.setDelegate(new ChatActivityEnterView.ChatActivityEnterViewDelegate() {
+    @Override
+    protected ChatActivityEnterView.ChatActivityEnterViewDelegate createInputDelegate() {
+        Context context = getParentActivity();
+        return new ChatActivityEnterView.ChatActivityEnterViewDelegate() {
             @Override public void onReplyKeyboardButtonPressed(ReplyKeyboard keyboard, ReplyKeyboard.Button button) { onReplyKeyboardButton(keyboard, button); }
             @Override
             public void onSendText(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate) {
@@ -369,11 +330,35 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             @Override public void onStickerFavoriteChanged(Sticker sticker, boolean favorite) { setFavorite(sticker, favorite); }
             @Override public void onGifRemoved(Gif gif) { localGifs.remove(gif); updateMediaPanel(); }
             @Override public void didPressAttachButton() { showAttachments(); }
+        };
+    }
+
+    @Override
+    protected void configureChat(Context context) {
+        listView.setOnItemClickListener((RecyclerListView.OnItemClickListenerExtended) (view, position, x, y) -> {
+            if (position < 0 || position >= messages.size()) {
+                return;
+            }
+            if (actionBar.isActionModeShowed()) {
+                toggle(messages.get(position));
+            } else {
+                showMenu(view, messages.get(position), x, y);
+            }
         });
+        listView.setOnItemLongClickListener((RecyclerListView.OnItemLongClickListenerExtended) (view, position, x, y) -> {
+            if (position < 0 || position >= messages.size()) {
+                return false;
+            }
+            if (!actionBar.isActionModeShowed()) {
+                showActionMode();
+            }
+            toggle(messages.get(position));
+            return true;
+        });
+
+
         enterView.setAllowStickersAndGifs(true, true, true);
         enterView.setRecordButtonVisible(false);
-        contentView.addView(enterView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
-        contentView.setEnterView(enterView);
         enterView.setReplyKeyboard(sampleReplyKeyboard(context, true, false), false);
         enterView.setMessageEffects(java.util.Collections.singletonList(
                 new org.telegram.ui.Components.MessageEffect(1, "🐥", 90001)));
@@ -414,9 +399,6 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             }
         });
 
-        contentView.addView(actionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
-        contentView.setActionBar(actionBar);
-        return fragmentView;
     }
 
     private static ReplyKeyboard sampleReplyKeyboard(Context context, boolean resize, boolean singleUse) {
@@ -672,52 +654,18 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
     }
 
     @Override
-    public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.emojiLoaded && listView != null) {
-            Emoji.invalidateAll(listView);
-        } else if (id == NotificationCenter.didSetNewWallpapper && contentView != null) {
-            if (!Theme.isAnimatingColor()) {
-                contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
-            }
-            contentView.invalidateBackground();
-            listView.invalidateViews();
-        }
-    }
-
-    @Override
     public boolean onBackPressed() {
         if (actionBar.isActionModeShowed()) {
             clearSelection();
-            return false;
-        }
-        if (enterView != null && (enterView.botCommandsMenuIsShowing() || enterView.isPopupShowing())) {
-            enterView.hidePopup(true);
             return false;
         }
         return super.onBackPressed();
     }
 
     @Override
-    public void onResume() {
-        super.onResume();
-        if (contentView != null) {
-            contentView.onResume();
-        }
-        if (enterView != null) {
-            enterView.onResume();
-        }
-    }
-
-    @Override
     public void onPause() {
         super.onPause();
         if (mediaViewer != null) mediaViewer.close(false);
-        if (contentView != null) {
-            contentView.onPause();
-        }
-        if (enterView != null) {
-            enterView.onPause();
-        }
     }
 
     /** Without this the chat screen keeps its old colours when the theme is switched. */

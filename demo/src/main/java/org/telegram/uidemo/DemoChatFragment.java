@@ -36,7 +36,7 @@ import org.telegram.ui.ActionBar.ActionBarMenu;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
 import org.telegram.ui.ActionBar.BackDrawable;
-import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.ChatFragmentBase;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Cells.TextBubbleCell;
@@ -90,7 +90,7 @@ import java.util.List;
  * (ChatActivityEnterView): formatting menu, emoji/keyboard switch, voice recording with
  * slide-to-cancel and lock, the recorded-voice preview, the reply / edit panel and send options.
  */
-public class DemoChatFragment extends BaseFragment implements NotificationCenter.NotificationCenterDelegate {
+public class DemoChatFragment extends ChatFragmentBase {
 
     private static final String[] REPLIES = {
             "Nice 👍",
@@ -139,10 +139,6 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     private ActionBarMenuItem nightItem;
     private ActionBarMenuSubItem recordButtonItem;
-    private ChatInputLayout contentView;
-    private RecyclerListView listView;
-    private LinearLayoutManager layoutManager;
-    private ChatActivityEnterView enterView;
     private LocalStickerSamples stickerSamples;
     private EmojiView mediaPanel;
     private ChatInputTopPanel topPanel;
@@ -189,7 +185,6 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     @Override
     public boolean onFragmentCreate() {
-        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.didSetNewWallpapper);
         ChatSounds.preload();
         TextBubbleMessage.ForwardedFrom source = new TextBubbleMessage.ForwardedFrom(-100,
                 ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.forward_source_name));
@@ -380,10 +375,6 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     @Override
     public void onFragmentDestroy() {
-        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.didSetNewWallpapper);
-        if (enterView != null) {
-            enterView.onDestroy();
-        }
         for (Runnable completion : pollCompletions) AndroidUtilities.cancelRunOnUIThread(completion);
         pollCompletions.clear();
         for (Runnable completion : inlineCompletions) AndroidUtilities.cancelRunOnUIThread(completion);
@@ -642,11 +633,12 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.addSubItem(MENU_BOT_COMMANDS, R.drawable.input_bot2, context.getString(org.telegram.uidemo.R.string.bot_commands_menu));
         otherItem.addSubItem(MENU_SEND_PREVIEW, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.send_preview_menu));
 
-        contentView = new ChatInputLayout(context, parentLayout);
-        contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
-        fragmentView = contentView;
+        return super.createView(context);
+    }
 
-        listView = new RecyclerListView(context) {
+    @Override
+    protected RecyclerListView createMessageList(Context context) {
+        return new RecyclerListView(context) {
             @Override
             protected void onLayout(boolean changed, int l, int t, int r, int b) {
                 super.onLayout(changed, l, t, r, b);
@@ -654,15 +646,20 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 invalidateViews();
             }
         };
-        layoutManager = new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false);
-        layoutManager.setStackFromEnd(true);
-        listView.setLayoutManager(layoutManager);
-        listView.setItemAnimator(new ChatBubbleItemAnimator());
-        listView.addItemDecoration(new ChatAvatarDecoration());
-        listView.setVerticalScrollBarEnabled(true);
-        listView.setClipToPadding(false);
-        listView.setPadding(0, ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + AndroidUtilities.dp(4), 0, AndroidUtilities.dp(3));
-        listView.setAdapter(new Adapter(context));
+    }
+
+    @Override
+    protected RecyclerView.Adapter createMessageAdapter(Context context) {
+        return new Adapter(context);
+    }
+
+    @Override
+    protected ChatActivityEnterView.ChatActivityEnterViewDelegate createInputDelegate() {
+        return new EnterViewDelegate();
+    }
+
+    @Override
+    protected void configureChat(Context context) {
         listView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
@@ -703,24 +700,18 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             startMultiselect(position);
             return true;
         });
-        contentView.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         // sticky date while scrolling (ChatActivity floatingDateView, 4dp under the action bar)
         floatingDateView = new ChatActionCell(context, getResourceProvider());
         floatingDateView.setFloating(true);
         floatingDateView.setAlpha(0f);
-        contentView.addView(floatingDateView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.LEFT, 0, 4, 0, 0));
+        contentView.addView(floatingDateView, contentView.indexOfChild(enterView), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.LEFT, 0, 4, 0, 0));
         floatingDateView.setTranslationY(ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0));
-        contentView.setContentView(listView);
         roundPlayer = new LocalRoundVideoPlayer(contentView, listView);
         musicPlayer = new LocalMusicPlayer(context, this::refreshMusic);
 
-        enterView = new ChatActivityEnterView(getParentActivity(), contentView, this, true, getResourceProvider());
-        enterView.setDelegate(new EnterViewDelegate());
         enterView.setAllowStickersAndGifs(true, true, true);
         enterView.setDialogId(777, UserConfig.selectedAccount);
         enterView.setRoundVideoEnabled(true);
-        contentView.addView(enterView, contentView.getChildCount(), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
-        contentView.setEnterView(enterView);
         enterView.setReplyKeyboard(sampleReplyKeyboard(context, true, false), false);
         enterView.setMessageEffects(java.util.Arrays.asList(
                 new org.telegram.ui.Components.MessageEffect(1, "🐥", LocalEmojiSamples.JSON_ID),
@@ -795,9 +786,6 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         bottomMessagesActionContainer.setOnTouchListener((v, event) -> true);
         contentView.addView(bottomMessagesActionContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 51, Gravity.BOTTOM));
 
-        contentView.addView(actionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
-        contentView.setActionBar(actionBar);
-        return fragmentView;
     }
 
     // ---- selection mode (ChatActivity.createActionMode / createBottomMessagesActionButtons / createMenu's
@@ -1533,14 +1521,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.didSetNewWallpapper && contentView != null) {
-            if (!Theme.isAnimatingColor()) {
-                contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
-            }
-            contentView.invalidateBackground();
-            listView.invalidateViews();
-            floatingDateView.invalidate();
-        }
+        super.didReceivedNotification(id, account, args);
+        if (id == NotificationCenter.didSetNewWallpapper && floatingDateView != null) floatingDateView.invalidate();
     }
 
     @Override
@@ -1549,22 +1531,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             clearSelection();
             return false;
         }
-        if (enterView != null && (enterView.botCommandsMenuIsShowing() || enterView.isPopupShowing())) {
-            enterView.hidePopup(true);
-            return false;
-        }
         return super.onBackPressed();
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (contentView != null) {
-            contentView.onResume();
-        }
-        if (enterView != null) {
-            enterView.onResume();
-        }
     }
 
     @Override
@@ -1572,12 +1539,6 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         super.onPause();
         if (roundPlayer != null) roundPlayer.stop();
         if (musicPlayer != null) musicPlayer.stop();
-        if (contentView != null) {
-            contentView.onPause();
-        }
-        if (enterView != null) {
-            enterView.onPause();
-        }
     }
 
     @Override

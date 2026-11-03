@@ -2,7 +2,7 @@
 
 ## 新任务 A–F（2026-11-03）
 
-用户已合并 PR #1；远端 `dev/ui-lib` 基线为 `3834565`。当前工作分支 `codex/phase-e`，基于阶段 D 的 `a1a95a4`。每阶段结束推送并创建目标为 `dev/ui-lib` 的 PR；下阶段从上一阶段分支继续，不等待合并，不自行合并，不改 main。下文旧路线图的“未合并”是当时记录，已由此状态更新。
+用户已合并 PR #1；远端 `dev/ui-lib` 基线为 `3834565`。当前工作分支 `codex/phase-f`，基于阶段 E 的 `62589a9`。每阶段结束推送并创建目标为 `dev/ui-lib` 的 PR；下阶段从上一阶段分支继续，不等待合并，不自行合并，不改 main。下文旧路线图的“未合并”是当时记录，已由此状态更新。
 
 上游再次核实为 `release-11.4.2-5469`。基线 `:tgui:assembleRelease :demo:assembleDebug` 通过（TEMP/phase-a-baseline.log）。继续复用 tgui、原包名、RecyclerView fork 与 GPL 头，不引入网络层或平行模块。
 
@@ -13,9 +13,19 @@
 | C 更多消息 | 已完成，限制见下 | PR #4；11项功能已实现，库/消费端/完整设备回归通过，人工补验见各项记录 |
 | D 输入增强 | 已完成，限制见下 | PR #5；@提及、表情联想、命令菜单和发送预览，库/消费端/完整MuMu回归通过 |
 | E 查看器升级 | 已完成，限制见下 | PR #6；缩略图/相册、宿主菜单、倍速/静音，库/消费端/完整设备回归通过 |
-| F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
+| F 聊天页与资料页 | 进行中 | ChatFragmentBase及demo/sample已接入，验证中；群组频道资料待做 |
 
-roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；阶段 C 已完成本任务的11项功能，PR #4已转为可审查；阶段D四项、阶段E三项已完成，F未开始。
+roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；阶段 C 已完成本任务的11项功能，PR #4已转为可审查；阶段D四项、阶段E三项已完成，F进行中。
+
+### 阶段 F 当前交接
+
+- 62589a9已推送且PR #6转ready，仍未合并。已从该提交创建codex/phase-f；第一项ChatFragmentBase门槛通过，下一项群组/频道资料待实现。
+- 从现有demo/sample搬提组件装配为ChatFragmentBase，保留原类与包名、fork RecyclerView、GPL；不造新气泡/数据模型/业务层。宿主实现createMessageAdapter/createInputDelegate，可配置configureChat/createMessageList/createInputView。原直接组装不删除。
+- 基类统一列表/input/actionbar、动态顶部padding、壁纸/emoji监听/主题描述、Back弹层与生命周期，clearViews重建保留文字草稿/spans/选区并释放旧input/adapter。demo/sample改为继承并去掉重复装配和生命周期调用，保留自定义列表、浮动日期、选择模式、媒体播放器、全部adapter和回调。
+- 输入顶栏动画此前仅通知宿主delegate，现ChatActivityEnterView内部同步ChatInputLayout列表/建议面板位移；不包代理或重复派发bottomPanel，不改原宿主top回调参数/次数。审查补齐IME动画和顶栏动画叠加，避免两条路径覆盖列表位移。
+- ChatFragmentDeviceChecks通过真实Activity导航验证发送、草稿/spans/选区重建、旧input恰好销毁一次/旧adapter释放、顶栏动画回调及键盘位移叠加、Back先关闭emoji、暂停恢复与销毁。首次顶栏测试失败因fixture在首次窗口测量后才addTopView，漏传尺寸；补齐真实尺寸通知后保持原断言通过。最终库release/demo/test/publish通过（TEMP/phase-f-chat-verified-build.log），专项phase-f-chat-verified-device.log通过；完整回归phase-f-chat-full-device.log通过（IME叠加修复前），修复后的完整回归进行中。
+- 最终IME叠加修复后完整MuMu回归通过（phase-f-chat-verified-full-device.log），包含A–E旧检查、TGS完整末段/回卷后续播及收藏尺寸；独立宿主debug/R8通过（phase-f-chat-verified-host.log）。
+- 真操作demo发送“Base chat test”、长按GIF选择、回复顶栏、日夜切换及取消回复后恢复列表均正常。截图TEMP/f-chat.png、f-chat-select.png、f-chat-reply-night.png、f-chat-return-day.png。sample的debug/R8 APK已安装，但列表及主题按钮均不响应触摸，正在定位，尚不记为宿主运行验收通过；其编译门槛通过，旧列表本轮未改，不将未定位现象归因于R8。
 
 ### 阶段 E 当前交接
 
