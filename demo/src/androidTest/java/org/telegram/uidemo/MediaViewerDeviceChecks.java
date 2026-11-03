@@ -28,6 +28,7 @@ public final class MediaViewerDeviceChecks {
     private final ArrayList<MediaViewer.Item> items=new ArrayList<>();
     private int actionCalls; private MediaViewer.Action lastAction; private int lastActionIndex; private MediaViewer.Item lastActionItem;
     private boolean allowAll,closeInCallback,reopenInCallback;
+    private int speedEvents,muteEvents,speedErrors; private float lastSpeed; private boolean lastMuted;
     private MediaViewerDeviceChecks(Instrumentation i,Activity a){instrumentation=i;activity=a;}
     public static void run(Instrumentation instrumentation,Activity activity) throws Exception {
         MediaViewerDeviceChecks t=new MediaViewerDeviceChecks(instrumentation,activity);
@@ -41,7 +42,7 @@ public final class MediaViewerDeviceChecks {
             t.main(t::openLongGroup);SystemClock.sleep(400);t.main(t::longGroupChecks);
             t.main(t::openVideoGroup);SystemClock.sleep(400);t.main(t::tapVideo);
             t.awaitVideo();t.main(t::openVideoGroup);SystemClock.sleep(400);t.main(t::scrollVideo);t.awaitVideo();
-            t.menuChecks();
+            t.menuChecks();t.playbackPreferenceChecks();
         } finally {t.main(()->{if(t.viewer!=null&&t.viewer.isShowing())t.viewer.close(false);});}
     }
     private void main(Runnable action){AtomicReference<Throwable> e=new AtomicReference<>();instrumentation.runOnMainSync(()->{try{action.run();}catch(Throwable t){e.set(t);}});if(e.get()!=null)throw new AssertionError("media viewer checks",e.get());}
@@ -236,6 +237,115 @@ public final class MediaViewerDeviceChecks {
             check(actionCalls==4&&lastAction==MediaViewer.Action.SAVE&&!viewer.isShowing(),"host callback may close viewer");
             closingRow.performClick();check(actionCalls==4,"closed viewer rejects old row");});
         main(()->{viewer.openActionsMenu();check(!viewer.isShowing(),"closed viewer cannot reopen menu");});
+    }
+
+    private void playbackPreferenceChecks() throws Exception {
+        final android.net.Uri uri=android.net.Uri.parse("android.resource://"+activity.getPackageName()+"/"+R.raw.sample_video);
+        main(()->{
+            MediaViewer.Item a=MediaViewer.Item.video(uri,new ColorDrawable(Color.BLUE),"S","D",null);
+            MediaViewer.Item b=MediaViewer.Item.video(uri,new ColorDrawable(Color.RED),"S","D",null);
+            viewer=MediaViewer.open(activity,Arrays.asList(a,b),0,new MediaViewer.Provider(){
+                @Override public void onPlaybackSpeedChanged(float value){speedEvents++;lastSpeed=value;}
+                @Override public void onMutedChanged(boolean value){muteEvents++;lastMuted=value;}
+                @Override public void onPlaybackSpeedError(float requested){speedErrors++;}
+            });
+        });
+        waitPrepared();
+        SystemClock.sleep(350);
+        playbackMenuChecks();
+        main(()->{
+            check(viewer.isPlaybackSpeedSupported()==(android.os.Build.VERSION.SDK_INT>=23),"SDK speed support");
+            int before=speedEvents;
+            check(!viewer.setPlaybackSpeed(Float.NaN)&&!viewer.setPlaybackSpeed(Float.POSITIVE_INFINITY)
+                    &&!viewer.setPlaybackSpeed(.1f)&&!viewer.setPlaybackSpeed(3.1f)&&speedEvents==before,"invalid speeds rejected");
+        });
+        if(android.os.Build.VERSION.SDK_INT>=23){
+            for(float speed:new float[]{.5f,1.5f,2f}){
+                final int[] start={0};
+                main(()->{check(viewer.setPlaybackSpeed(speed),"accepted speed "+speed);
+                    android.media.MediaPlayer p=(android.media.MediaPlayer)field(viewer,"player");
+                    check(p.isPlaying()&&Math.abs(p.getPlaybackParams().getSpeed()-speed)<.01f&&Math.abs(viewer.getPlaybackSpeed()-speed)<.01f,"native playing speed "+speed);
+                    start[0]=p.getCurrentPosition();});
+                SystemClock.sleep(400);
+                main(()->{android.media.MediaPlayer p=(android.media.MediaPlayer)field(viewer,"player");
+                    check(p.isPlaying()&&p.getCurrentPosition()>start[0]+60,"position advances at speed "+speed);});
+            }
+            main(()->{
+                ((View)field(viewer,"playPauseView")).performClick();android.media.MediaPlayer p=(android.media.MediaPlayer)field(viewer,"player");
+                check(!p.isPlaying(),"pause player");check(viewer.setPlaybackSpeed(.5f),"set speed while paused");
+                check(!p.isPlaying(),"changing paused speed does not start playback");
+                viewer.setMuted(true);check(viewer.isMuted()&&lastMuted&&muteEvents>0,"mute state and callback");
+                viewer.setMuted(false);check(!viewer.isMuted()&&!lastMuted,"unmute state and callback");
+                ((View)field(viewer,"playPauseView")).performClick();
+                check(p.isPlaying()&&Math.abs(p.getPlaybackParams().getSpeed()-.5f)<.01f,"resume applies paused speed");
+                viewer.setMuted(true);viewer.setCurrentIndex(1);
+                check(viewer.isMuted()&&Math.abs(viewer.getPlaybackSpeed()-.5f)<.01f,"same viewer retains preferences on next video");
+            });
+            waitPrepared();
+            main(()->{
+                android.media.MediaPlayer p=(android.media.MediaPlayer)field(viewer,"player");
+                check(p.isPlaying()&&Math.abs(p.getPlaybackParams().getSpeed()-.5f)<.01f,"new video applies retained speed");
+                p.seekTo(Math.max(0,p.getDuration()-150));
+            });
+            boolean finished=false;for(int i=0;i<120&&!finished;i++){
+                boolean[] done={false};main(()->done[0]=(Boolean)field(viewer,"playerFinished"));finished=done[0];if(!finished)SystemClock.sleep(50);
+            }
+            check(finished,"video reaches completed state");
+            main(()->{android.media.MediaPlayer p=(android.media.MediaPlayer)field(viewer,"player");
+                check(viewer.setPlaybackSpeed(1.5f)&&!p.isPlaying(),"completed speed change does not restart");
+                check(speedEvents>0&&speedErrors==0&&Math.abs(lastSpeed-1.5f)<.01f,"speed notifications");});
+        }
+        main(()->{viewer.close(false);check(field(viewer,"player")==null,"closing releases player");});
+    }
+    private org.telegram.ui.ActionBar.ActionBarMenuItem playbackMenu(){
+        return (org.telegram.ui.ActionBar.ActionBarMenuItem)field(viewer,"playbackMenu");
+    }
+    private void awaitPlaybackMenu(){
+        boolean shown=false;
+        for(int i=0;i<80&&!shown;i++){
+            boolean[] state={false};main(()->state[0]=playbackMenu().isSubMenuShowing());
+            shown=state[0];if(!shown)SystemClock.sleep(20);
+        }
+        check(shown,"real playback submenu opens");
+    }
+    private void playbackMenuChecks(){
+        main(()->viewer.openPlaybackMenu());awaitPlaybackMenu();
+        if(android.os.Build.VERSION.SDK_INT>=23){
+            main(()->{
+                View[] rows=(View[])field(field(viewer,"speedButtons"),"speedItems");
+                int before=speedEvents;rows[3].performClick();
+                check(speedEvents==before+1&&Math.abs(lastSpeed-1.5f)<.01f
+                        &&Math.abs(viewer.getPlaybackSpeed()-1.5f)<.01f,"speed menu selects 1.5x");
+            });
+            main(()->viewer.openPlaybackMenu());awaitPlaybackMenu();
+        }
+        main(()->{
+            int before=muteEvents;((View)field(viewer,"muteMenuItem")).performClick();
+            check(viewer.isMuted()&&lastMuted&&muteEvents==before+1,"mute menu callback");
+            viewer.openPlaybackMenu();
+        });awaitPlaybackMenu();
+        main(()->{
+            int before=muteEvents;((View)field(viewer,"muteMenuItem")).performClick();
+            check(!viewer.isMuted()&&!lastMuted&&muteEvents==before+1,"unmute menu callback");
+        });
+        if(android.os.Build.VERSION.SDK_INT>=23){
+            main(()->viewer.openPlaybackMenu());awaitPlaybackMenu();
+            main(()->{
+                View old=((View[])field(field(viewer,"speedButtons"),"speedItems"))[4];
+                int before=speedEvents;viewer.setCurrentIndex(1);old.performClick();
+                check(speedEvents==before&&Math.abs(viewer.getPlaybackSpeed()-1.5f)<.01f,
+                        "previous page speed row rejected");
+            });
+            waitPrepared();
+            main(()->viewer.setCurrentIndex(0));waitPrepared();
+        }
+    }
+    private void waitPrepared(){
+        boolean ready=false;for(int i=0;i<120&&!ready;i++){
+            boolean[] state={false};main(()->state[0]=field(viewer,"player")!=null&&(Boolean)field(viewer,"playerPrepared"));
+            ready=state[0];if(!ready)SystemClock.sleep(50);
+        }
+        check(ready,"local video player prepared");
     }
 
 }

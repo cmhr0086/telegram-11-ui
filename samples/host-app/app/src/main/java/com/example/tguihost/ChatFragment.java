@@ -104,6 +104,12 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             item.photoHeight = i == 0 ? 600 : 320;
             photos.add(item);
         }
+        android.net.Uri sampleVideo = android.net.Uri.parse("android.resource://"
+                + org.telegram.messenger.ApplicationLoader.applicationContext.getPackageName() + "/" + com.example.tguihost.R.raw.sample_video);
+        TextBubbleMessage video = TextBubbleMessage.video(nextId++, false, "12:34", TextBubbleMessage.STATE_NONE,
+                photos.get(1).photo, sampleVideo, 6, null);
+        video.photoWidth = 480; video.photoHeight = 270;
+        photos.add(video);
         messages.add(TextBubbleMessage.album(nextId++, false, "12:34", TextBubbleMessage.STATE_NONE,
                 photos, org.telegram.messenger.ApplicationLoader.applicationContext.getString(com.example.tguihost.R.string.local_album_sample)));
         messages.add(TextBubbleMessage.roundVideo(nextId++, true, "12:35", TextBubbleMessage.STATE_READ,
@@ -189,6 +195,10 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             pages.add(page);
         }
         mediaViewer = org.telegram.ui.MediaViewer.open(getParentActivity(), pages, index, new org.telegram.ui.MediaViewer.Provider() {
+            @Override public void onPlaybackSpeedError(float speed) {
+                if (getParentActivity() != null) Toast.makeText(getParentActivity(), getParentActivity().getString(
+                        com.example.tguihost.R.string.media_viewer_speed_error, Float.toString(speed)), Toast.LENGTH_LONG).show();
+            }
             @Override public boolean canPerformAction(org.telegram.ui.MediaViewer.Action action, int i, org.telegram.ui.MediaViewer.Item item) {
                 return true;
             }

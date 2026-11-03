@@ -5,6 +5,7 @@
 ## Unreleased
 
 ### 新增
+- 阶段 E：搬入 `SpeedButtonsLayout` 并复用上游 SpeedSlider/SpeedIconDrawable，为 `MediaViewer` 增加0.2–3倍速与观看静音；缓存暂停/完成时的选择，恢复后再应用，跨页保留本次偏好。API21–22仅静音；宿主可接状态/速度失败回调，demo/sample有本地视频，不引入ExoPlayer或新依赖。
 - 阶段 E：`MediaViewer` 新增按页授权的分享/保存/删除菜单与 `Provider.onAction`；复用上游菜单组件、图标和配色，业务执行/确认交宿主。默认不启用，demo/sample明确展示回调，无自动IO或权限请求。
 - 阶段 E：搬运 `GroupedPhotosListView`，`MediaViewer.Item.groupId` / `Provider.forceAllInGroup()` 提供相册缩略图、点击/拖动与滑页同步；保留上游尺寸/动画和绝对页索引。demo/sample相册接入；修复查看器绘制后未恢复宿主Drawable bounds/滤波状态，无新增依赖或旧API破坏。
 - 阶段 D：搬运 `MessageSendPreview` 与 `ReactionsContainerLayout` 效果选择分支；复用既有气泡，新增宿主 `MessageEffect`、本地JSON/TGS单轮预览、取消保留草稿和生命周期/迟到发送隔离。`onSendTextWithEffect` / `onSendVoiceWithEffect` 默认转调旧回调；demo/sample接入，无新运行依赖或网络层。

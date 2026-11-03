@@ -119,6 +119,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_SUGGEST_EMOJI = 27;
     private static final int MENU_BOT_COMMANDS = 28;
     private static final int MENU_SEND_PREVIEW = 29;
+    private static final int MENU_MEDIA_PLAYBACK = 30;
     private long firstInlineId;
     private final ArrayList<Runnable> inlineCompletions = new ArrayList<>();
     private long firstDocumentThumbnailId;
@@ -560,6 +561,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     enterView.getEditField().updateAnimatedEmoji(true);
                 } else if (id == MENU_ALBUM_TEN) {
                     sendOutgoing(sampleAlbum(10, true, true));
+                } else if (id == MENU_MEDIA_PLAYBACK) {
+                    for (TextBubbleMessage message : messages) {
+                        if (message.type == TextBubbleMessage.TYPE_PHOTO && message.videoUri != null) {
+                            openMediaViewer(message);
+                            break;
+                        }
+                    }
                 } else if (id == MENU_UNREAD) {
                     int row = rows.indexOf(UNREAD_MARKER);
                     if (row >= 0) layoutManager.scrollToPositionWithOffset(row, 0);
@@ -616,6 +624,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         recordButtonItem.setChecked(true);
         otherItem.addSubItem(MENU_LOCAL_EMOJI, R.drawable.msg_emoji_smiles, context.getString(org.telegram.uidemo.R.string.local_emoji_insert));
         otherItem.addSubItem(MENU_ALBUM_TEN, R.drawable.msg_photos, context.getString(org.telegram.uidemo.R.string.album_ten));
+        otherItem.addSubItem(MENU_MEDIA_PLAYBACK, R.drawable.input_video, context.getString(org.telegram.uidemo.R.string.media_viewer_playback));
         otherItem.addSubItem(MENU_UNREAD, R.drawable.ic_ab_new, context.getString(R.string.UnreadMessages));
         otherItem.addSubItem(MENU_SERVICE, R.drawable.msg_info, context.getString(org.telegram.uidemo.R.string.service_messages));
         groupItem = otherItem.addSubItem(MENU_GROUP, R.drawable.msg_groups, context.getString(org.telegram.uidemo.R.string.group_messages), true);
@@ -1722,6 +1731,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             return;
         }
         MediaViewer.open(getParentActivity(), items, index, new MediaViewer.Provider() {
+            @Override public void onPlaybackSpeedError(float speed) {
+                if (getParentActivity() != null) Toast.makeText(getParentActivity(), getParentActivity().getString(
+                        org.telegram.uidemo.R.string.media_viewer_speed_error, Float.toString(speed)), Toast.LENGTH_LONG).show();
+            }
             @Override public boolean canPerformAction(MediaViewer.Action action, int i, MediaViewer.Item item) {
                 return true;
             }

@@ -267,4 +267,12 @@
     <string name="AddEffectMessageHint">Add an animated effect</string>
     <string name="ShareFile">Share</string>
     <string name="SaveToGallery">Save to gallery</string>
+    <string name="SpeedVerySlow">Very slow</string>
+    <string name="SpeedSlow">Slow</string>
+    <string name="SpeedNormal">Normal</string>
+    <string name="SpeedFast">Fast</string>
+    <string name="SpeedVeryFast">Very fast</string>
+    <string name="VideoPlayerSpeed">Speed</string>
+    <string name="Mute">Mute</string>
+    <string name="Unmute">Unmute</string>
 </resources>

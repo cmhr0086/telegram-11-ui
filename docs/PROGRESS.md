@@ -12,19 +12,26 @@
 | B 附件菜单 | 已实现并推送 PR #3 | 主体/五页/权限/选择/确认与宿主回调；简化交互和人工补验见下 |
 | C 更多消息 | 已完成，限制见下 | PR #4；11项功能已实现，库/消费端/完整设备回归通过，人工补验见各项记录 |
 | D 输入增强 | 已完成，限制见下 | PR #5；@提及、表情联想、命令菜单和发送预览，库/消费端/完整MuMu回归通过 |
-| E 查看器升级 | 进行中 | 缩略图条/相册分组/宿主操作完成；播放控制待做 |
+| E 查看器升级 | 已完成，限制见下 | PR #6；缩略图/相册、宿主菜单、倍速/静音，库/消费端/完整设备回归通过 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
 
-roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；阶段 C 已完成本任务的11项功能，PR #4已转为可审查；阶段D四项已完成，E进行中、F未开始。
+roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；阶段 C 已完成本任务的11项功能，PR #4已转为可审查；阶段D四项、阶段E三项已完成，F未开始。
 
 ### 阶段 E 当前交接
+
+- 阶段E第三项完成：tools/pull搬入固定上游org.telegram.ui.SpeedButtonsLayout并裁剪Locale/业务imports；复用已有SpeedSlider/SpeedIconDrawable和系统MediaPlayer，未引入依赖。0.2–3x范围，.2/.5/1/1.5/2预设，44dp滑条/196dp最小宽、原颜色/间隔/图标；新增静音行使用上游video_send_mute/unmute，明确这是观看模式扩展（上游该按钮属于发送/编辑）。
+- set/getPlaybackSpeed、isPlaybackSpeedSupported、setMuted/isMuted、openPlaybackMenu和Provider状态/速度错误回调为兼容新增API；API21–22无速度选择，仅静音。偏好属于本次viewer并跨页保留；暂停/准备中/完成时只缓存speed，恢复播放才调用PlaybackParams，避免其自动start副作用。解码器拒绝时尝试回退上次有效速度并通知宿主；不持久化账号设置。
+- 审查修复：startPlayer音量及启动纳入异常处理；旧MediaPlayer/TextureView回调按身份过滤，错误回调重入换页/关闭/暂停后不再启动旧player；菜单旧行代次隔离、预设初始/最终高亮、滑条无障碍操作同步实际速度。demo新增“Video viewer controls”直达原本地视频；sample保留三图并追加同一81KB本地视频为混合相册，宿主示例收到速度错误给明确提示。
+- 最终库release/demo/debugAndroidTest/publish通过（TEMP/phase-e-playback-final-build.log），独立host debug/R8通过（phase-e-playback-host.log）；专项phase-e-playback-final-device.log及完整MuMu Android15回归phase-e-full-device.log均通过，包含A–D全部旧检查及用户反馈的TGS完整末段/回卷后续播、GIF临时重绑、收藏尺寸。MediaViewer专项覆盖相册/源恢复/菜单权限，以及真实MediaPlayer 0.5/1.5/2x参数和位置推进、暂停改速不启动/恢复生效、完成后改速不重启、跨视频偏好、菜单点击/旧行/静音状态回调、非法值和释放。
+- 真操作：夜间预设1.5x、Mute→Unmute行切换，拖动滑条到2.7x；日间暂停后选0.5x仍暂停，恢复后进度到0:01/0:06并变帧，返回聊天正常，无AndroidRuntime错误。截图TEMP/viewer-playback-{night,muted,slider,paused-day,resume,return-day}.png。未声称实际声音输出已验；无障碍/API21–22/解码器拒绝路径为代码核对，未在相应设备人工验；sample只编译未安装。
+- E三项均已独立提交；本项推送后更新PR #6为ready，仍以dev/ui-lib为目标且不合并。下一阶段从本分支拉codex/phase-f。保留MediaViewer的已有简易转场/底部组合限制，无编辑/PiP/预加载/时间轴抽帧，README/CHANGELOG已同步；其它Android版本/平板横屏/复杂RTL/大字体/实际IME/实际音轨待人工补验。
 
 - 相册缩略图b2e0a96已推送，创建目标dev/ui-lib的draft PR #6。本项菜单完成：裁剪PhotoViewer 5572/5613/5633/5639的ActionBarMenuItem分支，保留48dp入口/行、media_more/msg_gallery/msg_shareout/msg_delete与原#fafafa/#f9222222颜色；缺失图标四密度原样搬入。Provider.canPerformAction/onAction与Action枚举默认全禁用，openActionsMenu可主动打开；不做IO/Intent/权限/删除，demo/sample提示明确仅宿主回调。
 - 菜单按页/打开/点击重查权限，捕获原item/index和代次；翻页/关闭/隐藏bar/重开清旧popup与待打开preDraw，点击前失效以支持宿主回调重入。禁用组件自带长按/拖开旁路，普通选项保留上游退场动画。动态原GONE入口先测量再打开，标题为菜单让出64dp（无菜单16dp）。
 - 菜单最终库release/demo/test/publish通过（TEMP/phase-e-menu-final-build.log），独立host debug/R8通过（phase-e-menu-final-host.log）；后者首次命令漏读用户ANDROID_HOME而失败，读入后通过，未改工程配置。MuMu media_viewer专项phase-e-menu-device.log通过，包含全部缩略图/真实视频准备和真实popup行权限过滤、三个动作对象身份、撤权、旧行、翻页、关闭及回调重开/关闭隔离。
 - 真操作：日间/夜间打开同一查看器菜单，实际Share和Save触发对应第28项宿主提示，返回相册全部格恢复；没有执行文件导出或删除。截图TEMP/viewer-menu-{day,share,night,save,return}.png，无AndroidRuntime错误。sample仅构建；其它设备/横屏/复杂RTL仍需人工检查。菜单仅图片/视频已加载的宿主项，业务权限/确认/导出及数据刷新由宿主负责。
 
-- 从阶段D的a1a95a4创建codex/phase-e，PR #5已ready且未合并。当前已完成相册缩略图/分组翻页及分享/保存/删除宿主菜单，下一项倍速/静音；F未开始，目标仍未完成。
+- 从阶段D的a1a95a4创建codex/phase-e，PR #5已ready且未合并。当前已完成相册缩略图/分组翻页、分享/保存/删除宿主菜单、倍速/静音；下一阶段F聊天页基类及群频道资料，目标仍未完成。
 - tools/pull搬入固定上游GroupedPhotosListView，保留42×56dp、1dp间隔、2dp圆角、选中宽度展开、100/200ms动画及Scroller手势。Entry快照/稳定绝对索引和宿主Drawable替代TL/账号/ImageReceiver；查看器使用上游68dp高/10dp顶距，手机横屏隐藏，caption位于条上、视频控制位于条下。
 - Item.groupId连续非零组、Provider.forceAllInGroup、getGroupedPhotosListView和setCurrentIndex为兼容新增API。保留附近最多20项及同窗口稳定，退出组200ms淡出后折叠；点击/拖动双向同步，拖动结束再准备视频。demo现有相册及发送10图可操作，sample三图相册接入并按当前cell/重绑维护隐藏格。
 - 审查/设备修复：原查看器drawMedia会改宿主Drawable bounds和BitmapDrawable滤波，现finally恢复；缩略图tap需立即播放视频，只有实际scroll才延期；相册窗口不随每次选择重建；切组淡出期间保留旧图并在结束折叠。首次仪器滑页仅一个MOVE未跨过手势建立后的实际位移，改为真实多MOVE轨迹，保留页索引断言。
