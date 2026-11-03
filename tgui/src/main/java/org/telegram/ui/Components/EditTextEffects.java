@@ -12,8 +12,8 @@ import org.telegram.messenger.AndroidUtilities;
 
 /**
  * tgui: upstream EditTextEffects renders spoilers, quote blocks and animated custom emoji.
- * Those are messenger features; this version keeps the public surface and the clipping
- * workarounds so EditTextBoldCursor behaves the same for plain/styled text.
+ * Local custom emoji render through AnimatedEmojiSpan; the existing clipping workarounds
+ * also apply to their ReplacementSpan draw calls.
  */
 public class EditTextEffects extends EditText {
 
@@ -21,12 +21,15 @@ public class EditTextEffects extends EditText {
     public int quoteColor;
     public boolean drawAnimatedEmojiDrawables = true;
     private boolean clipToPadding;
+    private AnimatedEmojiSpan.EmojiGroupedSpans animatedEmojiSpans;
 
     public EditTextEffects(Context context) {
         super(context);
     }
 
     public void recycleEmojis() {
+        AnimatedEmojiSpan.release(this, animatedEmojiSpans);
+        animatedEmojiSpans = null;
     }
 
     public void setShouldRevealSpoilersByTouch(boolean shouldRevealSpoilersByTouch) {
@@ -67,23 +70,66 @@ public class EditTextEffects extends EditText {
 
     @Override
     protected void onDraw(Canvas canvas) {
+        updateAnimatedEmoji(false);
         canvas.save();
         if (clipToPadding && getScrollY() != 0) {
             canvas.clipRect(-AndroidUtilities.dp(3), getScrollY() - super.getExtendedPaddingTop() - offsetY, getMeasuredWidth(), getMeasuredHeight() + getScrollY() + super.getExtendedPaddingBottom() - offsetY);
         }
-        if (wrapCanvasToFixClipping) {
-            if (wrappedCanvas == null) {
-                wrappedCanvas = new NoClipCanvas();
+        boolean previousEmojiDrawing = AnimatedEmojiSpan.setDrawingEnabled(drawAnimatedEmojiDrawables);
+        try {
+            // A Canvas proxy prevents Editor from caching an animated ReplacementSpan in a RenderNode.
+            // With the clipping workaround disabled we still delegate clipping normally.
+            if (wrapCanvasToFixClipping || animatedEmojiSpans != null && !animatedEmojiSpans.isEmpty()) {
+                if (wrappedCanvas == null) {
+                    wrappedCanvas = new NoClipCanvas();
+                }
+                wrappedCanvas.canvas = canvas;
+                wrappedCanvas.preserveClipping = !wrapCanvasToFixClipping;
+                super.onDraw(wrappedCanvas);
+            } else {
+                super.onDraw(canvas);
             }
-            wrappedCanvas.canvas = canvas;
-            super.onDraw(wrappedCanvas);
-        } else {
-            super.onDraw(canvas);
+        } finally {
+            AnimatedEmojiSpan.setDrawingEnabled(previousEmojiDrawing);
+            canvas.restore();
         }
-        canvas.restore();
     }
 
     public void updateAnimatedEmoji(boolean force) {
+        if (!drawAnimatedEmojiDrawables || !isAttachedToWindow()) {
+            recycleEmojis();
+            return;
+        }
+        if (force) {
+            AnimatedEmojiSpan.applyFontMetricsForString(getText(), getPaint());
+        }
+        animatedEmojiSpans = AnimatedEmojiSpan.update(emojiCacheType(), this, animatedEmojiSpans, getLayout());
+        if (force) invalidate();
+    }
+
+    @Override
+    protected void onTextChanged(CharSequence text, int start, int lengthBefore, int lengthAfter) {
+        super.onTextChanged(text, start, lengthBefore, lengthAfter);
+        AnimatedEmojiSpan.applyFontMetricsForString(text, getPaint());
+    }
+
+    @Override
+    public void setTextSize(int unit, float size) {
+        super.setTextSize(unit, size);
+        AnimatedEmojiSpan.applyFontMetricsForString(getText(), getPaint());
+        requestLayout();
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        updateAnimatedEmoji(true);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        recycleEmojis();
+        super.onDetachedFromWindow();
     }
 
     protected int emojiCacheType() {

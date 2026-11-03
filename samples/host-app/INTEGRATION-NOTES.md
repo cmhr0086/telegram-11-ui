@@ -172,3 +172,7 @@ release 里的大头：`assets/emoji` 5.2 MB（PNG，不再压缩，资源压缩
 ## 2026-11-03：UndoView 消费验证
 
 ChatListFragment 增加长按归档/撤销示例，直接使用发布的 AAR 中的 UndoView，并保存条目的原位置。页面离开时结算待处理操作，原有单击进入聊天和左滑静音仍保留。构建/运行结果见仓库 docs/PROGRESS.md；这里的新增示例不改写上面的历史设备测试记录。
+
+## 2026-11-03：本地动态表情消费验证
+
+HostApp 将库中现有 JSON 插画复制成宿主文件，以 SourceProvider 映射示例 ID。Chat 页有气泡样例，右上表情按钮可插入输入栏；发送回调从 entities 恢复动画 span，消费 AAR 的新公开 API。debug 与 R8 release 构建证据及设备覆盖见 docs/PROGRESS.md；未将主 demo 的截图算作本宿主运行验证。

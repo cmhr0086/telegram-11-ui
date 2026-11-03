@@ -37,7 +37,9 @@ public class RoadmapInstrumentation extends Instrumentation {
                 Intent intent = new Intent(getTargetContext(), MainActivity.class);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 activity = startActivitySync(intent);
-                waitForIdleSync();
+                Bundle status = new Bundle();
+                status.putString("stream", "\nUndoView checks started\n");
+                sendStatus(1, status);
                 testTimeoutWithoutDraw();
                 testReplacement();
                 testUndoClick();
@@ -45,13 +47,16 @@ public class RoadmapInstrumentation extends Instrumentation {
                 testDetachPending();
                 testDetachDuringExit();
                 testNarrowLayout();
+                status.putString("stream", "\nUndoView: 7 checks passed; emoji checks starting\n");
+                sendStatus(1, status);
+                AnimatedEmojiDeviceChecks.run(this, activity);
                 main(() -> {
                     if (container != null && container.getParent() instanceof ViewGroup) {
                         ((ViewGroup) container.getParent()).removeView(container);
                     }
                     activity.finish();
                 });
-                result.putString("stream", "\nRoadmapInstrumentation: 7 checks passed\n");
+                result.putString("stream", "\nRoadmapInstrumentation: 7 UndoView checks + AnimatedEmojiDeviceChecks passed\n");
                 finish(Activity.RESULT_OK, result);
             } catch (Throwable failure) {
                 StringWriter trace = new StringWriter();

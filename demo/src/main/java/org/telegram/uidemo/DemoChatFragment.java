@@ -81,6 +81,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     private static final int MENU_NIGHT = 1;
     private static final int MENU_RECORD_BUTTON = 2;
+    private static final int MENU_LOCAL_EMOJI = 3;
     // action mode (ChatActivity.createActionMode ids)
     private static final int ACTION_EDIT = 10;
     private static final int ACTION_COPY = 11;
@@ -186,6 +187,12 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         archive.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
         addSample(archive);
         addSample(TextBubbleMessage.document(nextId++, true, "10:12", TextBubbleMessage.STATE_READ, "notes.txt", 12_288));
+        try {
+            LocalEmojiSamples.install(ApplicationLoader.applicationContext);
+            addSample(LocalEmojiSamples.text(ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.local_emoji_sample)), false, "10:13", TextBubbleMessage.STATE_NONE);
+        } catch (java.io.IOException error) {
+            org.telegram.messenger.FileLog.e(error);
+        }
         rebuildRows();
         return super.onFragmentCreate();
     }
@@ -347,6 +354,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     boolean visible = !enterView.isRecordButtonVisible();
                     enterView.setRecordButtonVisible(visible);
                     recordButtonItem.setChecked(visible);
+                } else if (id == MENU_LOCAL_EMOJI) {
+                    enterView.setFieldText(LocalEmojiSamples.text(getParentActivity().getString(org.telegram.uidemo.R.string.local_emoji_sample)));
+                    enterView.getEditField().updateAnimatedEmoji(true);
                 }
             }
         });
@@ -356,6 +366,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.setContentDescription("More options");
         recordButtonItem = otherItem.addSubItem(MENU_RECORD_BUTTON, R.drawable.input_mic, "Voice / video button", true);
         recordButtonItem.setChecked(true);
+        otherItem.addSubItem(MENU_LOCAL_EMOJI, R.drawable.msg_emoji_smiles, context.getString(org.telegram.uidemo.R.string.local_emoji_insert));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -802,6 +813,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             SpannableStringBuilder styled = new SpannableStringBuilder(text.toString());
             if (entities != null && !entities.isEmpty()) {
                 MediaDataController.addTextStyleRuns(entities, text, styled);
+                MediaDataController.addAnimatedEmojiSpans(entities, styled, Theme.chat_msgTextPaint.getFontMetricsInt());
             }
             String prefix = scheduleDate != 0 ? "⏰ " : (!notify ? "🔕 " : "");
             sendOutgoing(prefix.isEmpty() ? styled : new SpannableStringBuilder(prefix).append(styled));
@@ -829,6 +841,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 SpannableStringBuilder styled = new SpannableStringBuilder(text.toString());
                 if (entities != null && !entities.isEmpty()) {
                     MediaDataController.addTextStyleRuns(entities, text, styled);
+                    MediaDataController.addAnimatedEmojiSpans(entities, styled, Theme.chat_msgTextPaint.getFontMetricsInt());
                 }
                 editing.text = styled;
                 int index = rowOf(editing);

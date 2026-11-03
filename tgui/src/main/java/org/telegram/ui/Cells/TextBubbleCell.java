@@ -37,6 +37,7 @@ import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Components.AnimatedFloat;
+import org.telegram.ui.Components.AnimatedEmojiSpan;
 import org.telegram.ui.Components.ButtonBounce;
 import org.telegram.ui.Components.CheckBoxBase;
 import org.telegram.ui.Components.CubicBezierInterpolator;
@@ -67,6 +68,7 @@ public class TextBubbleCell extends View {
     protected boolean pinnedBottom;
 
     private StaticLayout textLayout;
+    private AnimatedEmojiSpan.EmojiGroupedSpans animatedEmojiSpans;
     protected StaticLayout timeLayout;
     protected int layoutForWidth = -1;
     protected CharSequence layoutForText;
@@ -310,9 +312,16 @@ public class TextBubbleCell extends View {
         } else if (!sameMessage) {
             cancelReactionsAnimation();
         }
-        if (this.message != message || this.pinnedTop != pinnedTop || this.pinnedBottom != pinnedBottom || layoutForText != (message == null ? null : message.text) || reactionsChanged || layoutForReply != (message == null ? null : message.replyTo)) {
+        // Spans can change in place without changing the CharSequence identity or its length.
+        boolean customEmoji = hasAnimatedEmoji(message == null ? null : message.text)
+                || hasAnimatedEmoji(textLayout == null ? null : textLayout.getText());
+        if (customEmoji || this.message != message || this.pinnedTop != pinnedTop || this.pinnedBottom != pinnedBottom || layoutForText != (message == null ? null : message.text) || reactionsChanged || layoutForReply != (message == null ? null : message.replyTo)) {
             layoutForWidth = -1;
             requestLayout();
+        }
+        if (message == null) {
+            AnimatedEmojiSpan.release(this, animatedEmojiSpans);
+            animatedEmojiSpans = null;
         }
         this.message = message;
         this.pinnedTop = pinnedTop;
@@ -348,6 +357,10 @@ public class TextBubbleCell extends View {
 
     public TextBubbleMessage getMessage() {
         return message;
+    }
+
+    private static boolean hasAnimatedEmoji(CharSequence text) {
+        return text instanceof Spanned && ((Spanned) text).getSpans(0, text.length(), AnimatedEmojiSpan.class).length > 0;
     }
 
     /** Callbacks for the media cells (voice / photo / file); text bubbles never call it. */
@@ -1023,11 +1036,13 @@ public class TextBubbleCell extends View {
         }
 
         int[] emojiOnly = new int[1];
-        CharSequence source = detectLinks ? addLinks(message.text) : message.text;
+        CharSequence source = AnimatedEmojiSpan.cloneSpans(detectLinks ? addLinks(message.text) : message.text);
+        AnimatedEmojiSpan.applyFontMetricsForString(source, Theme.chat_msgTextPaint);
         CharSequence text = TextUtils.isEmpty(source) ? " " : Emoji.replaceEmoji(source, Theme.chat_msgTextPaint.getFontMetricsInt(), true, emojiOnly);
         TextPaint emojiPaint = getEmojiOnlyPaint(text, emojiOnly[0]);
         emojiOnlyMode = emojiPaint != null;
         textPaint = emojiOnlyMode ? emojiPaint : Theme.chat_msgTextPaint;
+        AnimatedEmojiSpan.applyFontMetricsForString(text, textPaint);
         textLayout = new StaticLayout(text, textPaint, textMaxWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
 
         int lineCount = textLayout.getLineCount();
@@ -1065,6 +1080,7 @@ public class TextBubbleCell extends View {
             lastLineWidth = (int) Math.ceil(textLayout.getLineRight(lineCount - 1) - minLeft);
             textHeight = textLayout.getLineBottom(lineCount - 1);
         }
+        animatedEmojiSpans = AnimatedEmojiSpan.update(0, this, animatedEmojiSpans, textLayout);
         if (emojiOnlyMode) {
             layoutForReply = null;
             replyNameLayout = null;
@@ -1128,10 +1144,11 @@ public class TextBubbleCell extends View {
         }
         Spanned spanned = (Spanned) text;
         Emoji.EmojiSpan[] spans = spanned.getSpans(0, spanned.length(), Emoji.EmojiSpan.class);
-        if (spans == null || spans.length == 0 || emojiOnly - spans.length > 0) {
+        AnimatedEmojiSpan[] animated = spanned.getSpans(0, spanned.length(), AnimatedEmojiSpan.class);
+        if (spans.length + animated.length == 0 || emojiOnly != spans.length + animated.length) {
             return null;
         }
-        if (spanned.getSpans(0, spanned.length(), Object.class).length != spans.length) {
+        if (spanned.getSpans(0, spanned.length(), Object.class).length != spans.length + animated.length) {
             return null;
         }
         TextPaint paint;
@@ -1175,6 +1192,8 @@ public class TextBubbleCell extends View {
 
     @Override
     protected void onDetachedFromWindow() {
+        AnimatedEmojiSpan.release(this, animatedEmojiSpans);
+        animatedEmojiSpans = null;
         super.onDetachedFromWindow();
         cancelReactionsAnimation();
         cancelCheckLongPress();
@@ -1236,6 +1255,7 @@ public class TextBubbleCell extends View {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        animatedEmojiSpans = AnimatedEmojiSpan.update(0, this, animatedEmojiSpans, textLayout);
         if (checkBox != null) {
             checkBox.onAttachedToWindow();
         }

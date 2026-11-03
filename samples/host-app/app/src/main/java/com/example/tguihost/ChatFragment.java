@@ -70,6 +70,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         add("Looks like Telegram 🙂", true, TextBubbleMessage.STATE_READ);
         add("👍", true, TextBubbleMessage.STATE_READ);
         add("Type something below and send it.", false, TextBubbleMessage.STATE_NONE);
+        add(localEmoji(), false, TextBubbleMessage.STATE_NONE);
         return super.onFragmentCreate();
     }
 
@@ -103,6 +104,9 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                     }
                 } else if (id == MENU_NIGHT) {
                     TelegramUI.toggleDayNight(actionBar);
+                } else if (id == 2) {
+                    enterView.setFieldText(localEmoji());
+                    enterView.getEditField().updateAnimatedEmoji(true);
                 } else if (id == ACTION_DELETE) {
                     for (TextBubbleMessage m : new ArrayList<>(selected)) {
                         int index = messages.indexOf(m);
@@ -114,6 +118,8 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             }
         });
         actionBar.createMenu().addItem(MENU_NIGHT, R.drawable.msg_theme);
+        actionBar.createMenu().addItem(2, R.drawable.msg_emoji_smiles)
+                .setContentDescription(context.getString(com.example.tguihost.R.string.local_emoji_insert));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -156,7 +162,10 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         enterView.setDelegate(new ChatActivityEnterView.ChatActivityEnterViewDelegate() {
             @Override
             public void onSendText(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate) {
-                send(text);
+                android.text.SpannableStringBuilder styled = new android.text.SpannableStringBuilder(text.toString());
+                org.telegram.messenger.MediaDataController.addTextStyleRuns(entities, text, styled);
+                org.telegram.messenger.MediaDataController.addAnimatedEmojiSpans(entities, styled, Theme.chat_msgTextPaint.getFontMetricsInt());
+                send(styled);
             }
         });
         enterView.setRecordButtonVisible(false);
@@ -169,7 +178,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
     }
 
     private void send(CharSequence text) {
-        TextBubbleMessage m = new TextBubbleMessage(nextId++, text.toString(), true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENT);
+        TextBubbleMessage m = new TextBubbleMessage(nextId++, text, true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENT);
         messages.add(m);
         int position = messages.size() - 1;
         listView.getAdapter().notifyItemInserted(position);
@@ -180,6 +189,13 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         if (contentView.getBackgroundImage() instanceof MotionBackgroundDrawable) {
             ((MotionBackgroundDrawable) contentView.getBackgroundImage()).switchToNextPosition();
         }
+    }
+
+    private static CharSequence localEmoji() {
+        android.text.SpannableStringBuilder text = new android.text.SpannableStringBuilder("🐥");
+        text.setSpan(new org.telegram.ui.Components.AnimatedEmojiSpan(90001, Theme.chat_msgTextPaint.getFontMetricsInt()),
+                0, text.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return text;
     }
 
     private void showMenu(View cell, TextBubbleMessage message, float x, float y) {

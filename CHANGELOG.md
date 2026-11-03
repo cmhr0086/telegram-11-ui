@@ -5,6 +5,9 @@
 ## Unreleased
 
 ### 新增
+- 阶段 C 本地动态表情：`AnimatedEmojiDrawable.SourceProvider` 将 documentId 映射至宿主 JSON / gzip TGS 文件，经私有缓存副本交给既有 rlottie；最后解绑回收，支持重新绑定和来源切换。无账号、下载或 Telegram 服务器依赖。
+- `AnimatedEmojiSpan` 从占位恢复真实行内绘制、上游尺寸/位置、布局分组生命周期、深克隆；原输入栏和文字气泡可混排普通/自定义 emoji，demo 可插入和发送，外部 AAR 样例也接入。
+- `AnimatedEmojiDeviceChecks`：设备上检查 JSON/TGS 原生帧与实际绘制变化、span/实体往返、来源缺失和损坏回退、原文件保留、共享绑定和重新 attach。
 - `UndoView`：从上游 11.4.2 归档/删除分支裁剪，保留单项/批量、5 秒期限、归档 Lottie、删除数字圆环及原布局/动画；删除账号、消息控制器和无关业务分支，操作提交及撤销由宿主回调。
 - 对话列表 demo 支持归档/删除后的原位撤销（单项、批量及文件夹过滤页），外部宿主样例增加长按归档/撤销。
 - 无第三方测试依赖的 `RoadmapInstrumentation`，覆盖 UndoView 的超时、替换、点击、回调重入、窗口移除及窄屏长文本。
@@ -14,6 +17,7 @@
 - demo：点图片 / 视频打开查看器，可在聊天里所有已下载的图片和视频之间翻页；加了一条 6 秒的示例视频消息（`demo/res/raw/sample_video.mp4`，80 KB）。
 
 ### 修复
+- `Emoji.replaceEmoji(createNew=true)` 保留已有样式和自定义表情 span，重建普通 EmojiSpan 时移除旧实例，避免混排丢失 ID 或重复 span；实体回填忽略负起点。
 - 点 `PhotoBubbleCell` 的图片会弹出消息菜单：现在图片区域的单击按上游 `didPressImage` 回调 `MediaDelegate.onMediaPressed`（任何下载状态），说明文字条和气泡其它位置仍然单击出菜单；长按图片照常进入多选、没有按下效果，手指移动超过阈值把手势还给列表滚动。
 
 ## 11.4.2-ui4

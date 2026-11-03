@@ -144,6 +144,25 @@ undo.showWithAction(UndoView.ACTION_DELETE, null,
 
 示例：原 demo 的 Chat list 页，长按进入多选后归档/删除，或在 Swipe action 菜单选择 Archive/Delete；外部宿主 `samples/host-app` 长按条目可归档并撤销。原位恢复及文件夹过滤由示例代码维护。
 
+### 本地动态表情
+
+```java
+// 在 TelegramUI.init 后设置；宿主管理文件及 documentId 的映射。
+AnimatedEmojiDrawable.setSourceProvider(id -> localFiles.get(id));
+SpannableStringBuilder text = new SpannableStringBuilder("Hello 🐥");
+text.setSpan(new AnimatedEmojiSpan(90001L, edit.getPaint().getFontMetricsInt()),
+    6, 8, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+enterView.setFieldText(text);
+```
+
+`SourceProvider` 在 UI 线程查询，返回已准备好的本地文件；支持普通 Lottie JSON 与 gzip TGS，解压上限 4 MiB，不访问网络。读取、解压和首次创建 rlottie 是同步的，宿主应提前准备小型表情素材。更换映射或文件内容后再次调用 `setSourceProvider`，已有视图下一帧重载。无来源或损坏文件回退为 span 内原文字，库只处理缓存副本，不删除宿主文件。
+
+现有 `ChatActivityEnterView` / `EditTextEffects` 与 `TextBubbleCell` 自动管理布局和 attach/detach；自绘 StaticLayout 的宿主需保存 `AnimatedEmojiSpan.update(cacheType, view, group, layouts)` 的返回值，释放时调用 `release(view, group)`，布局正常 `draw` 即可。独立 drawable 需成对 `addView` / `removeView`，最后解绑回收，重绑可重新加载。发送/存储使用 `MediaDataController.getEntities`，恢复样式后另调 `addAnimatedEmojiSpans`；不要用 `toString()` 丢弃实体。各视图间可用 `cloneSpans` 隔离字体尺寸。
+
+demo 的 Chat 页末尾有本地 JSON / TGS 混排；更多菜单的 “Insert local animated emoji” 可插入原输入栏并发送。素材复用上游已打包的 Utya 动画，压缩成 TGS 仅用于演示本地文件入口。`samples/host-app` 也提供 AAR 消费示例。
+
+范围：本地 rlottie 静态图层/矢量动画，不含服务器下载、视频/WebM、外置图片资源、自定义表情包选择页及动态反应。当前兼容的 `drawAnimatedEmojis` 叠加入口不二次绘制，独立 overlay 的 alpha/filter/spoiler 参数尚未支持；行内绘制跟随 text paint 和 Canvas 的透明度、裁剪及坐标。媒体说明文字和回复预览尚未接入动画生命周期。
+
 ## 包含的组件
 
 | 类别 | 类 |
@@ -190,13 +209,13 @@ undo.showWithAction(UndoView.ACTION_DELETE, null,
 | `TLRPC` / `MediaDataController` | `TLRPC` 只剩消息实体（粗体、链接、自定义表情 id…）的纯数据类；`MediaDataController` 只保留文字实体相关的静态方法（`getEntities`、`addStyleToText`、`addTextStyleRuns`…，原样复制） |
 | `ProfileActivity` | 只移植了用户资料页的头部（`needLayout` / `setAvatarExpandProgress` / `needLayoutText` / `TopView` / `OverlaysView` 的数值和动画）、写消息按钮和信息行的单元格，改写成 `ProfileFragment` + 纯模型；去掉头像相册翻页（`ProfileGalleryView`，展开的就是那张 `Profile.photo`）、`SharedMediaLayout` 共享媒体分页（换成 `TextCell` 计数行）、群组 / 频道资料、成员列表、Stories、表情状态、Premium、个人颜色背景与图案、二维码 / 搜索 / 通话按钮、从聊天头像飞入的打开动画、修改头像、`AboutLinkCell`（简介用多行 `TextDetailCell`）、`UndoView` |
 | `EmojiView` | 只保留表情页；贴纸 / GIF 页、自定义和精选表情包、Premium 检查、表情搜索（需要服务器关键词）和长按预览（`ContentPreviewViewer`）都已剥离，输入栏会调用的对应方法保留为空实现。`EmojiTabsStrip` 去掉了表情包标签和 Premium 锁 |
-| `AnimatedEmojiSpan` | 保留自定义表情 id、占一个表情的宽度，动画渲染见路线图 |
+| `AnimatedEmojiSpan` | 保留上游字体尺寸、缩放和行内位置，直接在 ReplacementSpan 中画本地 rlottie；layout 分组管理父 View 的绑定和释放，实体 ID 可往返 |
 | `AlertsCreator` / `CaptionContainerView` / `VideoEditedInfo` | 分别只保留定时发送日期选择器、阅后即焚图标 `PeriodDrawable`、圆形视频裁剪字段 |
 | `RLottieDrawable` / `RLottieImageView` | 上游原版，native 库换成 `libtguilottie.so`；`addParentView` 改收 `View`（无 `ImageReceiver`），`RLottieImageView` 去掉了按 `TLRPC.Document` 加载贴纸的分支。`BitmapsCache` 缓存目录改为 `cacheDir/acache` |
 | `Emoji` | 上游原版；只把 `replaceWithRestrictedEmoji`（服务器的 RestrictedEmoji 动态贴纸集）换成普通 `replaceEmoji`，`useSystemEmoji` / `allowBigEmoji` 由 `SharedConfig` 的静态字段提供 |
-| `AnimatedEmojiDrawable`、`AnimatedEmojiSpan` | 自定义 emoji 只保留常量和 `SwapAnimatedEmojiDrawable`，当普通 Drawable 容器用 |
+| `AnimatedEmojiDrawable` | 宿主以 documentId 提供本地 JSON / gzip TGS；替换 ImageReceiver、账号和网络加载；解压至私有缓存，最后解绑释放原生动画，保留 Swap API |
 | `BackupImageView` | 改成本地 Drawable/Bitmap 视图，支持圆角，不再依赖 `ImageReceiver` 和网络加载 |
-| `EditTextEffects` | 去掉剧透（spoiler）、引用块和自定义 emoji 渲染 |
+| `EditTextEffects` | 保留裁剪修正，接入本地自定义 emoji；剧透粒子和引用块仍未移植 |
 | `URLSpanReplacement` | 点击后用 `ACTION_VIEW` 打开链接 |
 | `LaunchActivity` | 换成 `TelegramUI.Host` / `TelegramActivity` |
 
@@ -224,7 +243,7 @@ undo.showWithAction(UndoView.ACTION_DELETE, null,
 2. **阶段 B1（已完成）：Telegram 表情渲染**——上游 `Emoji` / `EmojiData` / `CompoundEmoji` 和全部 emoji 精灵图，输入栏、气泡（含纯 emoji 大号显示）和设置单元格里显示 Telegram 风格表情；输入栏可隐藏录音按钮
 3. **阶段 B2（已完成）：表情面板**——上游 `EmojiView` 的表情页（分类标签、最近使用、肤色选择、退格），替换占位面板，跟随日夜主题切换
 4. **阶段 B3**：表情搜索、动态 / 自定义表情页、贴纸 / GIF 页（与下面 C、D 合并推进）
-5. **阶段 C：动态表情 / 自定义表情**——`AnimatedEmojiDrawable` / `AnimatedEmojiSpan` 的真实渲染（rlottie 已就绪），文字里的自定义表情实体
+5. **阶段 C（本地渲染已完成）：动态表情 / 自定义表情**——`AnimatedEmojiDrawable` / `AnimatedEmojiSpan` 渲染宿主本地 JSON / TGS，输入栏与文字气泡支持混排及实体往返；自定义表情包面板和动态反应仍待后续
 6. **阶段 D：贴纸和 GIF**——`EmojiView` 的贴纸 / GIF 页、`StickersAlert`、`TrendingStickersLayout`，数据由宿主提供（不接 Telegram 服务器）
 7. **对话列表（已完成）**：`DialogCell`、滑动动作、多选、列表动画、文件夹标签、抽屉、写消息按钮；下拉显示隐藏归档（`PullForegroundDrawable`）、文件夹左右翻页（`DialogsViewPager`）也已完成；对话搜索（`DialogsSearchController`）也已完成；`UndoView` 归档/删除撤销已提供，隐藏归档等其它提示尚未移植
 8. **消息菜单与多选（已完成静态版）**：`MessageContextMenu`（单击：遮罩、浮起气泡、弹出菜单、静态表情反应条），长按多选（复选框、ActionMode、底部回复 / 转发栏、拖动连选）；气泡里的反应胶囊（`ReactionsLayoutInBubble`，静态表情 + 计数动画）已完成；后续：动态反应（上游 lottie 选中 / 飞入动画、反应者头像、展开全部反应、自定义表情反应），依赖阶段 C
