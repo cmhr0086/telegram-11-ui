@@ -32,6 +32,11 @@ import org.telegram.ui.Components.MessageContextMenu;
 import org.telegram.ui.Components.MotionBackgroundDrawable;
 import org.telegram.ui.Components.NumberTextView;
 import org.telegram.ui.Components.RecyclerListView;
+import org.telegram.ui.Components.EmojiView;
+import org.telegram.ui.Components.Sticker;
+import org.telegram.ui.Components.StickerSet;
+import org.telegram.ui.Components.StickersAlert;
+import org.telegram.ui.Components.Gif;
 import org.telegram.ui.TelegramUI;
 
 import java.text.SimpleDateFormat;
@@ -56,6 +61,11 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
     private LinearLayoutManager layoutManager;
     private ChatActivityEnterView enterView;
     private NumberTextView selectedCount;
+    private EmojiView emojiPanel;
+    private StickerSet localPack;
+    private final ArrayList<Sticker> recentStickers = new ArrayList<>();
+    private final ArrayList<Sticker> favoriteStickers = new ArrayList<>();
+    private final ArrayList<Gif> localGifs = new ArrayList<>();
 
     public ChatFragment(String title) {
         this.title = title;
@@ -85,6 +95,18 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 photos, org.telegram.messenger.ApplicationLoader.applicationContext.getString(com.example.tguihost.R.string.local_album_sample)));
         messages.add(TextBubbleMessage.roundVideo(nextId++, true, "12:35", TextBubbleMessage.STATE_READ,
                 photos.get(0).photo, null, 6));
+        Context app = org.telegram.messenger.ApplicationLoader.applicationContext;
+        // HostApp already copies this exact upstream JSON file for the inline emoji.
+        // TGS format accepts either gzip TGS or plain Lottie JSON through the same rlottie decoder.
+        Sticker sticker = new Sticker(90001, Sticker.Format.TGS,
+                new java.io.File(app.getFilesDir(), "local-emoji.json"), null, 512, 512, "🐥");
+        localPack = new StickerSet(90000, app.getString(com.example.tguihost.R.string.local_sticker_pack),
+                java.util.Collections.singletonList(sticker));
+        recentStickers.add(sticker);
+        localGifs.add(new Gif(90002, new java.io.File(app.getFilesDir(), "local-sticker.gif"), null, 200, 113));
+        messages.add(TextBubbleMessage.sticker(nextId++, false, "12:36", TextBubbleMessage.STATE_NONE, sticker));
+        messages.add(TextBubbleMessage.gif(nextId++, true, "12:37", TextBubbleMessage.STATE_READ, localGifs.get(0),
+                app.getString(com.example.tguihost.R.string.local_gif_caption)));
         return super.onFragmentCreate();
     }
 
@@ -181,7 +203,16 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 org.telegram.messenger.MediaDataController.addAnimatedEmojiSpans(entities, styled, Theme.chat_msgTextPaint.getFontMetricsInt());
                 send(styled);
             }
+            @Override public void onEmojiPanelCreated(EmojiView panel) { emojiPanel = panel; updateMediaPanel(); }
+            @Override public void onSendSticker(Sticker sticker) { sendSticker(sticker); }
+            @Override public void onSendGif(Gif gif) {
+                append(TextBubbleMessage.gif(nextId++, true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENT, gif, null));
+            }
+            @Override public void onStickerSetRequested(StickerSet set) { showStickerSet(set); }
+            @Override public void onStickerFavoriteChanged(Sticker sticker, boolean favorite) { setFavorite(sticker, favorite); }
+            @Override public void onGifRemoved(Gif gif) { localGifs.remove(gif); updateMediaPanel(); }
         });
+        enterView.setAllowStickersAndGifs(true, true, true);
         enterView.setRecordButtonVisible(false);
         contentView.addView(enterView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
         contentView.setEnterView(enterView);
@@ -193,6 +224,10 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
 
     private void send(CharSequence text) {
         TextBubbleMessage m = new TextBubbleMessage(nextId++, text, true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENT);
+        append(m);
+    }
+
+    private void append(TextBubbleMessage m) {
         messages.add(m);
         int position = messages.size() - 1;
         listView.getAdapter().notifyItemInserted(position);
@@ -205,6 +240,31 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         }
     }
 
+    private void updateMediaPanel() {
+        if (emojiPanel != null) emojiPanel.setMediaData(java.util.Collections.singletonList(localPack), recentStickers, favoriteStickers, localGifs);
+    }
+
+    private void sendSticker(Sticker sticker) {
+        recentStickers.remove(sticker);
+        recentStickers.add(0, sticker);
+        updateMediaPanel();
+        append(TextBubbleMessage.sticker(nextId++, true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENT, sticker));
+    }
+
+    private void setFavorite(Sticker sticker, boolean favorite) {
+        favoriteStickers.remove(sticker);
+        if (favorite) favoriteStickers.add(sticker);
+        updateMediaPanel();
+    }
+
+    private void showStickerSet(StickerSet set) {
+        showDialog(new StickersAlert(getParentActivity(), set, new StickersAlert.Delegate() {
+            @Override public void onSendSticker(Sticker sticker) { sendSticker(sticker); }
+            @Override public boolean isFavorite(Sticker sticker) { return favoriteStickers.contains(sticker); }
+            @Override public void onFavoriteChanged(Sticker sticker, boolean favorite) { setFavorite(sticker, favorite); }
+        }, getResourceProvider()));
+    }
+
     private static CharSequence localEmoji() {
         android.text.SpannableStringBuilder text = new android.text.SpannableStringBuilder("🐥");
         text.setSpan(new org.telegram.ui.Components.AnimatedEmojiSpan(90001, Theme.chat_msgTextPaint.getFontMetricsInt()),
@@ -214,7 +274,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
 
     private void showMenu(View cell, TextBubbleMessage message, float x, float y) {
         MessageContextMenu menu = new MessageContextMenu(getParentActivity(), getResourceProvider());
-        menu.addItem(R.drawable.msg_copy, "Copy", () -> {
+        if (!android.text.TextUtils.isEmpty(message.text)) menu.addItem(R.drawable.msg_copy, "Copy", () -> {
             AndroidUtilities.addToClipboard(message.text.toString());
             Toast.makeText(getParentActivity(), "Copied", Toast.LENGTH_SHORT).show();
         });
@@ -348,6 +408,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         for (int key : keys) {
             list.add(new ThemeDescription(null, 0, null, null, null, redraw, key));
         }
+        TextBubbleCell.addMediaThemeDescriptions(list, redraw);
         if (enterView != null) {
             list.addAll(enterView.getThemeDescriptions());
         }
@@ -373,16 +434,28 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             TextBubbleCell cell;
             if (viewType == TextBubbleMessage.TYPE_ALBUM) cell = new org.telegram.ui.Cells.AlbumBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_ROUND_VIDEO) cell = new org.telegram.ui.Cells.RoundVideoBubbleCell(context, getResourceProvider());
+            else if (viewType == TextBubbleMessage.TYPE_STICKER) cell = new org.telegram.ui.Cells.StickerBubbleCell(context, getResourceProvider());
+            else if (viewType == TextBubbleMessage.TYPE_GIF) cell = new org.telegram.ui.Cells.GifBubbleCell(context, getResourceProvider());
             else cell = new TextBubbleCell(context, getResourceProvider());
             cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
                 @Override public void onMediaPressed(TextBubbleCell source, TextBubbleMessage item) {
                     if (item.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
                         Toast.makeText(context, com.example.tguihost.R.string.round_video_host, Toast.LENGTH_SHORT).show();
+                    } else if (item.type == TextBubbleMessage.TYPE_STICKER) {
+                        showStickerSet(localPack);
+                    } else if (item.type == TextBubbleMessage.TYPE_GIF) {
+                        showMenu(source, item, source.getWidth() / 2f, source.getHeight() / 2f);
                     }
                 }
                 @Override public void onAlbumMediaPressed(org.telegram.ui.Cells.AlbumBubbleCell source,
                         TextBubbleMessage album, TextBubbleMessage item, int index) {
                     Toast.makeText(context, context.getString(com.example.tguihost.R.string.album_item, index + 1), Toast.LENGTH_SHORT).show();
+                }
+            });
+            cell.setDelegate(new TextBubbleCell.Delegate() {
+                @Override public void onBubbleLongPressed(TextBubbleCell source, TextBubbleMessage item) {
+                    if (!actionBar.isActionModeShowed()) showActionMode();
+                    toggle(item);
                 }
             });
             cell.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));

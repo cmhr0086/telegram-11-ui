@@ -46,6 +46,13 @@ import org.telegram.ui.Cells.DocumentBubbleCell;
 import org.telegram.ui.Cells.PhotoBubbleCell;
 import org.telegram.ui.Cells.AlbumBubbleCell;
 import org.telegram.ui.Cells.RoundVideoBubbleCell;
+import org.telegram.ui.Cells.StickerBubbleCell;
+import org.telegram.ui.Cells.GifBubbleCell;
+import org.telegram.ui.Components.Sticker;
+import org.telegram.ui.Components.StickerSet;
+import org.telegram.ui.Components.Gif;
+import org.telegram.ui.Components.EmojiView;
+import org.telegram.ui.Components.StickersAlert;
 import org.telegram.ui.Cells.VoiceBubbleCell;
 import org.telegram.ui.Components.ChatActivityEnterView;
 import org.telegram.ui.Components.ChatBubbleItemAnimator;
@@ -97,6 +104,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private RecyclerListView listView;
     private LinearLayoutManager layoutManager;
     private ChatActivityEnterView enterView;
+    private LocalStickerSamples stickerSamples;
+    private EmojiView mediaPanel;
     private ChatInputTopPanel topPanel;
     private final ArrayList<TextBubbleMessage> messages = new ArrayList<>();
     private long nextId = 1;
@@ -207,6 +216,14 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         addSample(roundIncoming);
         addSample(TextBubbleMessage.roundVideo(nextId++, true, "10:15", TextBubbleMessage.STATE_READ,
                 sampleVideoThumb(videoUri), videoUri, 6));
+        try {
+            stickerSamples = new LocalStickerSamples(ApplicationLoader.applicationContext);
+            for (Sticker sticker : stickerSamples.sets.get(0).stickers) {
+                addSample(TextBubbleMessage.sticker(nextId++, sticker.id % 2 == 0, "10:16", TextBubbleMessage.STATE_READ, sticker));
+            }
+            addSample(TextBubbleMessage.gif(nextId++, false, "10:17", TextBubbleMessage.STATE_NONE,
+                    stickerSamples.gifs.get(0), ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.local_gif_caption)));
+        } catch (java.io.IOException error) { org.telegram.messenger.FileLog.e(error); }
         rebuildRows();
         return super.onFragmentCreate();
     }
@@ -459,6 +476,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
         enterView = new ChatActivityEnterView(getParentActivity(), contentView, this, true, getResourceProvider());
         enterView.setDelegate(new EnterViewDelegate());
+        enterView.setAllowStickersAndGifs(true, true, true);
         enterView.setDialogId(777, UserConfig.selectedAccount);
         enterView.setRoundVideoEnabled(true);
         contentView.addView(enterView, contentView.getChildCount(), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
@@ -830,6 +848,17 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     private class EnterViewDelegate implements ChatActivityEnterView.ChatActivityEnterViewDelegate {
 
+        @Override public void onEmojiPanelCreated(EmojiView panel) { mediaPanel = panel; refreshMediaPanel(); }
+        @Override public void onSendSticker(Sticker sticker) { sendSticker(sticker); }
+        @Override public void onSendGif(Gif gif) {
+            sendOutgoing(TextBubbleMessage.gif(nextId++, true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENDING, gif, null));
+        }
+        @Override public void onStickerSetRequested(StickerSet set) { openStickerSet(set); }
+        @Override public void onStickerFavoriteChanged(Sticker sticker, boolean favorite) { changeFavorite(sticker, favorite); }
+        @Override public void onGifRemoved(Gif gif) {
+            if (stickerSamples != null) { stickerSamples.gifs.removeIf(item -> item.id == gif.id); refreshMediaPanel(); }
+        }
+
         @Override
         public void onSendText(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate) {
             // like upstream MessageObject: plain text + entities (the editor's IME / emoji spans are not carried over)
@@ -942,6 +971,35 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             AndroidUtilities.cancelRunOnUIThread(fakeVideoAmplitude);
             fakeVideoAmplitude = null;
         }
+    }
+
+    private void refreshMediaPanel() {
+        if (mediaPanel != null && stickerSamples != null) mediaPanel.setMediaData(stickerSamples.sets,
+                stickerSamples.recent, stickerSamples.favorites, stickerSamples.gifs);
+    }
+    private void sendSticker(Sticker sticker) {
+        if (stickerSamples != null) {
+            stickerSamples.recent.removeIf(item -> item.id == sticker.id);
+            stickerSamples.recent.add(0, sticker);
+            refreshMediaPanel();
+        }
+        sendOutgoing(TextBubbleMessage.sticker(nextId++, true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENDING, sticker));
+    }
+    private void changeFavorite(Sticker sticker, boolean favorite) {
+        if (stickerSamples == null) return;
+        stickerSamples.favorites.removeIf(item -> item.id == sticker.id);
+        if (favorite) stickerSamples.favorites.add(sticker);
+        refreshMediaPanel();
+    }
+    private void openStickerSet(StickerSet set) {
+        showDialog(new StickersAlert(getParentActivity(), set, new StickersAlert.Delegate() {
+            @Override public void onSendSticker(Sticker sticker) { sendSticker(sticker); }
+            @Override public boolean isFavorite(Sticker sticker) {
+                for (Sticker item : stickerSamples.favorites) if (item.id == sticker.id) return true;
+                return false;
+            }
+            @Override public void onFavoriteChanged(Sticker sticker, boolean favorite) { changeFavorite(sticker, favorite); }
+        }, getResourceProvider()));
     }
 
     private void sendOutgoing(CharSequence text) {
@@ -1489,7 +1547,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
         @Override
         public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) {
-            if (message.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
+            if (message.type == TextBubbleMessage.TYPE_STICKER) {
+                if (actionBar.isActionModeShowed()) processRowSelect(message);
+                else if (stickerSamples != null) openStickerSet(stickerSamples.sets.get(0));
+            } else if (message.type == TextBubbleMessage.TYPE_GIF) {
+                if (actionBar.isActionModeShowed()) processRowSelect(message);
+                else showMessageOptions(cell, message, cell.getWidth() / 2f, cell.getHeight() / 2f);
+            } else if (message.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
                 if (message.mediaState == TextBubbleMessage.MEDIA_READY) {
                     stopVoice();
                     roundPlayer.toggle(message);
@@ -1673,6 +1737,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 cell = new AlbumBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_ROUND_VIDEO) {
                 cell = new RoundVideoBubbleCell(context, getResourceProvider());
+            } else if (viewType == TextBubbleMessage.TYPE_STICKER) {
+                cell = new StickerBubbleCell(context, getResourceProvider());
+            } else if (viewType == TextBubbleMessage.TYPE_GIF) {
+                cell = new GifBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_DOCUMENT) {
                 cell = new DocumentBubbleCell(context, getResourceProvider());
             } else {

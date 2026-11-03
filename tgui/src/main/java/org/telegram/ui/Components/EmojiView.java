@@ -41,6 +41,8 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.core.graphics.ColorUtils;
@@ -71,6 +73,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Objects;
+import java.util.List;
 
 /**
  * tgui: the emoji page of upstream EmojiView (Telegram 11.4.2) — the grid of the bundled emoji
@@ -90,6 +93,13 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
 
         default void onEmojiSelected(String emoji) {
         }
+
+        default void onStickerSelected(Sticker sticker) { }
+        default void onGifSelected(Gif gif) { }
+        default void onStickerSetRequested(StickerSet set) { }
+        default void onStickerFavoriteChanged(Sticker sticker, boolean favorite) { }
+        default void onGifRemoved(Gif gif) { }
+        default void onMediaPreview(Object item, View source) { }
 
         default void onCustomEmojiSelected(long documentId, TLRPC.Document document, String emoticon, boolean isRecent) {
         }
@@ -146,6 +156,8 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
     }
 
     private final static int TAB_EMOJI = 0;
+    private final static int TAB_GIFS = 1;
+    private final static int TAB_STICKERS = 2;
 
     private ArrayList<Tab> allTabs = new ArrayList<>();
     private ArrayList<Tab> currentTabs = new ArrayList<>();
@@ -202,6 +214,15 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
     boolean stickersBanned;
 
     private int currentPage;
+    private boolean allowStickers;
+    private boolean allowGifs;
+    private StickerMediaPage stickerPage, gifPage;
+    private LinearLayout typeTabs;
+    private final ArrayList<ImageView> typeButtons = new ArrayList<>();
+    private final ArrayList<StickerSet> mediaPacks = new ArrayList<>();
+    private final ArrayList<Sticker> mediaRecent = new ArrayList<>();
+    private final ArrayList<Sticker> mediaFavorites = new ArrayList<>();
+    private final ArrayList<Gif> mediaGifs = new ArrayList<>();
 
     private EmojiColorPickerWindow colorPickerView;
     private int emojiSize;
@@ -223,17 +244,77 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
     private final Theme.ResourcesProvider resourcesProvider;
 
     public void setAllow(boolean allowStickers, boolean allowGifs, boolean animated) {
-        // tgui: only the emoji page exists
+        this.allowStickers = allowStickers;
+        this.allowGifs = allowGifs;
+        int selectedType = currentPage;
         currentTabs.clear();
         for (int i = 0; i < allTabs.size(); i++) {
-            if (allTabs.get(i).type == TAB_EMOJI) {
-                currentTabs.add(allTabs.get(i));
-            }
+            Tab tab = allTabs.get(i);
+            if (tab.type == TAB_EMOJI || tab.type == TAB_GIFS && allowGifs || tab.type == TAB_STICKERS && allowStickers && !stickersBanned) currentTabs.add(tab);
         }
         if (pager != null) {
             pager.setAdapter(null);
             pager.setAdapter(emojiPagerAdapter);
+            int target = indexOfPage(selectedType);
+            pager.setCurrentItem(Math.max(0, target), false);
+            setCurrentPageType(currentTabs.get(Math.max(0, target)).type);
         }
+        rebuildTypeTabs();
+    }
+
+    /** Replaces local host snapshots; the host owns persistence and favorite/recent state. */
+    public void setMediaData(List<StickerSet> packs, List<Sticker> recent, List<Sticker> favorites, List<Gif> gifs) {
+        mediaPacks.clear(); mediaRecent.clear(); mediaFavorites.clear(); mediaGifs.clear();
+        if (packs != null) for (StickerSet pack : packs) if (pack != null) mediaPacks.add(pack);
+        if (recent != null) for (Sticker sticker : recent) if (sticker != null) mediaRecent.add(sticker);
+        if (favorites != null) for (Sticker sticker : favorites) if (sticker != null) mediaFavorites.add(sticker);
+        if (gifs != null) for (Gif gif : gifs) if (gif != null) mediaGifs.add(gif);
+        if (stickerPage != null) stickerPage.setData(mediaPacks, mediaRecent, mediaFavorites, mediaGifs);
+        if (gifPage != null) gifPage.setData(mediaPacks, mediaRecent, mediaFavorites, mediaGifs);
+    }
+
+    private int indexOfPage(int type) {
+        for (int i = 0; i < currentTabs.size(); i++) if (currentTabs.get(i).type == type) return i;
+        return -1;
+    }
+
+    private void setCurrentPageType(int type) {
+        boolean changed = currentPage != type;
+        currentPage = type;
+        updateTypeTabColors();
+        updateMediaPlayback();
+        if (changed && delegate != null) delegate.onTabOpened(type == TAB_STICKERS ? 3 : type == TAB_GIFS ? 2 : 0);
+    }
+
+    private void rebuildTypeTabs() {
+        if (typeTabs == null) return;
+        typeTabs.removeAllViews(); typeButtons.clear();
+        for (Tab tab : currentTabs) {
+            ImageView button = new ImageView(getContext());
+            button.setScaleType(ImageView.ScaleType.CENTER);
+            button.setImageResource(tab.type == TAB_EMOJI ? R.drawable.smiles_tab_smiles : tab.type == TAB_GIFS ? R.drawable.smiles_tab_gif : R.drawable.smiles_tab_stickers);
+            button.setContentDescription(getContext().getString(tab.type == TAB_EMOJI ? R.string.Emoji : tab.type == TAB_GIFS ? R.string.tgui_gifs : R.string.tgui_stickers));
+            button.setOnClickListener(v -> {
+                int index = indexOfPage(tab.type);
+                if (index >= 0) pager.setCurrentItem(index, true);
+            });
+            typeTabs.addView(button, new LinearLayout.LayoutParams(0, LayoutHelper.MATCH_PARENT, 1));
+            typeButtons.add(button);
+        }
+        updateTypeTabColors();
+    }
+
+    private void updateTypeTabColors() {
+        for (int i = 0; i < typeButtons.size() && i < currentTabs.size(); i++) {
+            int key = currentTabs.get(i).type == currentPage ? Theme.key_chat_emojiPanelIconSelected : Theme.key_chat_emojiBottomPanelIcon;
+            typeButtons.get(i).setColorFilter(new PorterDuffColorFilter(getThemedColor(key), PorterDuff.Mode.MULTIPLY));
+        }
+    }
+
+    private void updateMediaPlayback() {
+        boolean active = showing && getVisibility() == VISIBLE && isAttachedToWindow();
+        if (gifPage != null) gifPage.setPageActive(active && currentPage == TAB_GIFS);
+        if (stickerPage != null) stickerPage.setPageActive(active && currentPage == TAB_STICKERS);
     }
 
     public void setShouldDrawBackground(boolean shouldDrawBackground) {
@@ -597,6 +678,18 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
         layoutParams.topMargin = AndroidUtilities.dp(36);
         emojiContainer.addView(emojiTabsShadow, layoutParams);
 
+        StickerMediaPage.Listener mediaListener = new StickerMediaPage.Listener() {
+            @Override public void onStickerSelected(Sticker sticker) { if (delegate != null) delegate.onStickerSelected(sticker); }
+            @Override public void onGifSelected(Gif gif) { if (delegate != null) delegate.onGifSelected(gif); }
+            @Override public void onStickerSetRequested(StickerSet set) { if (delegate != null) delegate.onStickerSetRequested(set); }
+            @Override public void onStickerFavoriteChanged(Sticker sticker, boolean favorite) { if (delegate != null) delegate.onStickerFavoriteChanged(sticker, favorite); }
+            @Override public void onGifRemoved(Gif gif) { if (delegate != null) delegate.onGifRemoved(gif); }
+        };
+        gifPage = new StickerMediaPage(context, true, resourcesProvider, mediaListener);
+        stickerPage = new StickerMediaPage(context, false, resourcesProvider, mediaListener);
+        Tab gifTab = new Tab(); gifTab.type = TAB_GIFS; gifTab.view = gifPage; allTabs.add(gifTab);
+        Tab stickerTab = new Tab(); stickerTab.type = TAB_STICKERS; stickerTab.view = stickerPage; allTabs.add(stickerTab);
+        setMediaData(null, null, null, null);
         currentTabs.clear();
         currentTabs.addAll(allTabs);
 
@@ -636,6 +729,11 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
             }
         };
         pager.setAdapter(emojiPagerAdapter = new EmojiPagesAdapter());
+        pager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
+            @Override public void onPageSelected(int position) {
+                if (position >= 0 && position < currentTabs.size()) setCurrentPageType(currentTabs.get(position).type);
+            }
+        });
 
         backspaceButton = new ImageView(context) {
             @Override
@@ -688,6 +786,11 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
         // the GIF / sticker type tabs and the search button are cut with those pages
         addView(bottomTabContainer, new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, AndroidUtilities.dp(40) + AndroidUtilities.getShadowHeight(), Gravity.LEFT | Gravity.BOTTOM));
         bottomTabContainer.addView(backspaceButton, LayoutHelper.createFrame(47, 40, Gravity.BOTTOM | Gravity.RIGHT));
+        typeTabs = new LinearLayout(context);
+        typeTabs.setOrientation(LinearLayout.HORIZONTAL);
+        FrameLayout.LayoutParams typeParams = new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, AndroidUtilities.dp(40), Gravity.BOTTOM);
+        typeParams.rightMargin = AndroidUtilities.dp(47);
+        bottomTabContainer.addView(typeTabs, typeParams);
         if (Build.VERSION.SDK_INT >= 21) {
             backspaceButton.setBackground(Theme.createSelectorDrawable(color, Theme.RIPPLE_MASK_CIRCLE_20DP, AndroidUtilities.dp(18)));
         }
@@ -1443,6 +1546,8 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
 
     /** tgui: the GIF page is cut; kept for the input bar. */
     public void switchToGifRecent() {
+        int index = indexOfPage(TAB_GIFS);
+        if (index >= 0 && pager != null) pager.setCurrentItem(index, true);
     }
 
     @Override
@@ -1499,6 +1604,9 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
         if (emojiTabs != null) {
             emojiTabs.updateColors();
         }
+        if (stickerPage != null) stickerPage.updateColors();
+        if (gifPage != null) gifPage.updateColors();
+        updateTypeTabColors();
     }
 
     @Override
@@ -1557,6 +1665,8 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
 
     public void invalidateViews() {
         emojiGridView.invalidateViews();
+        if (stickerPage != null) stickerPage.invalidate();
+        if (gifPage != null) gifPage.invalidate();
     }
 
     public void setForseMultiwindowLayout(boolean value) {
@@ -1565,8 +1675,8 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
 
     public void onOpen(boolean forceEmoji, boolean groupEmojiHintWasVisible) {
         showBackspaceButton(true, false);
-        if (pager.getCurrentItem() != 0) {
-            pager.setCurrentItem(0, !forceEmoji);
+        if (forceEmoji && pager.getCurrentItem() != 0) {
+            pager.setCurrentItem(0, false);
         }
         showBottomTab(true, true);
     }
@@ -1575,6 +1685,7 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.emojiLoaded);
+        updateMediaPlayback();
     }
 
     @Override
@@ -1587,6 +1698,7 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
                 emojiAdapter.notifyDataSetChanged();
             }
         }
+        updateMediaPlayback();
     }
 
     public int getCurrentPage() {
@@ -1595,10 +1707,14 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
 
     public void onDestroy() {
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.emojiLoaded);
+        if (gifPage != null) gifPage.dispose();
+        if (stickerPage != null) stickerPage.dispose();
     }
 
     @Override
     protected void onDetachedFromWindow() {
+        if (gifPage != null) gifPage.setPageActive(false);
+        if (stickerPage != null) stickerPage.setPageActive(false);
         super.onDetachedFromWindow();
         if (colorPickerView != null && colorPickerView.isShowing()) {
             colorPickerView.dismiss();
@@ -1608,11 +1724,15 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
     /** tgui: there are no stickers; kept for the input bar. */
     public void setStickersBanned(boolean emojiBanned, boolean stickersBanned, long chatId) {
         this.emojiBanned = emojiBanned;
+        boolean changed = this.stickersBanned != stickersBanned;
         this.stickersBanned = stickersBanned;
+        if (changed) setAllow(allowStickers, allowGifs, false);
     }
 
     /** tgui: there are no stickers; kept for the input bar. */
     public boolean areThereAnyStickers() {
+        if (!mediaRecent.isEmpty() || !mediaFavorites.isEmpty()) return true;
+        for (StickerSet pack : mediaPacks) if (pack != null && !pack.stickers.isEmpty()) return true;
         return false;
     }
 
@@ -1824,7 +1944,8 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
         }
 
         public CharSequence getPageTitle(int position) {
-            return LocaleController.getString(R.string.Emoji);
+            int type = currentTabs.get(position).type;
+            return getContext().getString(type == TAB_EMOJI ? R.string.Emoji : type == TAB_GIFS ? R.string.tgui_gifs : R.string.tgui_stickers);
         }
 
         public Object instantiateItem(ViewGroup viewGroup, int position) {
@@ -1849,6 +1970,7 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
 
     public void setShowing(boolean showing) {
         this.showing = showing;
+        updateMediaPlayback();
     }
 
     public boolean isShowing() {

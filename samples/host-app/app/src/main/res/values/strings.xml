@@ -4,4 +4,6 @@
     <string name="local_album_sample">Local album from the AAR</string>
     <string name="album_item">Photo %1$d: host opens its viewer here</string>
     <string name="round_video_host">Host supplies the video surface and playback here</string>
+    <string name="local_sticker_pack">Local duck stickers</string>
+    <string name="local_gif_caption">Local animated GIF from the AAR</string>
 </resources>
