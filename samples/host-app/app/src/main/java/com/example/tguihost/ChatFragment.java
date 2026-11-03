@@ -41,6 +41,8 @@ import org.telegram.ui.Components.Gif;
 import org.telegram.ui.Components.Attachment;
 import org.telegram.ui.Components.ChatAttachAlert;
 import org.telegram.ui.bots.ReplyKeyboard;
+import org.telegram.ui.Components.Mention;
+import org.telegram.ui.Components.MentionsController;
 import org.telegram.ui.TelegramUI;
 
 import java.text.SimpleDateFormat;
@@ -305,6 +307,21 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         contentView.addView(enterView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
         contentView.setEnterView(enterView);
         enterView.setReplyKeyboard(sampleReplyKeyboard(context, true, false), false);
+        java.util.List<Mention> mentionUsers = java.util.Arrays.asList(
+                new Mention(101, context.getString(com.example.tguihost.R.string.mention_alice), "alice", null),
+                new Mention(102, context.getString(com.example.tguihost.R.string.mention_bob), "bob", null),
+                new Mention(103, context.getString(com.example.tguihost.R.string.mention_carol), null, null),
+                new Mention(104, context.getString(com.example.tguihost.R.string.mention_david), "david", null),
+                new Mention(105, context.getString(com.example.tguihost.R.string.mention_eve), "eve", null));
+        new MentionsController(enterView, contentView, (query, results) -> {
+            String prefix = query.query.toLowerCase(java.util.Locale.ROOT);
+            java.util.ArrayList<Mention> matches = new java.util.ArrayList<>();
+            for (Mention user : mentionUsers) {
+                if (user.name.toString().toLowerCase(java.util.Locale.ROOT).startsWith(prefix)
+                        || user.username != null && user.username.toLowerCase(java.util.Locale.ROOT).startsWith(prefix)) matches.add(user);
+            }
+            results.onResult(matches);
+        }, getResourceProvider());
 
         contentView.addView(actionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
         contentView.setActionBar(actionBar);

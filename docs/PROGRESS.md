@@ -2,7 +2,7 @@
 
 ## 新任务 A–F（2026-11-03）
 
-用户已合并 PR #1；远端 `dev/ui-lib` 基线为 `3834565`。当前工作分支 `codex/phase-c`，基于阶段 B 的 `344a205`。每阶段结束推送并创建目标为 `dev/ui-lib` 的 PR；下阶段从上一阶段分支继续，不等待合并，不自行合并，不改 main。下文旧路线图的“未合并”是当时记录，已由此状态更新。
+用户已合并 PR #1；远端 `dev/ui-lib` 基线为 `3834565`。当前工作分支 `codex/phase-d`，基于阶段 C 的 `1bbf01f`。每阶段结束推送并创建目标为 `dev/ui-lib` 的 PR；下阶段从上一阶段分支继续，不等待合并，不自行合并，不改 main。下文旧路线图的“未合并”是当时记录，已由此状态更新。
 
 上游再次核实为 `release-11.4.2-5469`。基线 `:tgui:assembleRelease :demo:assembleDebug` 通过（TEMP/phase-a-baseline.log）。继续复用 tgui、原包名、RecyclerView fork 与 GPL 头，不引入网络层或平行模块。
 
@@ -11,15 +11,25 @@
 | A 贴纸与 GIF | 已完成，限制见下 | PR #2，库/消费端/仪器及 MuMu 真操作通过；WEBM 首帧降级 |
 | B 附件菜单 | 已实现并推送 PR #3 | 主体/五页/权限/选择/确认与宿主回调；简化交互和人工补验见下 |
 | C 更多消息 | 已完成，限制见下 | PR #4；11项功能已实现，库/消费端/完整设备回归通过，人工补验见各项记录 |
-| D 输入增强 | 未开始 | 提及、表情联想、命令、发送预览 |
+| D 输入增强 | 进行中 | @提及已完成；表情联想、命令、发送预览未开始 |
 | E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
 
-roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；阶段 C 现已完成本任务的11项功能；D–F仍未开始。
+roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；阶段 C 已完成本任务的11项功能，PR #4已转为可审查；阶段D进行中，E–F未开始。
+
+### 阶段 D 当前交接
+
+- 从阶段C的1bbf01f拉出codex/phase-d；PR #4已ready，不合并。第一项@提及：上游MentionsContainerView/MentionCell先搬运再裁剪，候选由Mention模型/Provider提供；MentionsController处理文本/光标、异步失效和原替换/ID span。ChatInputLayout新增上浮候选面板定位，demo/sample已接入。
+- @提及保留普通分支36dp行、28dp头像/14dp圆角、15dp文字、6dp面板圆角、3.5行/屏幕22%上限、stiffness550无弹性spring。来源：固定上游MentionCell 34–121、MentionsContainerView 81–87/327–388/420–550、MentionsAdapter1097–1116，以及ChatActivity的上浮2dp定位。业务候选搜索/排序由宿主；无新增依赖/TL/网络/权限。
+- 审查修复：宿主Drawable绘制恢复bounds；离屏行重新绑定刷新主题；username规范前导@/空姓名回退；失焦隐藏/拒绝迟到响应。有效新query期间保留旧面板但禁止旧候选插入，新结果原位替换。加强专项曾因setFieldText临时把光标置0触发hide失败，已将自动文本/光标刷新合并到事件尾部，保持原断言后通过；公开refresh立即执行。保留上游只替换[@,光标)规则，不吞右侧后缀；无username复用URLSpanUserMention与原实体导出。
+- 最终库release/demo/debugAndroidTest/publish通过（TEMP/phase-d-mentions-verified-build.log），独立host debug/R8通过（phase-d-mentions-final-host.log）；专项phase-d-mentions-final-device.log通过，完整MuMu回归phase-d-mentions-final-full-device.log通过，包含旧TGS完整周期/循环续播、GIF临时重绑和收藏尺寸。覆盖邮箱/空格/换行/非折叠/UTF16光标边界、异步代次/同query不同全文/迟到与销毁、后台回调切主线程、焦点失效、旧候选点击隔离、光标中间保留后缀、ID span、@规范化、36dp/2dp定位及Drawable bounds。
+- MuMu Android15真操作：菜单填入@、输入a过滤Alice、真实点击发送@alice、日夜刷新、滚动到后续候选、无username的Carol插入蓝色ID span并发送，表情面板展开时提及面板随输入上移。截图TEMP/mentions-{menu,night,filter,sent,day,scroll,id-span,emoji}.png；无AndroidRuntime错误。实际软键盘过渡仍受前述MuMu搜狗IME环境限制；未单独安装sample实操。
+- 限制：仅普通用户提及，无inline bot网格/网络搜索、反向布局、模糊背景/动态头像/群成员权限策略；宿主提供静态Drawable和候选数据。多语言搜索排序由宿主实现；其它Android版本、平板/复杂RTL/大字体仍需人工检查。README/CHANGELOG和demo/sample已更新，无旧API不兼容变更。
+- @提及随本次独立提交推送，阶段D创建目标dev/ui-lib的draft PR记录已完成与限制；不自行合并。下一项：SuggestEmojiView，之后机器人命令菜单和MessageSendPreview。D–F仍未完成。
 
 ### 阶段 C 当前交接
 
-- 回复键盘完成，随本次独立提交推送：直接搬运 `ui/bots/BotKeyboardView`，保留原GPL、42dp最小行高/16dp文字/15dp外距/10dp行列距和原颜色；`ReplyKeyboard` 不可变快照替换TL标记。原输入栏恢复48dp入口、紧凑/全高/单次/移除、占位提示、表情互斥及宿主动作回调；demo/sample接入，无新增权限、网络或运行依赖。
+- 回复键盘1bbf01f已提交并推送：直接搬运 `ui/bots/BotKeyboardView`，保留原GPL、42dp最小行高/16dp文字/15dp外距/10dp行列距和原颜色；`ReplyKeyboard` 不可变快照替换TL标记。原输入栏恢复48dp入口、紧凑/全高/单次/移除、占位提示、表情互斥及宿主动作回调；demo/sample接入，无新增权限、网络或运行依赖。
 - 回复键盘审查：旧按钮重绑/清空后不派发；单次回调重入替换模型不关闭新面板；编辑/录音/销毁阻止打开；切换前清理贴纸展开与搜索。修复关闭动画中IME出现的旧动画竞态；ChatInputLayout在退场期间保留面板padding，避免输入栏先跳到底部再位移。原上游按钮再次点击为收起，不擅自改成强制开启IME。
 - 回复键盘验证：最终库release/demo/debugAndroidTest/publish（TEMP/phase-c-reply-verified-build.log）及独立host debug/R8（phase-c-reply-final-host.log）通过。component=reply_keyboard（phase-c-reply-final-device.log）和完整MuMu Android15回归（phase-c-reply-full-device.log）通过，含旧TGS末段/循环后续播、GIF重绑续播/收藏尺寸。专项涵盖快照/重复ID、42dp/等宽/全高、主题provider、旧按钮失效、面板切换/单次/回调重入/提示恢复、编辑录音门禁、销毁后重建及关闭动画→IME竞态。
 - 回复键盘真操作：紧凑/全高/单次/移除、发送文字、虚构联系人确认并发送、夜间主题与表情切换、单次发送后关闭及重新展开，位置/投票按钮打开正确附件页。截图TEMP/reply-{entry,compact,text,contact-confirm,night,emoji,full,once,once-sent,removed,location,poll}.png；无AndroidRuntime崩溃输出。sample仅构建，未单独安装实操。

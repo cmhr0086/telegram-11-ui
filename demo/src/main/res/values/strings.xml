@@ -76,4 +76,10 @@
     <string name="reply_keyboard_contact_confirm">Send the fictional contact from this demo?</string>
     <string name="reply_keyboard_sample_contact">Demo user</string>
     <string name="reply_keyboard_action">Host keyboard action: %1$s</string>
+    <string name="mention_menu">Mention a member</string>
+    <string name="mention_alice">Alice</string>
+    <string name="mention_bob">Bob</string>
+    <string name="mention_carol">Carol (no username)</string>
+    <string name="mention_david">David</string>
+    <string name="mention_eve">Eve</string>
 </resources>

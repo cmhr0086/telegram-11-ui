@@ -59,6 +59,8 @@ import org.telegram.ui.Components.StickersAlert;
 import org.telegram.ui.Components.Attachment;
 import org.telegram.ui.Components.ChatAttachAlert;
 import org.telegram.ui.bots.ReplyKeyboard;
+import org.telegram.ui.Components.Mention;
+import org.telegram.ui.Components.MentionsController;
 import org.telegram.ui.Cells.VoiceBubbleCell;
 import org.telegram.ui.Components.ChatActivityEnterView;
 import org.telegram.ui.Components.ChatBubbleItemAnimator;
@@ -110,6 +112,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_DOCUMENT_THUMB = 23;
     private static final int MENU_INLINE = 24;
     private static final int MENU_REPLY_KEYBOARD = 25;
+    private static final int MENU_MENTIONS = 26;
     private long firstInlineId;
     private final ArrayList<Runnable> inlineCompletions = new ArrayList<>();
     private long firstDocumentThumbnailId;
@@ -573,6 +576,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     scrollToMessage(firstLocationId);
                 } else if (id == MENU_POLL) {
                     scrollToMessage(firstPollId);
+                } else if (id == MENU_MENTIONS) {
+                    enterView.getEditField().requestFocus();
+                    enterView.setFieldText("@");
                 } else if (id == MENU_REPLY_KEYBOARD) {
                     showReplyKeyboardOptions();
                 } else if (id == MENU_INLINE) {
@@ -602,6 +608,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.addSubItem(MENU_DOCUMENT_THUMB, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.document_thumbnail_messages));
         otherItem.addSubItem(MENU_INLINE, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.inline_messages));
         otherItem.addSubItem(MENU_REPLY_KEYBOARD, R.drawable.input_bot2, context.getString(org.telegram.uidemo.R.string.reply_keyboard_menu));
+        otherItem.addSubItem(MENU_MENTIONS, R.drawable.msg_addcontact, context.getString(org.telegram.uidemo.R.string.mention_menu));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -683,6 +690,21 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         contentView.addView(enterView, contentView.getChildCount(), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
         contentView.setEnterView(enterView);
         enterView.setReplyKeyboard(sampleReplyKeyboard(context, true, false), false);
+        java.util.List<Mention> mentionUsers = java.util.Arrays.asList(
+                new Mention(101, context.getString(org.telegram.uidemo.R.string.mention_alice), "alice", null),
+                new Mention(102, context.getString(org.telegram.uidemo.R.string.mention_bob), "bob", null),
+                new Mention(103, context.getString(org.telegram.uidemo.R.string.mention_carol), null, null),
+                new Mention(104, context.getString(org.telegram.uidemo.R.string.mention_david), "david", null),
+                new Mention(105, context.getString(org.telegram.uidemo.R.string.mention_eve), "eve", null));
+        new MentionsController(enterView, contentView, (query, results) -> {
+            String prefix = query.query.toLowerCase(java.util.Locale.ROOT);
+            java.util.ArrayList<Mention> matches = new java.util.ArrayList<>();
+            for (Mention user : mentionUsers) {
+                if (user.name.toString().toLowerCase(java.util.Locale.ROOT).startsWith(prefix)
+                        || user.username != null && user.username.toLowerCase(java.util.Locale.ROOT).startsWith(prefix)) matches.add(user);
+            }
+            results.onResult(matches);
+        }, getResourceProvider());
 
         topPanel = new ChatInputTopPanel(context, enterView, getResourceProvider());
         topPanel.setListener(new ChatInputTopPanel.Listener() {

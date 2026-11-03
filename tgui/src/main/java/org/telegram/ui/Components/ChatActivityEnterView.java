@@ -666,6 +666,20 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     private ImageView expandStickersButton;
     private boolean emojiViewFrozen;
     private EmojiView emojiView;
+    private MentionsController mentionsController;
+
+    void attachMentionsController(MentionsController controller) {
+        if (mentionsController != null && mentionsController != controller) mentionsController.destroy();
+        mentionsController = controller;
+    }
+    void detachMentionsController(MentionsController controller) {
+        if (mentionsController == controller) mentionsController = null;
+    }
+    boolean canShowMentionSuggestions() {
+        return !destroyed && messageEditText != null && messageEditText.hasFocus() && !recordingAudioVideo && recordInterfaceState == 0
+                && audioToSend == null && videoToSendMessageObject == null && getVisibility() == VISIBLE;
+    }
+
     private org.telegram.ui.bots.BotKeyboardView botKeyboardView;
     private org.telegram.ui.bots.ReplyKeyboard replyKeyboard;
     private ImageView botButton;
@@ -987,6 +1001,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 onFinishInitCameraRunnable.run();
                 if (!recordingAudioVideo) {
                     recordingAudioVideo = true;
+                    if (mentionsController != null) mentionsController.refresh();
                     updateRecordInterface(RECORD_STATE_ENTER, true);
                     if (recordCircle != null) {
                         recordCircle.showWaves(false, false);
@@ -1005,6 +1020,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 startedDraggingX = -1;
                 MediaController.getInstance().startRecording(recordingGuid);
                 recordingAudioVideo = true;
+                if (mentionsController != null) mentionsController.refresh();
                 updateRecordInterface(RECORD_STATE_ENTER, true);
                 if (recordTimerView != null) {
                     recordTimerView.start(0);
@@ -3940,8 +3956,15 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         }
 
         @Override
+        protected void onFocusChanged(boolean focused, int direction, android.graphics.Rect previous) {
+            super.onFocusChanged(focused, direction, previous);
+            if (mentionsController != null) mentionsController.refresh();
+        }
+
+        @Override
         protected void onSelectionChanged(int selStart, int selEnd) {
             super.onSelectionChanged(selStart, selEnd);
+            if (mentionsController != null) mentionsController.scheduleRefresh();
             if (delegate != null) {
                 delegate.onTextSelectionChanged(selStart, selEnd);
             }
@@ -4782,6 +4805,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     }
 
     public void onDestroy() {
+        if (mentionsController != null) mentionsController.destroy();
         destroyed = true;
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.recordStarted);
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.recordPaused);
@@ -7523,6 +7547,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 Theme.key_chat_emojiPanelBackground, Theme.key_chat_emojiPanelNewTrending, Theme.key_chat_messageLinkOut, Theme.key_chat_TextSelectionCursor,
                 Theme.key_chat_botKeyboardButtonText, Theme.key_chat_botKeyboardButtonBackground, Theme.key_chat_botKeyboardButtonBackgroundPressed,
                 Theme.key_chat_inTextSelectionHighlight, Theme.key_listSelector, Theme.key_windowBackgroundWhiteGrayText,
+                Theme.key_windowBackgroundWhiteBlackText, Theme.key_windowBackgroundWhiteGrayText3, Theme.key_windowBackgroundWhiteLinkText, Theme.key_avatar_text,
                 // upstream ChatActivity.getThemeDescriptions(): the emoji panel
                 Theme.key_chat_emojiPanelShadowLine, Theme.key_chat_emojiPanelEmptyText, Theme.key_chat_emojiPanelIcon, Theme.key_chat_emojiPanelIconSelected,
                 Theme.key_chat_emojiPanelStickerPackSelector, Theme.key_chat_emojiPanelBackspace, Theme.key_chat_emojiBottomPanelIcon,
@@ -7530,6 +7555,10 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         };
         for (int key : keys) {
             descriptions.add(new ThemeDescription(null, 0, null, null, null, delegate, key));
+        }
+        if (mentionsController != null) {
+            for (int key : Theme.keys_avatar_background) descriptions.add(new ThemeDescription(null, 0, null, null, null, delegate, key));
+            for (int key : Theme.keys_avatar_background2) descriptions.add(new ThemeDescription(null, 0, null, null, null, delegate, key));
         }
         // upstream ChatActivity.getThemeDescriptions() entries for the input (fields resolved by name)
         descriptions.add(new ThemeDescription(this, 0, null, getThemedPaint(Theme.key_paint_chatComposeBackground), null, null, Theme.key_chat_messagePanelBackground));
@@ -7571,6 +7600,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     }
 
     public void updateColors() {
+        if (mentionsController != null) mentionsController.updateColors();
 
         updateRecordedDeleteIconColors();
         if (recordCircle != null) {
@@ -8886,6 +8916,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             }
             if (!recordingAudioVideo) {
                 recordingAudioVideo = true;
+                    if (mentionsController != null) mentionsController.refresh();
                 updateRecordInterface(RECORD_STATE_ENTER, true);
             } else if (recordCircle != null) {
                 recordCircle.showWaves(true, true);
@@ -8905,6 +8936,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             videoToSendMessageObject = null;
             checkSendButton(true);
             recordingAudioVideo = true;
+                    if (mentionsController != null) mentionsController.refresh();
             updateRecordInterface(RECORD_STATE_ENTER, true);
         } else if (id == NotificationCenter.audioDidSent) {
             int guid = (Integer) args[0];

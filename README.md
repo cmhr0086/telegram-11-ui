@@ -431,6 +431,26 @@ cell.setMessage(message, pinnedTop, pinnedBottom);
 
 demo ⋮ “Poll messages” 提供单选、多选公开投票和关闭结果；本地回调延迟650ms展示 pending，然后更新内存票数。sample 同样展示宿主更新模型；附件创建投票→确认发送后直接成为可投票气泡。这些数据只用于本地演示，不连接服务器。暂不含 quiz/答题解释/定时关闭倒计时、最近投票者头像和库内投票者列表；实际参与者、撤票或关闭操作由宿主处理。极窄宽度下的长票数/自定义长时间、大字体和更多语言仍需人工检查；当前内置文案为英文，宿主可覆盖 Android 资源。
 
+### @提及列表
+
+`MentionsContainerView` / `MentionCell` 从固定上游的普通用户提及分支裁剪。宿主负责候选来源、过滤与排序，库不访问通讯录、群成员或 Telegram 网络：
+
+```java
+MentionsController mentions = new MentionsController(enterView, chatInputLayout,
+        (query, results) -> {
+            // Query.query excludes @; Query.start/end are UTF-16 replacement offsets.
+            results.onResult(hostFindUsers(query.query)); // List<Mention>; async allowed
+        }, resourcesProvider);
+// A candidate: stable ID, display name, optional username, optional static Drawable.
+Mention user = new Mention(42, getString(R.string.member_name), "alice", avatar);
+```
+
+输入框聚焦后，文本与光标变化会自动查询；非折叠选区、失焦或录音时隐藏。异步结果回到主线程，并核对全文/光标/请求代次；有效新查询等待期间保留旧面板但旧候选不能插入，新结果原位替换；宿主数据变化时调用 `mentions.refresh()`。`ChatInputLayout` 的 `setInputSuggestionsView` 将候选面板锚定输入上方并跟随 IME/表情面板位移，输入销毁会自动释放 controller，也可提前 `destroy()`。每个输入只绑定一个 controller；替换时自动释放旧绑定。
+
+点击保留光标右侧文字，只替换 `[@, 光标)` 并添加空格；这与上游一致，所以在单词中间选择候选不会吞掉右半词。无 username 的候选插入原 `URLSpanUserMention`，ID 通过既有 `onSendText` 实体交给宿主。username 可带前导 @，模型会规范化。候选ID在列表中须唯一，不能用RecyclerView的NO_ID（−1）。边界沿用上游文本起点/空格/换行，允许全名查询中的空格，不把邮箱里的 @ 当作提及。
+
+原36dp行高、28dp头像、15dp文字、6dp面板圆角和stiffness=550无弹性spring保留，最多显示3.5行/屏幕22%，列表可滚动。头像由宿主提供静态Drawable，绘制后恢复bounds；动态头像需宿主刷新。demo菜单“Mention a member”填入@并展示候选；sample输入@同样可用。没有inline bot网格/网络搜索、反向布局、模糊背景或群成员权限逻辑；仅普通用户提及。
+
 ### 回复键盘（reply keyboard）
 
 `org.telegram.ui.bots.BotKeyboardView` 从同名上游类搬运，`ReplyKeyboard` 替代 TL 标记。集成在原 `ChatActivityEnterView` 内，不需要宿主另建底部容器：
@@ -513,6 +533,7 @@ cell.setMessage(file, pinnedTop, pinnedBottom);
 | 服务消息 | `ChatActionCell` / `ServiceMessage`：加入、邀请、改名、置顶，用户与消息回调 |
 | 群聊消息 | `TextBubbleMessage.Sender` / `MessageGrouping` / `ChatAvatarDecoration`：原配色姓名、头像列、连续消息及滚动吸底头像 |
 | 转发来源 | `TextBubbleMessage.ForwardedFrom` / `ForwardBackground`：普通与无背景媒体来源头、头像、原按压动画、宿主来源回调；贴纸/圆视频旁侧回复 |
+| @提及 | 原 MentionsContainerView / MentionCell 普通用户分支，宿主候选查询、异步隔离、光标插入及ID span |
 | 回复键盘 | 原 `ui.bots.BotKeyboardView`，宿主不可变行快照、紧凑/全高/单次模式；原输入栏切换与按钮回调 |
 | 内联按钮 | 上游44dp按钮行、类型图标/按压/加载反馈；宿主行模型与短按/长按回调，所有既有气泡共用 |
 | 文件缩略图 | 既有 `DocumentBubbleCell`：宿主86dp缩略图、下载状态、说明文字及文件/菜单回调；旧无图布局保留 |
@@ -585,7 +606,7 @@ cell.setMessage(file, pinnedTop, pinnedBottom);
 
 - 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸、GIF、联系人、音乐、位置和投票；已有群聊头像、名字和转发来源；文件已支持宿主缩略图和说明；尚缺文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 查看器 `MediaViewer`：只是简易版——没有缩略图条、分享 / 保存 / 转发 / 删除菜单、图片编辑、画中画、倍速、静音、视频缩略图预览、横屏全屏按钮、多图相册分组；视频用系统 `MediaPlayer`（格式取决于设备解码器，没有缓冲进度、不循环），播放中不能连续翻页预加载；图片直接画宿主给的 `Drawable`（大图要宿主自己先缩放）；打开 / 关闭动画不处理被 ActionBar 或输入栏遮住的那部分（上游会裁剪），起点用整张图片的位置；平板没有专门布局
-- 输入栏：附件按钮由宿主回调打开 `ChatAttachAlert`；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；回复键盘已有宿主模型/回调；没有命令菜单和 WebView 容器；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
+- 输入栏：附件按钮由宿主回调打开 `ChatAttachAlert`；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；已有宿主驱动的 @提及列表；没有话题 / 表情联想列表（`SuggestEmojiView`）；回复键盘已有宿主模型/回调；没有命令菜单和 WebView 容器；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 
 - 只支持主题自带的颜色/渐变壁纸和默认图案壁纸，不支持壁纸文件和视差（motion）效果；各强调色原本的不同图案都显示成同一个 `default_pattern`
 - Lottie 只带了库内引用到的 `R.raw` JSON（对话列表的归档 / 滑动动作图标、骰子 / 飞镖等），外加上游 APK 自带的 46 个大幅插画：11 只 Utya 小鸭子 `R.raw.utyan_*`、两步验证猴子 `tsv_setup_monkey_*` / `tsv_monkey_close`、设置和邮箱引导（`tsv_setup_*`、`email_*`）、钱包 `wallet_*`、`qr_login`、`filter_new` 等，以及一批白色线条图标（`passcode_lock`、`stats`、`fragment*`、`boosts` 等，上游画在彩色圆形上，可配合 `AlertDialog.Builder.setTopAnimationIsNew(true)` 使用），demo 的 "Lottie illustrations" 页分组展示全部动画。客户端里另一些鸭子（搜索无结果等空状态）和动态表情、贴纸是运行时从服务器贴纸包下载的，不在 APK 里；其它动画 JSON 由宿主放进自己的 `res/raw`，再 `setTopAnimation(R.raw.xxx, …)` / `new RLottieDrawable(R.raw.xxx, …)` 使用
