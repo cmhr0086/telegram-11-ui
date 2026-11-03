@@ -5,6 +5,7 @@
 ## Unreleased
 
 ### 新增
+- 阶段 C：直接搬运 `ChatUnreadCell` 及原分隔条/箭头资源，保留 40dp 行高和三个 unread 颜色 key；`updateColors()` 便于主题重用。demo 聊天增加未读锚点和菜单定位，外部宿主增加预览。
 - 阶段 B：新增 `ChatAttachAlert` 附件面板和 `Attachment` 模型，支持相册、系统文件选择、宿主联系人与位置视图、本地投票，以及说明文字和发送回调。相册按系统版本请求权限，文件 URI 的长期授权与内容读取由宿主处理；Activity 重建会取消待处理的选择，需要重新打开。预览为精简列表，不含图片编辑；顶部拖动未实现上游完整整页联动。demo 将媒体显示为 URI 文字摘要。
 - 阶段 A：宿主 `MediaSource` / `StickerSet` / `Sticker` / `Gif`，本地 WEBP/TGS/GIF 渲染和 WEBM 首帧回退，无新增运行依赖；加载取消、复用隔离、隐藏停止及 detach 释放。
 - `StickerBubbleCell` 透明贴纸/service 时间和 `GifBubbleCell` 自动播放，既有照片布局、状态与媒体回调兼容；新增模型类型不改变旧 API。

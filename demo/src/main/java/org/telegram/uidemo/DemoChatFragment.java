@@ -95,6 +95,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_RECORD_BUTTON = 2;
     private static final int MENU_LOCAL_EMOJI = 3;
     private static final int MENU_ALBUM_TEN = 4;
+    private static final int MENU_UNREAD = 5;
     // action mode (ChatActivity.createActionMode ids)
     private static final int ACTION_EDIT = 10;
     private static final int ACTION_COPY = 11;
@@ -117,6 +118,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     /** Adapter rows: a TextBubbleMessage, or a Long (start of day, unix seconds) for a date separator. */
     private final ArrayList<Object> rows = new ArrayList<>();
     private static final int VIEW_TYPE_DATE = 100;
+    private static final int VIEW_TYPE_UNREAD = 101;
+    private static final Object UNREAD_MARKER = new Object();
+    private long firstUnreadId;
     private ChatActionCell floatingDateView;
     private boolean floatingDateVisible;
     private final Runnable hideFloatingDate = () -> showFloatingDate(false);
@@ -227,6 +231,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             addSample(TextBubbleMessage.gif(nextId++, false, "10:17", TextBubbleMessage.STATE_NONE,
                     stickerSamples.gifs.get(0), ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.local_gif_caption)));
         } catch (java.io.IOException error) { org.telegram.messenger.FileLog.e(error); }
+        if (!messages.isEmpty()) firstUnreadId = messages.get(messages.size() - 1).id;
         rebuildRows();
         return super.onFragmentCreate();
     }
@@ -288,6 +293,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 rows.add(day);
                 lastDay = day;
             }
+            if (message.id == firstUnreadId) rows.add(UNREAD_MARKER);
             rows.add(message);
         }
     }
@@ -395,6 +401,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     enterView.getEditField().updateAnimatedEmoji(true);
                 } else if (id == MENU_ALBUM_TEN) {
                     sendOutgoing(sampleAlbum(10, true, true));
+                } else if (id == MENU_UNREAD) {
+                    int row = rows.indexOf(UNREAD_MARKER);
+                    if (row >= 0) layoutManager.scrollToPositionWithOffset(row, 0);
                 }
             }
         });
@@ -406,6 +415,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         recordButtonItem.setChecked(true);
         otherItem.addSubItem(MENU_LOCAL_EMOJI, R.drawable.msg_emoji_smiles, context.getString(org.telegram.uidemo.R.string.local_emoji_insert));
         otherItem.addSubItem(MENU_ALBUM_TEN, R.drawable.msg_photos, context.getString(org.telegram.uidemo.R.string.album_ten));
+        otherItem.addSubItem(MENU_UNREAD, R.drawable.ic_ab_new, context.getString(R.string.UnreadMessages));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -810,16 +820,16 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         int row = rowOf(message);
         messages.remove(index);
         // the day's separator goes too when this was its only message
-        boolean removeSeparator = row > 0 && rows.get(row - 1) instanceof Long && (row + 1 >= rows.size() || rows.get(row + 1) instanceof Long);
+        int firstRemoved = row;
+        if (firstRemoved > 0 && rows.get(firstRemoved - 1) == UNREAD_MARKER) firstRemoved--;
+        boolean removeSeparator = firstRemoved > 0 && rows.get(firstRemoved - 1) instanceof Long && (row + 1 >= rows.size() || rows.get(row + 1) instanceof Long);
+        if (removeSeparator) firstRemoved--;
+        int removedCount = row - firstRemoved + 1;
         rebuildRows();
         RecyclerView.Adapter<?> adapter = listView.getAdapter();
         if (adapter != null && row >= 0) {
-            if (removeSeparator) {
-                adapter.notifyItemRangeRemoved(row - 1, 2);
-                row--;
-            } else {
-                adapter.notifyItemRemoved(row);
-            }
+            adapter.notifyItemRangeRemoved(firstRemoved, removedCount);
+            row = firstRemoved;
             // neighbours may gain or lose their tail / grouped corners
             if (row > 0) {
                 adapter.notifyItemChanged(row - 1);
@@ -1184,6 +1194,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         ThemeDescription.ThemeDescriptionDelegate redraw = () -> {
             if (listView != null) {
                 listView.invalidateViews();
+                for (int i = 0; i < listView.getChildCount(); i++) {
+                    if (listView.getChildAt(i) instanceof org.telegram.ui.Cells.ChatUnreadCell)
+                        ((org.telegram.ui.Cells.ChatUnreadCell) listView.getChildAt(i)).updateColors();
+                }
             }
             if (floatingDateView != null) {
                 floatingDateView.invalidate();
@@ -1212,6 +1226,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 Theme.key_chat_outSentCheck, Theme.key_chat_outSentCheckRead, Theme.key_chat_outSentClock,
                 Theme.key_chat_selectedBackground, Theme.key_chat_inTimeSelectedText, Theme.key_chat_outTimeSelectedText,
                 Theme.key_chat_serviceBackground, Theme.key_checkbox, Theme.key_checkboxCheck,
+                Theme.key_chat_unreadMessagesStartBackground, Theme.key_chat_unreadMessagesStartText,
+                Theme.key_chat_unreadMessagesStartArrowIcon,
                 Theme.key_chat_outReactionButtonBackground, Theme.key_chat_inReactionButtonBackground,
                 Theme.key_actionBarActionModeDefaultIcon, Theme.key_actionBarActionModeDefaultSelector, Theme.key_chat_messagePanelBackground,
         };
@@ -1773,11 +1789,12 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
         @Override
         public boolean isEnabled(RecyclerView.ViewHolder holder) {
-            return holder.getItemViewType() != VIEW_TYPE_DATE;
+            return holder.getItemViewType() != VIEW_TYPE_DATE && holder.getItemViewType() != VIEW_TYPE_UNREAD;
         }
 
         @Override
         public int getItemViewType(int position) {
+            if (rows.get(position) == UNREAD_MARKER) return VIEW_TYPE_UNREAD;
             TextBubbleMessage message = messageAt(position);
             return message == null ? VIEW_TYPE_DATE : message.type;
         }
@@ -1785,6 +1802,11 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         @NonNull
         @Override
         public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            if (viewType == VIEW_TYPE_UNREAD) {
+                org.telegram.ui.Cells.ChatUnreadCell cell = new org.telegram.ui.Cells.ChatUnreadCell(context, getResourceProvider());
+                cell.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
+                return new RecyclerListView.Holder(cell);
+            }
             if (viewType == VIEW_TYPE_DATE) {
                 ChatActionCell dateCell = new ChatActionCell(context, getResourceProvider());
                 dateCell.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -1816,6 +1838,12 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
         @Override
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+            if (holder.itemView instanceof org.telegram.ui.Cells.ChatUnreadCell) {
+                org.telegram.ui.Cells.ChatUnreadCell cell = (org.telegram.ui.Cells.ChatUnreadCell) holder.itemView;
+                cell.setText(context.getString(R.string.UnreadMessages));
+                cell.updateColors();
+                return;
+            }
             if (holder.itemView instanceof ChatActionCell) {
                 ((ChatActionCell) holder.itemView).setCustomDate((Long) rows.get(position));
                 return;

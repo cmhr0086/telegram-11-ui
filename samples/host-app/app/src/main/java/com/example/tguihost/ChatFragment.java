@@ -147,6 +147,12 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 } else if (id == 2) {
                     enterView.setFieldText(localEmoji());
                     enterView.getEditField().updateAnimatedEmoji(true);
+                } else if (id == 3) {
+                    org.telegram.ui.Cells.ChatUnreadCell unread = new org.telegram.ui.Cells.ChatUnreadCell(context, getResourceProvider());
+                    unread.setText(context.getString(R.string.UnreadMessages));
+                    org.telegram.ui.ActionBar.BottomSheet sheet = new org.telegram.ui.ActionBar.BottomSheet(context, false, getResourceProvider());
+                    sheet.setCustomView(unread);
+                    showDialog(sheet);
                 } else if (id == ACTION_DELETE) {
                     for (TextBubbleMessage m : new ArrayList<>(selected)) {
                         int index = messages.indexOf(m);
@@ -158,6 +164,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             }
         });
         actionBar.createMenu().addItem(MENU_NIGHT, R.drawable.msg_theme);
+        actionBar.createMenu().addItem(3, R.drawable.ic_ab_new).setContentDescription(context.getString(R.string.UnreadMessages));
         actionBar.createMenu().addItem(2, R.drawable.msg_emoji_smiles)
                 .setContentDescription(context.getString(com.example.tguihost.R.string.local_emoji_insert));
 

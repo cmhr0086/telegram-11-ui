@@ -260,10 +260,24 @@ new ChatAttachAlert(activity, new ChatAttachAlert.Delegate() {
 
 附件预览是精简列表，不包含 `PhotoViewer` 图片编辑功能；顶部手柄支持拖动，但不包含上游完整的整页联动。贴纸 WEBM 的首帧降级限制见上节。
 
+### 未读消息分隔条
+
+`ChatUnreadCell` 直接搬运上游：40dp 行高、27dp 分隔背景、居中文字和右侧箭头。宿主在第一条未读消息前插入独立 adapter 行，分隔行打断连续气泡分组。
+
+```java
+ChatUnreadCell row = new ChatUnreadCell(context, resourcesProvider);
+row.setText(context.getString(org.telegram.tgui.R.string.UnreadMessages));
+// 主题切换后重读 provider；也可沿用 getter / ThemeDescription 更新三个颜色键。
+row.updateColors();
+```
+
+demo 聊天菜单的 Unread Messages 可定位到分隔行；宿主示例菜单提供独立预览。是否已读和未读数量由宿主管理。
+
 ## 包含的组件
 
 | 类别 | 类 |
 | --- | --- |
+| 未读消息 | `ChatUnreadCell`：原版 40dp 分隔行、主题颜色和宿主未读文案 |
 | 附件面板 | `ChatAttachAlert`、`Attachment`、`AttachmentAccess`：相册、文件、联系人、位置与投票选择及宿主回调 |
 | 圆形视频 | `RoundVideoBubbleCell`、`TextBubbleMessage.roundVideo(...)`、上游 `RoundVideoShadow`：圆形预览、时长、未读/下载状态、播放环及宿主回调 |
 | 贴纸与 GIF | `StickerBubbleCell` / `GifBubbleCell`、`StickerSet` / `Sticker` / `Gif` / `MediaSource`、`LocalMediaView`；本地 WEBP/TGS/GIF、WEBM 首帧，自动播放及宿主加载回调 |
