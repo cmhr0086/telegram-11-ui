@@ -5,6 +5,7 @@
 ## Unreleased
 
 ### 新增
+- 阶段 C：`ForwardedFrom` 与 `onForwardPressed` 支持宿主提供的转发来源；直接搬运 `ForwardBackground`，从 `ChatMessageCell` / `AvatarSpan` 移植两行头、头像、颜色和几何。接入既有文字/语音/照片/文件/相册/GIF/贴纸/圆视频，纯 emoji 保留大号显示；贴纸和圆视频同时支持旁侧回复。demo/sample 均有示例，旧 API 兼容。
 - 阶段 C：既有气泡增加宿主 `Sender`、群聊姓名/42dp头像/48dp让位及纯 `MessageGrouping`；普通姓名头和贴纸/圆视频/纯表情旁侧头沿用上游几何与配色。`ChatAvatarDecoration` 使用现有 RecyclerView fork 支持滚动头像，旧宿主不启用时保留行内模式；demo 可切换，sample 接入群聊。
 - 阶段 C：`ServiceMessage` 为既有 `ChatActionCell` 提供加入/邀请/改名/置顶/自定义事件，移植上游文字分支与 Android 资源，保留原文字胶囊；新增用户/置顶目标回调。demo 可点击置顶跳转，host sample 可预览；不改变既有日期 API。
 - 阶段 C：直接搬运 `ChatUnreadCell` 及原分隔条/箭头资源，保留 40dp 行高和三个 unread 颜色 key；`updateColors()` 便于主题重用。demo 聊天增加未读锚点和菜单定位，外部宿主增加预览。

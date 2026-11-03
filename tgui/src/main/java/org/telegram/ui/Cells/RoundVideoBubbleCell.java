@@ -74,14 +74,16 @@ public class RoundVideoBubbleCell extends TextBubbleCell {
     @Override protected void buildLayout(int width) {
         layoutForWidth = width;
         layoutForText = message.text;
-        // This first media port does not lay out reply or reaction rows.
+        // Replies share the side forwarding block; reaction rows are not ported.
         layoutForReply = message.replyTo;
         setReactionsLayout();
         int displayHeight = AndroidUtilities.displaySize.y > 0 ? AndroidUtilities.displaySize.y : width;
         int side = AndroidUtilities.isTablet() ? AndroidUtilities.getMinTabletSide() : Math.min(width, displayHeight);
         diameter = Math.max(1, (int) (side * 0.6f));
         backgroundWidth = diameter;
+        buildSideReply(width, sideAuthorBackgroundRight(true));
         totalHeight = diameter + AndroidUtilities.dp(10);
+        totalHeight = Math.max(totalHeight, sideHeaderMinimumHeight());
         measureTime();
     }
 
@@ -140,13 +142,15 @@ public class RoundVideoBubbleCell extends TextBubbleCell {
         drawDuration(canvas);
         // One message timestamp/status overlay; the host may cover only the video circle.
         drawTimePill(canvas, (int) videoRect.right - AndroidUtilities.dp(5), (int) videoRect.bottom - AndroidUtilities.dp(5), AndroidUtilities.dp(6));
+        drawSideForward(canvas, sideAuthorBackgroundRight(true));
+        drawSideReply(canvas, sideAuthorBackgroundRight(true));
         if (!message.isOut) drawSideAuthor(canvas, sideAuthorBackgroundRight(true));
     }
 
     private void drawDuration(Canvas canvas) {
         if (durationLayout == null) return;
         float x = videoRect.left + AndroidUtilities.dp(8);
-        float y = getMeasuredHeight() - AndroidUtilities.dp(28 - (pinnedBottom ? 2 : 0));
+        float y = videoRect.bottom - AndroidUtilities.dp(23 - (pinnedBottom ? 2 : 0));
         // Upstream places duration at the left and the time/status pill at the right.
         // On a narrow circle the two can overlap; keep duration directly above time.
         float timeLeft = videoRect.right - AndroidUtilities.dp(5) - timeWidth - AndroidUtilities.dp(message.isOut ? 32 : 12);
@@ -185,6 +189,8 @@ public class RoundVideoBubbleCell extends TextBubbleCell {
     }
 
     @Override public boolean onTouchEvent(MotionEvent event) {
+        if (message != null && !isCheckBoxVisible() && checkForwardTouchEvent(event)) return true;
+        if (message != null && !isCheckBoxVisible() && checkReplyTouchEvent(event)) return true;
         if (message == null || isCheckBoxVisible() || mediaDelegate == null) {
             cancelVideoTouch();
             return super.onTouchEvent(event);

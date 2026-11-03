@@ -247,4 +247,6 @@
     <string name="tgui_attach_caption">Add a caption</string>
     <string name="tgui_attachment_preview">Preview</string>
     <string name="UnreadMessages">Unread Messages</string>
+    <!-- Telegram release-11.4.2-5469, values/strings.xml -->
+    <string name="ForwardedFrom">Forwarded from</string>
 </resources>

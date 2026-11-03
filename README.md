@@ -205,7 +205,7 @@ cell.updatePlayingMessageProgress();
 
 视频解码和声音由宿主负责。`getVideoRectOnScreen(rect)` 给出上次绘制的圆框；可在透明列表后面放圆形 Surface/TextureView，首帧准备好后 `setVideoVisible(false)` 隐藏缩略图，气泡仍在视频上方画时间、状态和环，并继续接收点击。离屏、暂停页面或解绑时宿主必须停止/释放自己的播放器，恢复缩略图。demo 的 `LocalRoundVideoPlayer` 展示 MediaPlayer + TextureView：居中裁剪、本地六秒素材、暂停/恢复、切换播放、音频焦点丢失暂停、离屏/退出释放。消费端提供纯 UI/回调示例。
 
-当前普通圆视频不支持播放扩大/过渡动画、拖环定位、转写、阅后即焚、画中画及圆消息自身的回复块/反应布局；其它既有气泡的回复和反应保持支持。可引用圆视频到普通文字消息。播放器不是库内媒体服务，不处理录制、下载、后台播放和进程恢复；MediaPlayer 格式兼容性由设备决定。窄圆的两个信息条重叠时，时长条向上避让。
+当前普通圆视频不支持播放扩大/过渡动画、拖环定位、转写、阅后即焚、画中画及反应布局；支持旁侧转发头和回复块，也可引用圆视频到普通文字消息。播放器不是库内媒体服务，不处理录制、下载、后台播放和进程恢复；MediaPlayer 格式兼容性由设备决定。窄圆的两个信息条重叠时，时长条向上避让。
 
 ### 本地贴纸与 GIF（阶段 A）
 
@@ -234,7 +234,7 @@ enterView.setDelegate(new ChatActivityEnterView.ChatActivityEnterViewDelegate() 
 
 demo 的 Chat 页包含上述消息，输入面板可选择、发送、收藏、预览包；`samples/host-app` 覆盖发布 AAR 的相同 API。示例的最近/收藏只保存在页面内存；示例 GIF/WEBM 由既有 sample_video.mp4 转码，不增加应用运行依赖。
 
-限制：WEBM 当前固定降级为设备 MediaMetadataRetriever 解出的首帧，解码失败保留宿主缩略图；没有视频贴纸实播。GIF 在 API 28+ 使用系统 AnimatedImageDrawable，21–27 使用 Movie（后者尚未设备验证）。不含服务器搜索、精选包/安装管理、Premium、完整上游拖拽展开/预览模糊与滑出菜单动画；包弹窗布局裁剪为固定五列。贴纸回复/转发头暂不绘制，下载业务交宿主；GIF 回复/说明沿用现有照片气泡。尚未逐像素标定所有屏幕尺寸/平板/RTL。
+限制：WEBM 当前固定降级为设备 MediaMetadataRetriever 解出的首帧，解码失败保留宿主缩略图；没有视频贴纸实播。GIF 在 API 28+ 使用系统 AnimatedImageDrawable，21–27 使用 Movie（后者尚未设备验证）。不含服务器搜索、精选包/安装管理、Premium、完整上游拖拽展开/预览模糊与滑出菜单动画；包弹窗布局裁剪为固定五列。贴纸支持旁侧回复/转发头，下载业务交宿主；GIF 回复/说明沿用现有照片气泡。尚未逐像素标定所有屏幕尺寸/平板/RTL。
 
 ### 附件面板
 
@@ -303,6 +303,24 @@ cell.setAvatarDrawnByList(true);
 
 `MessageGrouping` 要求同发送者、同收发方向、同群聊上下文、时间相隔不超过 300 秒；未知发送者/时间不合并。日期、服务和未读行应以 null 邻居打断分组。头像为 42dp、左侧列留 48dp；列表装饰在可见区域底部绘制连续组头像，遵守列表 padding 和行透明度。不启用装饰时仍使用行内头像。demo 的 “Group names and avatars” 可切换；host sample 使用群聊模型。尚未包含头像点击/动态头像、管理员头衔/频道签名、Premium 多色姓名，以及圆视频播放放大的姓名过渡；RTL/平板仍需人工检查。
 
+### 转发来源
+
+```java
+message.forwardedFrom = new TextBubbleMessage.ForwardedFrom(sourceId, sourceName,
+        sourceAvatar, -1); // null avatar uses initials; -1 color uses the upstream ID rule.
+cell.setMessage(message, pinnedTop, pinnedBottom);
+cell.setDelegate(new TextBubbleCell.Delegate() {
+    @Override public void onForwardPressed(TextBubbleCell cell, TextBubbleMessage message,
+                                           TextBubbleMessage.ForwardedFrom source) {
+        // Host opens the source; the library performs no account lookup.
+    }
+});
+```
+
+`sourceId=0` 表示匿名来源，保留名字但不画头像；空名字或 `forwardedFrom=null` 隐藏头部。既有普通气泡在正文/媒体上方显示两行来源，贴纸与圆视频放在旁侧，纯 emoji 保留大号绘制并预留上方空间。`ForwardBackground` 直接搬运上游路径、按压水波和回弹；字体、头像比例、间距与颜色 key 来自 `ChatMessageCell` / `AvatarSpan`。同一消息修改来源后重新绑定即可。
+
+贴纸/圆视频的回复块与来源共用服务底色，分别触发 `onReplyPressed` / `onForwardPressed`；媒体区域仍走媒体回调。demo 的 “Forwarded messages” 菜单定位示例，点击来源显示宿主回调；外部 sample 也有来源模型。极窄的群聊媒体行可能没有足够宽度显示旁侧来源（如 240dp），保留上游媒体尺寸并省略文字，不为此缩小贴纸或圆视频。未移植 PSA、导入消息、Saved Messages 特殊头、来源加载状态和动态头像；纯 emoji 只有回复、没有转发时仍沿用既有普通文字气泡布局。复杂 RTL、平板及大字体需人工检查。
+
 ## 包含的组件
 
 | 类别 | 类 |
@@ -310,6 +328,7 @@ cell.setAvatarDrawnByList(true);
 | 未读消息 | `ChatUnreadCell`：原版 40dp 分隔行、主题颜色和宿主未读文案 |
 | 服务消息 | `ChatActionCell` / `ServiceMessage`：加入、邀请、改名、置顶，用户与消息回调 |
 | 群聊消息 | `TextBubbleMessage.Sender` / `MessageGrouping` / `ChatAvatarDecoration`：原配色姓名、头像列、连续消息及滚动吸底头像 |
+| 转发来源 | `TextBubbleMessage.ForwardedFrom` / `ForwardBackground`：普通与无背景媒体来源头、头像、原按压动画、宿主来源回调；贴纸/圆视频旁侧回复 |
 | 附件面板 | `ChatAttachAlert`、`Attachment`、`AttachmentAccess`：相册、文件、联系人、位置与投票选择及宿主回调 |
 | 圆形视频 | `RoundVideoBubbleCell`、`TextBubbleMessage.roundVideo(...)`、上游 `RoundVideoShadow`：圆形预览、时长、未读/下载状态、播放环及宿主回调 |
 | 贴纸与 GIF | `StickerBubbleCell` / `GifBubbleCell`、`StickerSet` / `Sticker` / `Gif` / `MediaSource`、`LocalMediaView`；本地 WEBP/TGS/GIF、WEBM 首帧，自动播放及宿主加载回调 |
@@ -373,7 +392,7 @@ cell.setAvatarDrawnByList(true);
 
 主题 `.attheme` 解析同时接受 LF / CRLF，壁纸二进制偏移按原始字节计算；`.gitattributes` 固定新检出的主题资源为 LF。Windows 上此前出现的夜间文字透明/缺失已修复，设备覆盖打包的 night/darkblue 与两种换行格式。
 
-- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸和 GIF；没有头像、名字、转发、音乐 / 位置等其它媒体、带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
+- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸和 GIF；已有群聊头像、名字和转发来源；没有音乐 / 位置等其它媒体、带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 查看器 `MediaViewer`：只是简易版——没有缩略图条、分享 / 保存 / 转发 / 删除菜单、图片编辑、画中画、倍速、静音、视频缩略图预览、横屏全屏按钮、多图相册分组；视频用系统 `MediaPlayer`（格式取决于设备解码器，没有缓冲进度、不循环），播放中不能连续翻页预加载；图片直接画宿主给的 `Drawable`（大图要宿主自己先缩放）；打开 / 关闭动画不处理被 ActionBar 或输入栏遮住的那部分（上游会裁剪），起点用整张图片的位置；平板没有专门布局
 - 输入栏：附件按钮由宿主回调打开 `ChatAttachAlert`；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；没有机器人键盘、命令菜单和 WebView 按钮；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 

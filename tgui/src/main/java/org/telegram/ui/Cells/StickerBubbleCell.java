@@ -26,7 +26,7 @@ import org.telegram.ui.Components.Sticker;
  * 8612-8619, 9311-9360), onLayout (11725-11753), drawTimeInternal (20476-20550).
  * Account/document loading, Premium effects and dice are removed. The existing
  * photo cell supplies media tap, long press, selection and visibility APIs.
- * Sticker replies/forward headers are not laid out in this first extraction.
+ * Replies and forwarding sources use ChatMessageCell's side service background.
  */
 public class StickerBubbleCell extends PhotoBubbleCell {
     private static final int STICKER_STATUS_OFFSET = 6;
@@ -91,6 +91,7 @@ public class StickerBubbleCell extends PhotoBubbleCell {
         photoWidth = Math.max(1, photoWidth);
         photoHeight = Math.max(1, photoHeight);
         backgroundWidth = photoWidth + AndroidUtilities.dp(12);
+        buildSideReply(width, sideAuthorBackgroundRight(true));
         totalHeight = photoHeight + AndroidUtilities.dp(14) - AndroidUtilities.dp(4);
         if (!reactionsLayoutInBubble.isEmpty) {
             reactionsLayoutInBubble.measure(maxWidth + AndroidUtilities.dp(36), message.isOut ? Gravity.RIGHT : Gravity.LEFT);
@@ -99,6 +100,7 @@ public class StickerBubbleCell extends PhotoBubbleCell {
             reactionsLayoutInBubble.positionOffsetY += AndroidUtilities.dp(4);
             totalHeight += reactionsLayoutInBubble.totalHeight;
         }
+        totalHeight = Math.max(totalHeight, sideHeaderMinimumHeight());
         measureTime();
     }
 
@@ -122,6 +124,8 @@ public class StickerBubbleCell extends PhotoBubbleCell {
             drawReactions(canvas);
         }
         drawStickerTime(canvas);
+        drawSideForward(canvas, sideAuthorBackgroundRight(true));
+        drawSideReply(canvas, sideAuthorBackgroundRight(true));
         if (!message.isOut) drawSideAuthor(canvas, sideAuthorBackgroundRight(true));
     }
 

@@ -220,9 +220,10 @@ public class PhotoBubbleCell extends TextBubbleCell {
             additionHeight += reactionsLayoutInBubble.totalHeight;
         }
 
-        // totalHeight / photoImage y (no name / forward header)
-        namesOffset = authorHeight + buildReplyLayout(backgroundWidth - AndroidUtilities.dp(mediaBackground ? 22 : 31) - AndroidUtilities.dp(out ? 30 : 20), false);
-        if (hasAuthorLayout() && replyNameLayout == null) namesOffset += AndroidUtilities.dp(7);
+        // totalHeight / photoImage y includes the author, forwarding and reply headers.
+        namesOffset = authorHeight + forwardOffset() + buildReplyLayout(backgroundWidth - AndroidUtilities.dp(mediaBackground ? 22 : 31) - AndroidUtilities.dp(out ? 30 : 20), false);
+        if (hasForwardLayout()) namesOffset += AndroidUtilities.dp(5);
+        else if (hasAuthorLayout() && replyNameLayout == null) namesOffset += AndroidUtilities.dp(7);
         totalHeight = photoHeight + AndroidUtilities.dp(14) + namesOffset + additionHeight;
         if (pinnedTop) {
             namesOffset -= AndroidUtilities.dp(1);
@@ -242,7 +243,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         if (captionLayout != null || !reactionsLayoutInBubble.isEmpty) {
             bl = br = minRad;
         }
-        if (replyNameLayout != null || hasAuthorLayout()) {
+        if (replyNameLayout != null || hasAuthorLayout() || hasForwardLayout()) {
             tl = tr = minRad;
         }
         if (pinnedTop) {
@@ -370,6 +371,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         final int layoutWidth = getMeasuredWidth();
         int backgroundLeft = drawBubbleBackground(canvas);
         drawAuthor(canvas, mediaBackground);
+        drawForward(canvas, mediaBackground);
         drawReply(canvas, mediaBackground);
 
         // onLayout: photo x
@@ -532,6 +534,8 @@ public class PhotoBubbleCell extends TextBubbleCell {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (message != null && !isCheckBoxVisible() && checkForwardTouchEvent(event)) return true;
+        if (message != null && message.type == TextBubbleMessage.TYPE_STICKER && !isCheckBoxVisible() && checkReplyTouchEvent(event)) return true;
         if (message == null || isCheckBoxVisible() || mediaDelegate == null) {
             resetPhotoTouch();
             return super.onTouchEvent(event);

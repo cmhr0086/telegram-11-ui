@@ -31,6 +31,18 @@ public class TextBubbleMessage {
     /** Explicit group context; absent on existing direct-chat models. */
     public boolean group;
     public Sender sender;
+    /** Host-provided forward origin; sourceId 0 represents an anonymous origin. */
+    public static final class ForwardedFrom {
+        public final long sourceId;
+        public final CharSequence name;
+        public final Drawable avatar;
+        public final int colorId;
+        public ForwardedFrom(long sourceId, CharSequence name) { this(sourceId, name, null, -1); }
+        public ForwardedFrom(long sourceId, CharSequence name, Drawable avatar, int colorId) {
+            this.sourceId = sourceId; this.name = name; this.avatar = avatar; this.colorId = colorId;
+        }
+    }
+    public ForwardedFrom forwardedFrom;
 
     public static final int STATE_NONE = 0;
     public static final int STATE_SENDING = 1;

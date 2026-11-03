@@ -204,7 +204,7 @@ public class DocumentBubbleCell extends TextBubbleCell {
             additionHeight += reactionsLayoutInBubble.totalHeight;
         }
 
-        namesOffset = authorHeight + buildReplyLayout(backgroundWidth - AndroidUtilities.dp(31) - AndroidUtilities.dp(message.isOut ? 30 : 20), false);
+        namesOffset = authorHeight + forwardOffset() + buildReplyLayout(backgroundWidth - AndroidUtilities.dp(31) - AndroidUtilities.dp(message.isOut ? 30 : 20), false);
         totalHeight = photoHeight + AndroidUtilities.dp(14) + namesOffset + additionHeight;
         if (pinnedTop) {
             namesOffset -= AndroidUtilities.dp(2);
@@ -247,6 +247,7 @@ public class DocumentBubbleCell extends TextBubbleCell {
         }
         int backgroundLeft = drawBubbleBackground(canvas);
         drawAuthor(canvas);
+        drawForward(canvas, false);
         drawReply(canvas, false);
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
@@ -309,6 +310,7 @@ public class DocumentBubbleCell extends TextBubbleCell {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (message != null && !isCheckBoxVisible() && checkForwardTouchEvent(event)) return true;
         if (message == null || isCheckBoxVisible() || mediaDelegate == null) {
             return super.onTouchEvent(event);
         }

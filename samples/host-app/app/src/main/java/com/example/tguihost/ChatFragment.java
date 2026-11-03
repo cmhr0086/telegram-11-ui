@@ -112,6 +112,13 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         messages.add(TextBubbleMessage.gif(nextId++, true, "12:37", TextBubbleMessage.STATE_READ, localGifs.get(0),
                 app.getString(com.example.tguihost.R.string.local_gif_caption)));
         for (TextBubbleMessage message : messages) bindGroupSender(message);
+        TextBubbleMessage.ForwardedFrom source = new TextBubbleMessage.ForwardedFrom(-100,
+                app.getString(com.example.tguihost.R.string.forward_source_name));
+        messages.get(0).forwardedFrom = source;
+        for (TextBubbleMessage message : messages) {
+            if (message.type == TextBubbleMessage.TYPE_STICKER || message.type == TextBubbleMessage.TYPE_ALBUM
+                    || message.type == TextBubbleMessage.TYPE_ROUND_VIDEO) message.forwardedFrom = source;
+        }
         return super.onFragmentCreate();
     }
 
@@ -557,6 +564,10 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 }
             });
             cell.setDelegate(new TextBubbleCell.Delegate() {
+                @Override public void onForwardPressed(TextBubbleCell sourceCell, TextBubbleMessage item, TextBubbleMessage.ForwardedFrom source) {
+                    Toast.makeText(context, context.getString(com.example.tguihost.R.string.forward_source_selected,
+                            source.name, source.sourceId), Toast.LENGTH_SHORT).show();
+                }
                 @Override public void onBubbleLongPressed(TextBubbleCell source, TextBubbleMessage item) {
                     if (!actionBar.isActionModeShowed()) showActionMode();
                     toggle(item);

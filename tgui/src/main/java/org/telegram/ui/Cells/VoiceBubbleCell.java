@@ -93,12 +93,13 @@ public class VoiceBubbleCell extends TextBubbleCell implements SeekBar.SeekBarDe
         int w = (int) Math.ceil(Theme.chat_audioTimePaint.measureText(timeString));
         backgroundWidth = Math.min(maxWidth, minSize + w);
         if (authorHeight != 0) backgroundWidth = Math.max(backgroundWidth, Math.min(maxWidth, authorWidth() + AndroidUtilities.dp(31)));
+        if (hasForwardLayout()) backgroundWidth = Math.max(backgroundWidth, Math.min(maxWidth, forwardRequiredWidth()));
         // reply panel: namesOffset grows, the bubble widens up to maxWidth for the quote
         int replyOffset = buildReplyLayout(backgroundWidth - AndroidUtilities.dp(31) - AndroidUtilities.dp(message.isOut ? 30 : 20), false);
         if (replyNameLayout != null) {
             backgroundWidth = Math.min(maxWidth, Math.max(backgroundWidth, Math.max(replyNameWidth, replyTextWidth) + AndroidUtilities.dp(31)));
         }
-        totalHeight = AndroidUtilities.dp(70) + replyOffset + authorHeight;
+        totalHeight = AndroidUtilities.dp(70) + replyOffset + authorHeight + forwardOffset();
         // setMessageContent, TYPE_VOICE: pills under the waveform, the time after the last row or below it
         reactionsLayoutInBubble.measure(maxWidth - AndroidUtilities.dp(message.isOut ? 32 : 24), android.view.Gravity.LEFT);
         if (!reactionsLayoutInBubble.isEmpty) {
@@ -116,7 +117,7 @@ public class VoiceBubbleCell extends TextBubbleCell implements SeekBar.SeekBarDe
             }
             totalHeight += reactionsLayoutInBubble.totalHeight;
         }
-        namesOffset = authorHeight + replyOffset + (pinnedTop ? -AndroidUtilities.dp(1) : 0);
+        namesOffset = authorHeight + forwardOffset() + replyOffset + (pinnedTop ? -AndroidUtilities.dp(1) : 0);
         // updateSeekBarWaveformWidth: backgroundWidth - 92dp (no transcribe button)
         seekBarWaveform.setSize(backgroundWidth - AndroidUtilities.dp(92), AndroidUtilities.dp(30));
         lastTime = -1;
@@ -205,6 +206,7 @@ public class VoiceBubbleCell extends TextBubbleCell implements SeekBar.SeekBarDe
         }
         int backgroundLeft = drawBubbleBackground(canvas);
         drawAuthor(canvas);
+        drawForward(canvas, false);
         drawReply(canvas, false);
         updatePositions();
         final boolean out = message.isOut;
@@ -254,6 +256,7 @@ public class VoiceBubbleCell extends TextBubbleCell implements SeekBar.SeekBarDe
     /** Upstream checkAudioMotionEvent, with the press area limited to the button so taps elsewhere open the menu. */
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (message != null && !isCheckBoxVisible() && checkForwardTouchEvent(event)) return true;
         if (message == null || isCheckBoxVisible() || durationLayout == null) {
             return super.onTouchEvent(event);
         }

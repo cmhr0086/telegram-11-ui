@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | A 贴纸与 GIF | 已完成，限制见下 | PR #2，库/消费端/仪器及 MuMu 真操作通过；WEBM 首帧降级 |
 | B 附件菜单 | 已实现并推送 PR #3 | 主体/五页/权限/选择/确认与宿主回调；简化交互和人工补验见下 |
-| C 更多消息 | 进行中 | 未读/服务/群聊已完成；转发、更多气泡和键盘待实现 |
+| C 更多消息 | 进行中 | 未读/服务/群聊/转发已完成；更多气泡和键盘待实现 |
 | D 输入增强 | 未开始 | 提及、表情联想、命令、发送预览 |
 | E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
@@ -19,13 +19,18 @@ roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功�
 
 ### 阶段 C 当前交接
 
-- 已提交并推送未读 f4d10cd、服务 7db39c1、群聊 4441ce7；[PR #4](https://github.com/cmhr0086/telegram-11-ui/pull/4) 为 draft，目标 dev/ui-lib，汇总 A–F 状态和未验证部分。C 尚有后续功能，保持 draft；不合并，不改 main。工作树接下来从转发头继续。
+- 已提交并推送未读 f4d10cd、服务 7db39c1、群聊 4441ce7；[PR #4](https://github.com/cmhr0086/telegram-11-ui/pull/4) 为 draft，目标 dev/ui-lib，汇总 A–F 状态和未验证部分。C 尚有后续功能，保持 draft；不合并，不改 main。转发头已完成本地验收，本次随独立功能提交推送。
 - ChatUnreadCell 经 tools/pull 搬运，保留原尺寸/密度资源/GPL；增加主题刷新、demo 锚点跳转和宿主预览。库release/demo/仪器构建及host debug/R8通过（TEMP/phase-c-unread-build.log、phase-c-unread-demo.log、phase-c-unread-host.log）；设备component=unread通过，实测聊天菜单跳转及夜→日刷新，截图TEMP/unread-night.png、unread-day.png。
 - 服务消息已完成：复用 ChatActionCell 原文字胶囊，移植 MessageObject 文字分支为纯 ServiceMessage（普通群返回/大型群加入、邀请、改名、各媒体类型置顶、自定义），用户/置顶目标通过回调交宿主。demo 菜单定位和点击置顶跳原文、日夜显示通过；host 信息按钮预览。库release/demo/test/publish及host debug/R8通过（TEMP/phase-c-service-build.log、phase-c-service-test-build.log、phase-c-service-host.log）；component=service通过（phase-c-service-device.log）。覆盖模板占位、emoji span、同文字换ID、取消点击、两类群加入、20字符预览、清空layout和日期复用。初次测试把span插入顺序误认为文字顺序，已按真实文本位置排序并依实际layout坐标触摸，生产回调断言保留。截图service-day.png、service-night.png、service-pin.png。未迁移服务卡片/礼物、按压高亮、逐链接无障碍导航。
 - 群聊已完成：Sender/原ID姓名配色、组首姓名、42dp头像/48dp列、300秒同发送者合并，复用既有各类气泡；贴纸/圆视频/纯emoji按无背景分支绘制旁侧名字，列表ChatAvatarDecoration复用上游可视组吸底逻辑。demo菜单可切换，sample使用群聊模型；旧API仍可默认行内绘制。头像padding/透明度、API21比较器和贴纸姓名8dp偏移已修；贴纸/圆视频保持原尺寸上限而非再扣头像列缩小。
 - 群聊设备检查发现首次Theme初始化把姓名画笔覆盖成默认12px，首条与后续字号不同，修正后保留原断言通过。component=group覆盖首次/同对象重绑/长姓名、颜色、300秒/未知ID边界、Photo姓名间隔和圆角、旁侧锚点、原贴纸/圆直径、长组末行屏外头像、clipToPadding=false+padding及半透明、宿主Drawable bounds恢复。最终库release/demo/test/publish及host debug/R8通过（TEMP/phase-c-group-size-build.log、phase-c-group-size-host.log）；设备phase-c-group-size-device.log通过。共享Theme修复后完整旧功能回归含服务/群聊已通过（phase-c-group-full-device.log；当时输出结尾漏列Group名称，但runner在返回前已执行该检查，现输出已补）。
 - MuMu群聊真操作：开关群聊、滚动、日夜切换；TGS及GIF继续动，圆视频点中播放并出现00:05/进度环，相册右列打开正确第11/17张后返回。截图group-night.png、group-stickers.png、group-round-size2.png、group-round-play.png、group-album-night.png、group-album-viewer.png、group-text-night.png。动画头像、头像点击、管理员头衔/Premium多色姓名、圆视频播放放大姓名过渡未移植；复杂RTL/平板需人工检查。
-- 下一项：转发头（含普通气泡及无背景媒体分支），之后音乐/联系人/位置/投票/文件缩略图、inline/reply keyboard。阶段C仍未完成，D–F未开始；不得把本批三项当作整个目标完成。
+- 转发头：`ForwardBackground` 经 tools/pull 搬入，只有版权头补充；从固定上游 ChatMessageCell/AvatarSpan 裁剪两行来源、1.23倍字号头像、匿名分支、原颜色/位置/按压动画。`ForwardedFrom`/`onForwardPressed` 由宿主提供来源并处理跳转，无网络层。文字/照片/语音/文件/相册/GIF顶部及贴纸/圆视频旁侧接入，纯emoji保留大号显示；旁侧回复与来源共用服务背景但独立点击。
+- 转发审查修复：侧回复不覆盖媒体，短转发+长回复的纯emoji联合限宽，扁贴纸保留完整侧头高度；圆视频时长锚定视频底部，不随扩行下移。保留贴纸比例/圆视频0.6倍原直径；未通过缩小媒体满足窄屏断言。240dp群聊旁侧剩余宽度可能不足一个省略号，来源为空时不响应点击；设备检查区分这一边界和400dp可见来源，而非要求隐藏来源触发回调。
+- 转发最终构建通过：库release/demo/debugAndroidTest/publishToMavenLocal（TEMP/phase-c-forward-final-build.log），外部host debug/R8 release（phase-c-forward-host.log）。完整MuMu Android15回归通过（phase-c-forward-full-device.log），包括8类气泡×收发×240/400dp、匿名/同对象替换/取消/detach/宿主头像bounds恢复、侧回复与来源隔离、800×80扁贴纸行高和大号emoji长回复；旧TGS完整周期/GIF临时重绑续播/收藏尺寸检查也通过。
+- MuMu真操作：转发菜单定位，普通来源点击显示正确ID，日夜切换，群聊开关，纯emoji来源+回复显示，匿名文件头，图片本体打开第1/17张查看器并返回，贴纸旁侧来源回调和回复跳原消息。截图TEMP/forward-night.png、forward-day.png、forward-source-tap.png、forward-emoji.png、forward-photo-viewer.png、forward-stickers.png、forward-sticker-source.png、forward-sticker-reply.png。TGS在贴纸截图间持续变化。圆视频侧头已查看；本轮未重新完成人工播放验收，真实播放器已有完整设备回归覆盖。
+- 转发限制：PSA/导入/Saved特殊头、来源加载状态、动态头像未移植；仅回复不含转发的纯emoji仍沿用旧普通文字气泡。240dp窄群聊旁侧文字可能省略为空；复杂RTL/平板/大字体需人工检查。README/CHANGELOG和demo/sample已更新，无破坏性API变更或新依赖。
+- 下一项：音乐/联系人/位置/投票/文件缩略图、inline/reply keyboard。阶段C仍未完成，D–F未开始；不得把本批四项当作整个目标完成。
 
 ### 阶段 B 当前交接
 

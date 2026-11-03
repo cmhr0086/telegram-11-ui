@@ -101,6 +101,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_UNREAD = 5;
     private static final int MENU_SERVICE = 6;
     private static final int MENU_GROUP = 7;
+    private static final int MENU_FORWARD = 8;
+    private long firstForwardedId;
     private boolean groupMode;
     private ActionBarMenuSubItem groupItem;
     // action mode (ChatActivity.createActionMode ids)
@@ -162,11 +164,15 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     public boolean onFragmentCreate() {
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.didSetNewWallpapper);
         ChatSounds.preload();
+        TextBubbleMessage.ForwardedFrom source = new TextBubbleMessage.ForwardedFrom(-100,
+                ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.forward_source_name));
         sampleDaysAgo = 3;
         addSample("Hey! This is the chat background from the current theme.", false, "10:02", TextBubbleMessage.STATE_NONE);
         addSample("The input below is upstream ChatActivityEnterView: select text for bold / italic / links, tap the smiley to switch to the emoji panel.", false, "10:02", TextBubbleMessage.STATE_NONE);
         sampleDaysAgo = 1;
         TextBubbleMessage looksLike = addSample("Looks just like Telegram", true, "10:03", TextBubbleMessage.STATE_READ);
+        looksLike.forwardedFrom = source;
+        firstForwardedId = looksLike.id;
         // reactions: pills inside the bubble (ReactionsLayoutInBubble), tap one to toggle yours
         react(looksLike, "👍", 3, true);
         react(looksLike, "❤", 1, false);
@@ -175,6 +181,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         addSample("Hold the microphone to record a voice message, slide left to cancel or up to lock.", false, "10:05", TextBubbleMessage.STATE_NONE);
         TextBubbleMessage voice = TextBubbleMessage.voice(nextId++, false, "10:05", TextBubbleMessage.STATE_NONE, 7, sampleWaveform());
         voice.contentUnread = true;
+        voice.forwardedFrom = source;
         react(voice, "🔥", 2, false);
         addSample(voice);
         addSample("Tap a message for the menu and reactions, long-press to select messages.", false, "10:05", TextBubbleMessage.STATE_NONE);
@@ -184,15 +191,19 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         react(emojiSet, "🎉", 1, false);
         sampleDaysAgo = 0;
         addSample("Links work too: https://telegram.org, core.telegram.org/api and mentions like @durov or #hashtags. Long-press a link to copy it.", false, "10:06", TextBubbleMessage.STATE_NONE);
-        react(addSample("👋", false, "10:06", TextBubbleMessage.STATE_NONE), "❤", 1, false);
-        addSample("😂❤️👍", true, "10:07", TextBubbleMessage.STATE_READ);
+        TextBubbleMessage emojiReply = react(addSample("👋", false, "10:06", TextBubbleMessage.STATE_NONE), "❤", 1, false);
+        emojiReply.forwardedFrom = source;
+        emojiReply.replyTo = TextBubbleMessage.ReplyTo.of(looksLike, "You");
+        addSample("😂❤️👍", true, "10:07", TextBubbleMessage.STATE_READ).forwardedFrom = source;
         addSample("ok", true, "10:07", TextBubbleMessage.STATE_SENT);
         // replies: the quote is upstream's reply panel; tapping it scrolls to the original and flashes it
         TextBubbleMessage quoted = addSample("It does! Tap this quote to jump to the original message.", false, "10:07", TextBubbleMessage.STATE_NONE);
         quoted.replyTo = TextBubbleMessage.ReplyTo.of(looksLike, "You");
+        quoted.forwardedFrom = source;
         // photos: the host hands in a Drawable (here generated, no network); one waits for a tap to "download"
         TextBubbleMessage landscape = TextBubbleMessage.photo(nextId++, false, "10:08", TextBubbleMessage.STATE_NONE, samplePhoto(1280, 853, 0), null);
         react(landscape, "🥰", 4, false);
+        landscape.forwardedFrom = source;
         react(landscape, "👏", 1, true);
         addSample(landscape);
         TextBubbleMessage portrait = TextBubbleMessage.photo(nextId++, true, "10:09", TextBubbleMessage.STATE_READ, samplePhoto(720, 960, 1), "Sunset from the hill 🌅");
@@ -214,6 +225,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         addSample(guide);
         TextBubbleMessage archive = TextBubbleMessage.document(nextId++, false, "10:11", TextBubbleMessage.STATE_NONE, "tgui-11.4.2-ui3-release-with-a-very-long-file-name-sources.zip", 48_234_496);
         archive.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
+        archive.forwardedFrom = new TextBubbleMessage.ForwardedFrom(0,
+                ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.forward_anonymous_name));
         addSample(archive);
         addSample(TextBubbleMessage.document(nextId++, true, "10:12", TextBubbleMessage.STATE_READ, "notes.txt", 12_288));
         try {
@@ -229,17 +242,25 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         TextBubbleMessage roundIncoming = TextBubbleMessage.roundVideo(nextId++, false, "10:15", TextBubbleMessage.STATE_NONE,
                 sampleVideoThumb(videoUri), videoUri, 6);
         roundIncoming.contentUnread = true;
+        roundIncoming.forwardedFrom = source;
+        roundIncoming.replyTo = TextBubbleMessage.ReplyTo.of(looksLike, "You");
         addSample(roundIncoming);
         addSample(TextBubbleMessage.roundVideo(nextId++, true, "10:15", TextBubbleMessage.STATE_READ,
                 sampleVideoThumb(videoUri), videoUri, 6));
         try {
             stickerSamples = new LocalStickerSamples(ApplicationLoader.applicationContext);
             for (Sticker sticker : stickerSamples.sets.get(0).stickers) {
-                addSample(TextBubbleMessage.sticker(nextId++, sticker.id % 2 == 0, "10:16", TextBubbleMessage.STATE_READ, sticker));
+                TextBubbleMessage stickerMessage = TextBubbleMessage.sticker(nextId++, sticker.id % 2 == 0, "10:16", TextBubbleMessage.STATE_READ, sticker);
+                stickerMessage.forwardedFrom = source;
+                if (!stickerMessage.isOut) stickerMessage.replyTo = TextBubbleMessage.ReplyTo.of(looksLike, "You");
+                addSample(stickerMessage);
             }
             addSample(TextBubbleMessage.gif(nextId++, false, "10:17", TextBubbleMessage.STATE_NONE,
                     stickerSamples.gifs.get(0), ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.local_gif_caption)));
         } catch (java.io.IOException error) { org.telegram.messenger.FileLog.e(error); }
+        for (TextBubbleMessage item : messages) {
+            if (item.type == TextBubbleMessage.TYPE_ALBUM && !item.isOut || item.type == TextBubbleMessage.TYPE_GIF) item.forwardedFrom = source;
+        }
         if (!messages.isEmpty()) firstUnreadId = messages.get(messages.size() - 1).id;
         ServiceMessage.Person alice = new ServiceMessage.Person(1L, "Alice");
         ServiceMessage.Person bob = new ServiceMessage.Person(2L, "Bob");
@@ -441,6 +462,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     for (TextBubbleMessage message : messages) message.group = groupMode;
                     listView.getAdapter().notifyDataSetChanged();
                     listView.invalidate();
+                } else if (id == MENU_FORWARD) {
+                    scrollToMessage(firstForwardedId);
                 }
             }
         });
@@ -456,6 +479,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.addSubItem(MENU_SERVICE, R.drawable.msg_info, context.getString(org.telegram.uidemo.R.string.service_messages));
         groupItem = otherItem.addSubItem(MENU_GROUP, R.drawable.msg_groups, context.getString(org.telegram.uidemo.R.string.group_messages), true);
         groupItem.setChecked(groupMode);
+        otherItem.addSubItem(MENU_FORWARD, R.drawable.msg_forward, context.getString(org.telegram.uidemo.R.string.forward_messages));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -1545,6 +1569,16 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
 
     private final TextBubbleCell.Delegate cellDelegate = new TextBubbleCell.Delegate() {
+        @Override
+        public void onForwardPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.ForwardedFrom source) {
+            if (actionBar.isActionModeShowed()) {
+                processRowSelect(message);
+                return;
+            }
+            Toast.makeText(getParentActivity(), getParentActivity().getString(org.telegram.uidemo.R.string.forward_source_selected,
+                    source.name, source.sourceId), Toast.LENGTH_SHORT).show();
+        }
+
         @Override
         public void onReactionPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Reaction reaction) {
             if (actionBar.isActionModeShowed()) {
