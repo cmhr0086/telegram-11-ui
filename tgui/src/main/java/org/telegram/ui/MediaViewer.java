@@ -38,6 +38,7 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.VelocityTracker;
 import android.view.View;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowManager;
@@ -52,12 +53,15 @@ import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLog;
 import org.telegram.tgui.R;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.ActionBarMenuItem;
+import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.GroupedPhotosListView;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.EnumSet;
 
 import static org.telegram.messenger.AndroidUtilities.dp;
 
@@ -128,8 +132,16 @@ public class MediaViewer {
         }
     }
 
+    /** Host-executed media actions; the viewer never exports or deletes files itself. */
+    public enum Action { SHARE, SAVE, DELETE }
+
     /** The host side (upstream PhotoViewerProvider). */
     public interface Provider {
+        /** Opt in per item. Evaluated when its page is displayed, the menu opens, and a row is clicked. */
+        default boolean canPerformAction(Action action, int index, Item item) { return false; }
+        /** Receives the original item/index captured at menu opening. Confirmation and IO belong to the host. */
+        default void onAction(Action action, int index, Item item) { }
+
         /** Show the complete supplied gallery as one thumbnail group (e.g. a host album picker). */
         default boolean forceAllInGroup() { return false; }
         /**
@@ -161,6 +173,19 @@ public class MediaViewer {
     private Dialog dialog;
     private ContainerView containerView;
     private FrameLayout actionBar;
+    private ActionBarMenuItem actionsMenu;
+    private ActionSnapshot actionSnapshot;
+    private ViewTreeObserver.OnPreDrawListener pendingActionMenuOpen;
+    private long actionGeneration;
+    private static final class ActionSnapshot {
+        final int index;
+        final Item item;
+        final long generation;
+        final EnumSet<Action> allowed = EnumSet.noneOf(Action.class);
+        ActionSnapshot(int index, Item item, long generation) {
+            this.index = index; this.item = item; this.generation = generation;
+        }
+    }
     private TextView titleView, subtitleView;
     private LinearLayout bottomLayout;
     private TextView captionView;
@@ -269,6 +294,97 @@ public class MediaViewer {
         switchToIndex(index);
     }
 
+    /** Opens a fresh permission snapshot for the current page. No actions are enabled by default. */
+    public void openActionsMenu() {
+        if (!isShowing() || closing || transitionProgress < 1f || actionsMenu == null) return;
+        dismissActionsMenu();
+        final ActionSnapshot snapshot = new ActionSnapshot(currentIndex, currentItem(), actionGeneration);
+        for (Action action : Action.values()) {
+            boolean allowed = provider.canPerformAction(action, snapshot.index, snapshot.item);
+            if (!isCurrentActionPage(snapshot)) return;
+            if (allowed) snapshot.allowed.add(action);
+        }
+        setActionsButtonVisible(!snapshot.allowed.isEmpty());
+        if (snapshot.allowed.isEmpty()) return;
+        actionSnapshot = snapshot;
+        actionsMenu.removeAllSubItems();
+        // PhotoViewer 5613, 5633, 5639: original icons/text/48dp sub-items and fixed viewer palette.
+        if (snapshot.allowed.contains(Action.SAVE)) addActionRow(snapshot, Action.SAVE, R.drawable.msg_gallery, R.string.SaveToGallery);
+        if (snapshot.allowed.contains(Action.SHARE)) addActionRow(snapshot, Action.SHARE, R.drawable.msg_shareout, R.string.ShareFile);
+        if (snapshot.allowed.contains(Action.DELETE)) addActionRow(snapshot, Action.DELETE, R.drawable.msg_delete, R.string.Delete);
+        actionsMenu.redrawPopup(0xf9222222);
+        // A previously hidden button first needs its normal 48dp action-bar layout.
+        pendingActionMenuOpen = new ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                containerView.getViewTreeObserver().removeOnPreDrawListener(this);
+                if (pendingActionMenuOpen == this) pendingActionMenuOpen = null;
+                if (!isCurrentActionSnapshot(snapshot) || !actionsMenu.isAttachedToWindow()) return true;
+                actionsMenu.toggleSubMenu();
+                actionsMenu.setOnMenuDismiss(byClick -> {
+                    if (actionSnapshot == snapshot) actionSnapshot = null;
+                });
+                return true;
+            }
+        };
+        containerView.getViewTreeObserver().addOnPreDrawListener(pendingActionMenuOpen);
+        containerView.invalidate();
+    }
+
+    private void addActionRow(ActionSnapshot snapshot, Action action, int icon, int title) {
+        ActionBarMenuSubItem row = actionsMenu.addSubItem(action.ordinal() + 1, icon, null,
+                activity.getString(title), false, false);
+        row.setColors(0xfffafafa, 0xfffafafa);
+        // Capture this opening's snapshot on each row; stale detached rows cannot execute a new page's action.
+        row.setOnClickListener(view -> {
+            if (!isCurrentActionSnapshot(snapshot) || !actionsMenu.isSubMenuShowing() || !snapshot.allowed.contains(action)) return;
+            boolean allowed = provider.canPerformAction(action, snapshot.index, snapshot.item);
+            if (!isCurrentActionSnapshot(snapshot)) return;
+            dismissActionsMenu(true); // invalidate before calling host code, which may close/reopen/change page
+            if (allowed) provider.onAction(action, snapshot.index, snapshot.item);
+        });
+    }
+
+    private boolean isCurrentActionPage(ActionSnapshot snapshot) {
+        return isShowing() && !closing && transitionProgress >= 1f && actionGeneration == snapshot.generation
+                && currentIndex == snapshot.index && currentItem() == snapshot.item;
+    }
+    private boolean isCurrentActionSnapshot(ActionSnapshot snapshot) {
+        return actionSnapshot == snapshot && isCurrentActionPage(snapshot);
+    }
+    private void dismissActionsMenu() { dismissActionsMenu(false); }
+    private void dismissActionsMenu(boolean animated) {
+        actionSnapshot = null; actionGeneration++;
+        if (pendingActionMenuOpen != null) {
+            if (containerView != null && containerView.getViewTreeObserver().isAlive()) containerView.getViewTreeObserver().removeOnPreDrawListener(pendingActionMenuOpen);
+            pendingActionMenuOpen = null;
+        }
+        if (actionsMenu != null && actionsMenu.isSubMenuShowing()) {
+            // Keep the upstream row-dismiss animation; retire page/menu sessions immediately.
+            if (!animated) actionsMenu.setPopupAnimationEnabled(false);
+            actionsMenu.closeSubMenu();
+            if (!animated) actionsMenu.setPopupAnimationEnabled(true);
+        }
+    }
+    private void updateActionsButton() {
+        if (actionsMenu == null || closing) return;
+        int index = currentIndex;
+        Item item = currentItem();
+        long generation = actionGeneration;
+        boolean available = false;
+        for (Action action : Action.values()) {
+            available |= provider.canPerformAction(action, index, item);
+            if (closing || !isShowing() || currentIndex != index || currentItem() != item || generation != actionGeneration) return;
+        }
+        setActionsButtonVisible(available);
+    }
+    private void setActionsButtonVisible(boolean visible) {
+        actionsMenu.setVisibility(visible ? View.VISIBLE : View.GONE);
+        View titles = (View) titleView.getParent();
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) titles.getLayoutParams();
+        int margin = dp(visible ? 64 : 16);
+        if (params.rightMargin != margin) { params.rightMargin = margin; titles.setLayoutParams(params); }
+    }
+
     // ---------------------------------------------------------------- window
 
     private void show() {
@@ -369,6 +485,18 @@ public class MediaViewer {
         subtitleView.setEllipsize(TextUtils.TruncateAt.END);
         titles.addView(subtitleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 1, 0, 0));
         actionBar.addView(titles, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.LEFT | Gravity.TOP, 72, 0, 16, 0));
+        // PhotoViewer 5572: keep the transplanted menu item inside this viewer's existing top bar.
+        actionsMenu = new ActionBarMenuItem(activity, null, Theme.ACTION_BAR_WHITE_SELECTOR_COLOR, Color.WHITE);
+        actionsMenu.setIcon(R.drawable.media_more);
+        actionsMenu.setContentDescription(activity.getString(R.string.AccDescrMoreOptions));
+        actionsMenu.setShowSubmenuByMove(false);
+        actionsMenu.setLongClickEnabled(false);
+        actionsMenu.setOnClickListener(view -> {
+            if (actionsMenu.isSubMenuShowing()) dismissActionsMenu(true);
+            else openActionsMenu();
+        });
+        actionsMenu.setVisibility(View.GONE);
+        actionBar.addView(actionsMenu, LayoutHelper.createFrame(48, LayoutHelper.MATCH_PARENT, Gravity.RIGHT | Gravity.TOP));
         containerView.addView(actionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
 
         // bottomLayout: caption above the video controls, one 0x7f000000 panel down to the navigation bar
@@ -448,6 +576,7 @@ public class MediaViewer {
     }
 
     private void updatePage() {
+        dismissActionsMenu();
         Item item = currentItem();
         titleView.setText(item.sender);
         CharSequence subtitle = item.date;
@@ -485,6 +614,7 @@ public class MediaViewer {
             preparePlayer(true);
         }
         containerView.invalidate();
+        updateActionsButton();
     }
 
     private void updateThumbnailGroup() {
@@ -640,6 +770,7 @@ public class MediaViewer {
             return;
         }
         closing = true;
+        dismissActionsMenu();
         cancelMoveZoomAnimation();
         if (transitionAnimator != null) {
             transitionAnimator.cancel();
@@ -684,6 +815,7 @@ public class MediaViewer {
     }
 
     private void finish() {
+        dismissActionsMenu();
         groupedPhotosListView.destroy();
         if (hiddenIndex >= 0) {
             provider.setSourceVisible(hiddenIndex, true);
@@ -705,6 +837,7 @@ public class MediaViewer {
     // ---------------------------------------------------------------- bars
 
     private void toggleBars() {
+        dismissActionsMenu();
         barsVisible = !barsVisible;
         if (barsAnimator != null) {
             barsAnimator.cancel();

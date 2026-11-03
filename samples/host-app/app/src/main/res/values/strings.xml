@@ -84,4 +84,5 @@
     <string name="bot_command_about">About this local demo</string>
     <string name="bot_command_feedback">Send feedback</string>
     <string name="send_preview_effect_sent">Host received effect %1$d</string>
+    <string name="media_viewer_host_action">Host received %1$s for media %2$d. Demo callback only; no files exported or deleted.</string>
 </resources>

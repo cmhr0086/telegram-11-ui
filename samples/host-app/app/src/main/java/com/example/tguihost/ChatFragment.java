@@ -189,6 +189,17 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             pages.add(page);
         }
         mediaViewer = org.telegram.ui.MediaViewer.open(getParentActivity(), pages, index, new org.telegram.ui.MediaViewer.Provider() {
+            @Override public boolean canPerformAction(org.telegram.ui.MediaViewer.Action action, int i, org.telegram.ui.MediaViewer.Item item) {
+                return true;
+            }
+            @Override public void onAction(org.telegram.ui.MediaViewer.Action action, int i, org.telegram.ui.MediaViewer.Item item) {
+                if (getParentActivity() == null) return;
+                int label = action == org.telegram.ui.MediaViewer.Action.SHARE ? R.string.ShareFile
+                        : action == org.telegram.ui.MediaViewer.Action.SAVE ? R.string.SaveToGallery : R.string.Delete;
+                Toast.makeText(getParentActivity(), getParentActivity().getString(
+                        com.example.tguihost.R.string.media_viewer_host_action, getParentActivity().getString(label), i + 1),
+                        Toast.LENGTH_LONG).show();
+            }
             @Override public boolean getSourceRect(int i, android.graphics.RectF rect, float[] radii) {
                 org.telegram.ui.Cells.AlbumBubbleCell current = findAlbumCell(album);
                 if (current == null || !current.isShown() || !current.getTileRectOnScreen(i, rect)) return false;

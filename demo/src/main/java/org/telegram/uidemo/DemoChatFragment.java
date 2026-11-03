@@ -1722,6 +1722,20 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             return;
         }
         MediaViewer.open(getParentActivity(), items, index, new MediaViewer.Provider() {
+            @Override public boolean canPerformAction(MediaViewer.Action action, int i, MediaViewer.Item item) {
+                return true;
+            }
+
+            @Override public void onAction(MediaViewer.Action action, int i, MediaViewer.Item item) {
+                // The demo deliberately reports the host callback; no export/deletion is implied.
+                if (getParentActivity() == null) return;
+                int label = action == MediaViewer.Action.SHARE ? R.string.ShareFile
+                        : action == MediaViewer.Action.SAVE ? R.string.SaveToGallery : R.string.Delete;
+                Toast.makeText(getParentActivity(), getParentActivity().getString(
+                        org.telegram.uidemo.R.string.media_viewer_host_action, getParentActivity().getString(label), i + 1),
+                        Toast.LENGTH_LONG).show();
+            }
+
             @Override
             public boolean getSourceRect(int i, android.graphics.RectF outRect, float[] outRadii) {
                 PhotoBubbleCell cell = findPhotoCell(sources.get(i));

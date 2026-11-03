@@ -97,4 +97,5 @@
     <string name="send_preview_menu">Send preview and effects</string>
     <string name="send_preview_draft">Preview a message with a local effect</string>
     <string name="send_preview_effect_sent">Host received effect %1$d</string>
+    <string name="media_viewer_host_action">Host received %1$s for media %2$d. Demo callback only; no files exported or deleted.</string>
 </resources>

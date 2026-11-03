@@ -265,4 +265,6 @@
     <plurals name="tgui_poll_votes"><item quantity="one">%1$d vote</item><item quantity="other">%1$d votes</item></plurals>
     <string name="AccDescrBotMenu">Bot menu</string>
     <string name="AddEffectMessageHint">Add an animated effect</string>
+    <string name="ShareFile">Share</string>
+    <string name="SaveToGallery">Save to gallery</string>
 </resources>

@@ -26,6 +26,8 @@ public final class MediaViewerDeviceChecks {
     private MediaViewer viewer; private final ArrayList<String> visibility=new ArrayList<>();
     private final ArrayList<Integer> pages=new ArrayList<>(); private int closed;
     private final ArrayList<MediaViewer.Item> items=new ArrayList<>();
+    private int actionCalls; private MediaViewer.Action lastAction; private int lastActionIndex; private MediaViewer.Item lastActionItem;
+    private boolean allowAll,closeInCallback,reopenInCallback;
     private MediaViewerDeviceChecks(Instrumentation i,Activity a){instrumentation=i;activity=a;}
     public static void run(Instrumentation instrumentation,Activity activity) throws Exception {
         MediaViewerDeviceChecks t=new MediaViewerDeviceChecks(instrumentation,activity);
@@ -39,6 +41,7 @@ public final class MediaViewerDeviceChecks {
             t.main(t::openLongGroup);SystemClock.sleep(400);t.main(t::longGroupChecks);
             t.main(t::openVideoGroup);SystemClock.sleep(400);t.main(t::tapVideo);
             t.awaitVideo();t.main(t::openVideoGroup);SystemClock.sleep(400);t.main(t::scrollVideo);t.awaitVideo();
+            t.menuChecks();
         } finally {t.main(()->{if(t.viewer!=null&&t.viewer.isShowing())t.viewer.close(false);});}
     }
     private void main(Runnable action){AtomicReference<Throwable> e=new AtomicReference<>();instrumentation.runOnMainSync(()->{try{action.run();}catch(Throwable t){e.set(t);}});if(e.get()!=null)throw new AssertionError("media viewer checks",e.get());}
@@ -184,6 +187,55 @@ public final class MediaViewerDeviceChecks {
             prepared=ready[0];if(!prepared)SystemClock.sleep(50);
         }
         check(prepared,"tapping video thumbnail prepares local MediaPlayer");main(()->viewer.close(false));
+    }
+
+    private org.telegram.ui.ActionBar.ActionBarMenuItem actionsMenu(){return (org.telegram.ui.ActionBar.ActionBarMenuItem)field(viewer,"actionsMenu");}
+    private void awaitMenu(){
+        boolean shown=false;for(int i=0;i<80&&!shown;i++){
+            boolean[] ready={false};main(()->ready[0]=actionsMenu().isSubMenuShowing());shown=ready[0];if(!shown)SystemClock.sleep(20);
+        }
+        check(shown,"real ActionBar submenu opens");
+    }
+    private View actionRow(MediaViewer.Action action){
+        View row=actionsMenu().getSubItem(action.ordinal()+1);check(row!=null,"action row "+action);return row;
+    }
+    private void menuChecks() throws Exception {
+        // Default provider never grants actions.
+        main(()->{open(false);});SystemClock.sleep(350);
+        main(()->{check(actionsMenu().getVisibility()==View.GONE,"default denies menu entry");viewer.openActionsMenu();check(!actionsMenu().isSubMenuShowing(),"default no popup");viewer.close(false);});
+        main(()->{
+            actionCalls=0;allowAll=false;closeInCallback=false;reopenInCallback=false;
+            viewer=MediaViewer.open(activity,items,1,new MediaViewer.Provider(){
+                @Override public boolean canPerformAction(MediaViewer.Action action,int index,MediaViewer.Item item){
+                    return allowAll||index==1&&action==MediaViewer.Action.SHARE||index==2&&action==MediaViewer.Action.DELETE;
+                }
+                @Override public void onAction(MediaViewer.Action action,int index,MediaViewer.Item item){
+                    actionCalls++;lastAction=action;lastActionIndex=index;lastActionItem=item;if(closeInCallback)viewer.close(false);else if(reopenInCallback)viewer.openActionsMenu();
+                }
+            });
+        });SystemClock.sleep(350);
+        main(()->{viewer.openActionsMenu();});awaitMenu();
+        final View[] old={null};
+        main(()->{
+            check(actionsMenu().getPopupLayout().getItemsCount()==1,"page one filtered row count");
+            old[0]=actionRow(MediaViewer.Action.SHARE);old[0].performClick();
+            check(actionCalls==1&&lastAction==MediaViewer.Action.SHARE&&lastActionIndex==1&&lastActionItem==items.get(1),"real share row callback identity");
+            viewer.openActionsMenu();
+        });awaitMenu();
+        main(()->{old[0]=actionRow(MediaViewer.Action.SHARE);viewer.setCurrentIndex(2);old[0].performClick();check(actionCalls==1,"old popup row rejected after paging");viewer.openActionsMenu();});awaitMenu();
+        main(()->{check(actionsMenu().getPopupLayout().getItemsCount()==1,"page two filtered row count");
+            actionRow(MediaViewer.Action.DELETE).performClick();check(actionCalls==2&&lastAction==MediaViewer.Action.DELETE&&lastActionIndex==2&&lastActionItem==items.get(2),"real delete row uses current item");
+            allowAll=true;viewer.openActionsMenu();});awaitMenu();
+        main(()->{check(actionsMenu().getPopupLayout().getItemsCount()==3,"all permissions expose three rows");
+            View save=actionRow(MediaViewer.Action.SAVE);allowAll=false;save.performClick();check(actionCalls==2,"revoked permission blocks stale row");
+            allowAll=true;viewer.openActionsMenu();});awaitMenu();
+        main(()->{reopenInCallback=true;old[0]=actionRow(MediaViewer.Action.SAVE);old[0].performClick();
+            check(actionCalls==3&&lastAction==MediaViewer.Action.SAVE,"host callback may reopen menu");});awaitMenu();
+        main(()->{old[0].performClick();check(actionCalls==3,"reentered popup rejects prior row");
+            reopenInCallback=false;closeInCallback=true;View closingRow=actionRow(MediaViewer.Action.SAVE);closingRow.performClick();
+            check(actionCalls==4&&lastAction==MediaViewer.Action.SAVE&&!viewer.isShowing(),"host callback may close viewer");
+            closingRow.performClick();check(actionCalls==4,"closed viewer rejects old row");});
+        main(()->{viewer.openActionsMenu();check(!viewer.isShowing(),"closed viewer cannot reopen menu");});
     }
 
 }
