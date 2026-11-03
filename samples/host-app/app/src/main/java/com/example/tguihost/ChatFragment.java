@@ -580,7 +580,8 @@ public class ChatFragment extends ChatFragmentBase {
 
     private static CharSequence localEmoji() {
         android.text.SpannableStringBuilder text = new android.text.SpannableStringBuilder("🐥");
-        text.setSpan(new org.telegram.ui.Components.AnimatedEmojiSpan(90001, Theme.chat_msgTextPaint.getFontMetricsInt()),
+        // Data is created before chat paints; the bubble applies its own font metrics when bound.
+        text.setSpan(new org.telegram.ui.Components.AnimatedEmojiSpan(90001, null),
                 0, text.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         return text;
     }

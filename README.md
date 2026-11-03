@@ -97,6 +97,8 @@ Manifest 里给 Activity 加上
 
 基类装配 `ChatInputLayout`、fork `RecyclerListView`、从底部排列的布局管理器、气泡动画/群头像及 `ChatActivityEnterView`，统一ActionBar/系统栏padding、壁纸/emoji监听、日夜主题描述、输入面板Back与resume/pause/destroy；重建时释放旧输入和adapter并保留文字草稿/spans/选区。protected `contentView/listView/layoutManager/enterView` 可配置，`createMessageList` / `createInputView` 可定制。`configureChat` 在列表/输入创建之后、ActionBar最后挂载之前执行；每次重建都会调用，数据初始化仍放在 `onFragmentCreate`。覆盖生命周期、通知或主题描述时调用super；选择模式可先消费Back再调用super。业务发送、分页、媒体播放器、权限和数据存储仍归宿主；不会自动存录音草稿、回复/编辑目标或业务选择状态。demo与sample现已改为继承，原宿主直接组装方式仍支持。
 
+创建消息数据时不要假定 `Theme.chat_msgTextPaint` 已初始化。本地动态表情可用 `new AnimatedEmojiSpan(id, null)`，`TextBubbleCell` 绑定时会应用当前文字字体度量；独立sample已覆盖冷启动路径。
+
 保留低层写法（`ChatInputLayout` + `ChatActivityEnterView` + `TextBubbleCell`），自行组装时仍需以下步骤：
 - `actionBar.setAddToContainer(false)`，再 `contentView.addView(actionBar)` + `contentView.setActionBar(actionBar)`；
 - `new ChatInputLayout(context, parentLayout)` → `setContentView(listView)` → 加 `enterView` 后 `setEnterView(enterView)`，最后加 ActionBar；

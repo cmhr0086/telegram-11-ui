@@ -19,6 +19,8 @@ roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功�
 
 ### 阶段 F 当前交接
 
+- ChatFragmentBase已提交e6d46a5并推送，创建目标dev/ui-lib的draft PR #7。额外运行验收定位sample冷启动失败：localEmoji在onFragmentCreate读取尚未初始化的Theme.chat_msgTextPaint，异常被ActionBarLayout触摸分发捕获。改用AnimatedEmojiSpan(id,null)，由既有TextBubbleCell绑定应用字体，不改变库渲染；临时诊断日志开关已撤。独立host debug/R8通过（TEMP/phase-f-host-cold-start.log），重新安装release后从列表进入聊天、发送“Host base test”、日夜切换正常，截图f-host-fixed.png、f-host-sent-night.png；先前触摸失败观察已解决。
+
 - 62589a9已推送且PR #6转ready，仍未合并。已从该提交创建codex/phase-f；第一项ChatFragmentBase门槛通过，下一项群组/频道资料待实现。
 - 从现有demo/sample搬提组件装配为ChatFragmentBase，保留原类与包名、fork RecyclerView、GPL；不造新气泡/数据模型/业务层。宿主实现createMessageAdapter/createInputDelegate，可配置configureChat/createMessageList/createInputView。原直接组装不删除。
 - 基类统一列表/input/actionbar、动态顶部padding、壁纸/emoji监听/主题描述、Back弹层与生命周期，clearViews重建保留文字草稿/spans/选区并释放旧input/adapter。demo/sample改为继承并去掉重复装配和生命周期调用，保留自定义列表、浮动日期、选择模式、媒体播放器、全部adapter和回调。

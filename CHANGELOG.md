@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- 修复独立宿主冷启动无法进入聊天：本地动态表情数据不再读取尚未初始化的 Theme 聊天字体，交由气泡绑定时应用字体度量；debug/R8及release实际发送、日夜切换通过。
+
 ### 新增
 - 阶段 F：新增 `ChatFragmentBase`，从既有demo/sample提取列表、输入、ActionBar、壁纸/主题与生命周期装配；宿主提供adapter和输入回调。demo/sample改为继承，保留旧低层写法；输入回复/编辑顶栏位移在容器内部逐帧同步，无新增依赖或不兼容API。
 - 阶段 E：搬入 `SpeedButtonsLayout` 并复用上游 SpeedSlider/SpeedIconDrawable，为 `MediaViewer` 增加0.2–3倍速与观看静音；缓存暂停/完成时的选择，恢复后再应用，跨页保留本次偏好。API21–22仅静音；宿主可接状态/速度失败回调，demo/sample有本地视频，不引入ExoPlayer或新依赖。
