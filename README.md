@@ -431,6 +431,32 @@ cell.setMessage(message, pinnedTop, pinnedBottom);
 
 demo ⋮ “Poll messages” 提供单选、多选公开投票和关闭结果；本地回调延迟650ms展示 pending，然后更新内存票数。sample 同样展示宿主更新模型；附件创建投票→确认发送后直接成为可投票气泡。这些数据只用于本地演示，不连接服务器。暂不含 quiz/答题解释/定时关闭倒计时、最近投票者头像和库内投票者列表；实际参与者、撤票或关闭操作由宿主处理。极窄宽度下的长票数/自定义长时间、大字体和更多语言仍需人工检查；当前内置文案为英文，宿主可覆盖 Android 资源。
 
+### 内联按钮（inline keyboard）
+
+消息的 `inlineKeyboard` 由宿主提供多行按钮，文字、照片和其它既有气泡共用上游按钮布局：
+
+```java
+message.inlineKeyboard = Collections.singletonList(Arrays.asList(
+        new TextBubbleMessage.InlineButton("confirm", "Confirm",
+                TextBubbleMessage.InlineButton.Type.CALLBACK, false),
+        new TextBubbleMessage.InlineButton("website", "Website",
+                TextBubbleMessage.InlineButton.Type.URL, false)));
+cell.setDelegate(new TextBubbleCell.Delegate() {
+    @Override public void onInlineButtonPressed(TextBubbleCell cell,
+            TextBubbleMessage message, TextBubbleMessage.InlineButton button) {
+        // Host maps button.id to its action or URL, then publishes an updated snapshot.
+    }
+    @Override public void onInlineButtonLongPressed(TextBubbleCell cell,
+            TextBubbleMessage message, TextBubbleMessage.InlineButton button) {
+        // Optional host action, such as showing button details.
+    }
+});
+```
+
+按钮 ID 在同一键盘内保持唯一。替换行快照并重新 `setMessage` 可更新文案和 `loading`；支持 CALLBACK、URL、SWITCH_INLINE、COPY 的外观，实际 URL/查询/复制/网络均由宿主处理。按钮为44dp高、48dp行距、15dp文字，背景/选择色使用上游 service 颜色键，加载反馈复用 `LoadingDrawable`。键盘放在气泡下方，不改变正文、媒体、时间和头像的内容位置；`getInlineButtonRect(row, column, out)` 可获取按钮区域，`getBubbleContentHeight()` 不包含键盘高度。
+
+demo 的 “Inline buttons” 菜单定位到文字和照片样例：Confirm 显示本地加载反馈，Website 显示宿主回调，Search here 填入输入框，Copy code 由宿主复制示例代码；长按报告对应按钮 ID。消费端 sample 也展示这些回调。未移植支付/收据/星币、Web App 登录、Telegram 邀请识别或服务端 callback 查询；不提供自动 URL 跳转。按钮的逐项无障碍虚拟节点尚未实现。
+
 ### 带缩略图的文件消息
 
 ```java
@@ -463,6 +489,7 @@ cell.setMessage(file, pinnedTop, pinnedBottom);
 | 服务消息 | `ChatActionCell` / `ServiceMessage`：加入、邀请、改名、置顶，用户与消息回调 |
 | 群聊消息 | `TextBubbleMessage.Sender` / `MessageGrouping` / `ChatAvatarDecoration`：原配色姓名、头像列、连续消息及滚动吸底头像 |
 | 转发来源 | `TextBubbleMessage.ForwardedFrom` / `ForwardBackground`：普通与无背景媒体来源头、头像、原按压动画、宿主来源回调；贴纸/圆视频旁侧回复 |
+| 内联按钮 | 上游44dp按钮行、类型图标/按压/加载反馈；宿主行模型与短按/长按回调，所有既有气泡共用 |
 | 文件缩略图 | 既有 `DocumentBubbleCell`：宿主86dp缩略图、下载状态、说明文字及文件/菜单回调；旧无图布局保留 |
 | 投票消息 | `PollBubbleCell` / `TextBubbleMessage.Poll`：单选/多选、结果条形与百分比、宿主提交和结果回调 |
 | 位置消息 | `LocationBubbleCell` / `TextBubbleMessage.Location`：宿主地图、纯坐标/地点布局、原图钉与位置回调 |

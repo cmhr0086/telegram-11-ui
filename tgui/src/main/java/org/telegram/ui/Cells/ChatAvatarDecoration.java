@@ -40,7 +40,7 @@ public final class ChatAvatarDecoration extends RecyclerView.ItemDecoration {
                         || !MessageGrouping.canMerge(last.getMessage(), next.getMessage())) break;
                 last = next; i++;
             }
-            float groupTop = first.getY(), groupBottom = last.getY() + last.getHeight();
+            float groupTop = first.getY(), groupBottom = last.getY() + last.getBubbleContentHeight();
             if (groupBottom <= visibleTop || groupTop >= visibleBottom) continue;
             float bottom = Math.max(visibleTop + size, Math.min(visibleBottom, groupBottom - AndroidUtilities.dp(3)));
             int alpha = Math.round(Math.max(0f, Math.min(1f, last.getAlpha())) * 255f);

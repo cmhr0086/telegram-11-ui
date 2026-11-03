@@ -330,7 +330,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         // drawBackground with mediaBackground: always the tail-less media drawable, 9dp from the side
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
-        final int layoutHeight = getMeasuredHeight();
+        final int layoutHeight = getBubbleContentHeight();
         Theme.MessageDrawable drawable;
         if (drawSelectionBackground) {
             drawable = out ? Theme.chat_msgOutMediaSelectedDrawable : Theme.chat_msgInMediaSelectedDrawable;

@@ -107,6 +107,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_LOCATION = 21;
     private static final int MENU_POLL = 22;
     private static final int MENU_DOCUMENT_THUMB = 23;
+    private static final int MENU_INLINE = 24;
+    private long firstInlineId;
+    private final ArrayList<Runnable> inlineCompletions = new ArrayList<>();
     private long firstDocumentThumbnailId;
     private long firstPollId;
     private final ArrayList<Runnable> pollCompletions = new ArrayList<>();
@@ -309,6 +312,16 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         addSample(TextBubbleMessage.document(nextId++, false, "10:12", TextBubbleMessage.STATE_NONE,
                 "Caption_without_a_thumbnail.txt", 12_288, null,
                 sampleContext.getString(org.telegram.uidemo.R.string.document_plain_caption)));
+        TextBubbleMessage inlineText = addSample(sampleContext.getString(org.telegram.uidemo.R.string.inline_sample_text), false, "10:12", TextBubbleMessage.STATE_NONE);
+        firstInlineId = inlineText.id;
+        inlineText.forwardedFrom = source;
+        inlineText.replyTo = TextBubbleMessage.ReplyTo.of(looksLike, "You");
+        inlineText.inlineKeyboard = sampleInlineKeyboard(sampleContext, false);
+        react(inlineText, "👍", 2, false);
+        TextBubbleMessage inlinePhoto = TextBubbleMessage.photo(nextId++, true, "10:12", TextBubbleMessage.STATE_READ,
+                samplePhoto(480, 320, 2), sampleContext.getString(org.telegram.uidemo.R.string.inline_sample_photo));
+        inlinePhoto.inlineKeyboard = sampleInlineKeyboard(sampleContext, false);
+        addSample(inlinePhoto);
         try {
             LocalEmojiSamples.install(ApplicationLoader.applicationContext);
             addSample(LocalEmojiSamples.text(ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.local_emoji_sample)), false, "10:13", TextBubbleMessage.STATE_NONE);
@@ -361,6 +374,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         }
         for (Runnable completion : pollCompletions) AndroidUtilities.cancelRunOnUIThread(completion);
         pollCompletions.clear();
+        for (Runnable completion : inlineCompletions) AndroidUtilities.cancelRunOnUIThread(completion);
+        inlineCompletions.clear();
         stopFakeVideo();
         stopVoice();
         if (roundPlayer != null) roundPlayer.stop();
@@ -556,6 +571,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     scrollToMessage(firstLocationId);
                 } else if (id == MENU_POLL) {
                     scrollToMessage(firstPollId);
+                } else if (id == MENU_INLINE) {
+                    scrollToMessage(firstInlineId);
                 } else if (id == MENU_DOCUMENT_THUMB) {
                     scrollToMessage(firstDocumentThumbnailId);
                 }
@@ -579,6 +596,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.addSubItem(MENU_LOCATION, R.drawable.msg_location, context.getString(org.telegram.uidemo.R.string.location_messages));
         otherItem.addSubItem(MENU_POLL, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.poll_messages));
         otherItem.addSubItem(MENU_DOCUMENT_THUMB, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.document_thumbnail_messages));
+        otherItem.addSubItem(MENU_INLINE, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.inline_messages));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -1730,7 +1748,45 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         return MediaController.waveformFromLevels(levels);
     }
 
+    private static List<List<TextBubbleMessage.InlineButton>> sampleInlineKeyboard(Context context, boolean loading) {
+        return java.util.Arrays.asList(
+                java.util.Arrays.asList(
+                        new TextBubbleMessage.InlineButton("callback", context.getString(org.telegram.uidemo.R.string.inline_callback), TextBubbleMessage.InlineButton.Type.CALLBACK, loading),
+                        new TextBubbleMessage.InlineButton("url", context.getString(org.telegram.uidemo.R.string.inline_url), TextBubbleMessage.InlineButton.Type.URL, false)),
+                java.util.Arrays.asList(
+                        new TextBubbleMessage.InlineButton("switch", context.getString(org.telegram.uidemo.R.string.inline_switch), TextBubbleMessage.InlineButton.Type.SWITCH_INLINE, false),
+                        new TextBubbleMessage.InlineButton("copy", context.getString(org.telegram.uidemo.R.string.inline_copy), TextBubbleMessage.InlineButton.Type.COPY, false)));
+    }
+
     private final TextBubbleCell.Delegate cellDelegate = new TextBubbleCell.Delegate() {
+        @Override public void onInlineButtonPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.InlineButton button) {
+            if (actionBar.isActionModeShowed() || getParentActivity() == null) return;
+            Context context = getParentActivity();
+            Toast.makeText(context, context.getString(org.telegram.uidemo.R.string.inline_action, button.id), Toast.LENGTH_SHORT).show();
+            if (button.type == TextBubbleMessage.InlineButton.Type.CALLBACK) {
+                final List<List<TextBubbleMessage.InlineButton>> pending = sampleInlineKeyboard(context, true);
+                message.inlineKeyboard = pending;
+                updateState(message, message.state);
+                Runnable completion = new Runnable() {
+                    @Override public void run() {
+                        inlineCompletions.remove(this);
+                        if (!messages.contains(message) || message.inlineKeyboard != pending) return;
+                        message.inlineKeyboard = sampleInlineKeyboard(ApplicationLoader.applicationContext, false);
+                        updateState(message, message.state);
+                    }
+                };
+                inlineCompletions.add(completion);
+                AndroidUtilities.runOnUIThread(completion, 1200);
+            } else if (button.type == TextBubbleMessage.InlineButton.Type.SWITCH_INLINE) {
+                enterView.setFieldText(context.getString(org.telegram.uidemo.R.string.inline_query));
+            } else if (button.type == TextBubbleMessage.InlineButton.Type.COPY) {
+                AndroidUtilities.addToClipboard(context.getString(org.telegram.uidemo.R.string.inline_copy_value));
+            }
+        }
+        @Override public void onInlineButtonLongPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.InlineButton button) {
+            if (getParentActivity() != null) Toast.makeText(getParentActivity(), getParentActivity().getString(org.telegram.uidemo.R.string.inline_long_action, button.id), Toast.LENGTH_SHORT).show();
+        }
+
         @Override
         public void onForwardPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.ForwardedFrom source) {
             if (actionBar.isActionModeShowed()) {

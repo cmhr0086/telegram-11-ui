@@ -420,7 +420,7 @@ public class DocumentBubbleCell extends TextBubbleCell {
             Theme.chat_msgTextPaint.setColor(getThemedColor(out ? Theme.key_chat_messageTextOut : Theme.key_chat_messageTextIn));
             Theme.chat_msgTextPaint.linkColor = getThemedColor(out ? Theme.key_chat_messageLinkOut : Theme.key_chat_messageLinkIn);
             int captionX = backgroundLeft + AndroidUtilities.dp(out || pinnedBottom ? 11 : 17);
-            int captionY = getHeight() - captionHeight - AndroidUtilities.dp(pinnedTop ? 9 : 10) - reactionsLayoutInBubble.totalHeight - (reactionsLayoutInBubble.isEmpty ? 0 : AndroidUtilities.dp(10));
+            int captionY = getBubbleContentHeight() - captionHeight - AndroidUtilities.dp(pinnedTop ? 9 : 10) - reactionsLayoutInBubble.totalHeight - (reactionsLayoutInBubble.isEmpty ? 0 : AndroidUtilities.dp(10));
             canvas.save(); canvas.translate(captionX - captionTextXOffset, captionY); captionLayout.draw(canvas); canvas.restore();
         }
         drawReactionsInBubble(canvas, backgroundLeft, 0);

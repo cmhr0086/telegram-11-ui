@@ -112,7 +112,7 @@ public class StickerBubbleCell extends PhotoBubbleCell {
         int x = message.isOut ? getMeasuredWidth() - backgroundWidth - AndroidUtilities.dp(5) : AndroidUtilities.dp(13) + incomingAvatarInset();
         int y = AndroidUtilities.dp(pinnedTop ? 4 : 5);
         photoRect.set(x, y, x + photoWidth, y + photoHeight);
-        bubbleBottom = getMeasuredHeight() - AndroidUtilities.dp(2);
+        bubbleBottom = getBubbleContentHeight() - AndroidUtilities.dp(2);
         if (photoVisible) {
             media.setBounds(x, y, x + photoWidth, y + photoHeight);
             media.draw(canvas);

@@ -322,7 +322,7 @@ public class TextBubbleCell extends View {
             sideDrawLayout = new StaticLayout(name, Theme.chat_namePaint, sideDrawTextWidth + AndroidUtilities.dp(2), Layout.Alignment.ALIGN_NORMAL, 1f, 0f, false);
         }
         if (sideDrawLayout == null) return;
-        float y = getHeight() - AndroidUtilities.dp(38);
+        float y = getBubbleContentHeight() - AndroidUtilities.dp(38);
         android.graphics.Paint paint = resourcesProvider == null ? Theme.chat_actionBackgroundPaint : resourcesProvider.getPaint(Theme.key_paint_chatActionBackground);
         if (paint == null) paint = Theme.chat_actionBackgroundPaint;
         applyServiceShaderMatrix();
@@ -357,7 +357,7 @@ public class TextBubbleCell extends View {
     public float getAvatarColumnX() { return AndroidUtilities.dp(6) + checkBoxTranslation; }
     private void drawAvatar(Canvas canvas) {
         if (incomingAvatarInset() == 0 || pinnedBottom || avatarDrawnByList) return;
-        drawAvatarAt(canvas, AndroidUtilities.dp(6), getHeight() - AndroidUtilities.dp(3));
+        drawAvatarAt(canvas, AndroidUtilities.dp(6), getBubbleContentHeight() - AndroidUtilities.dp(3));
     }
     /** Draw a static host avatar at list-space coordinates, restoring drawable bounds. */
     public void drawAvatarAt(Canvas canvas, float x, float bottom) {
@@ -406,6 +406,11 @@ public class TextBubbleCell extends View {
     private float selectionProgress;
     private long lastSelectionAnimationTime;
     protected int bubbleBottom;
+    private final InlineKeyboardLayout inlineKeyboard = new InlineKeyboardLayout(this);
+    private int inlineKeyboardHeight;
+    /** Height of the message bubble excluding its inline keyboard. */
+    public int getBubbleContentHeight() { return Math.max(0, getMeasuredHeight() - inlineKeyboardHeight); }
+    public void getInlineButtonRect(int row, int column, android.graphics.RectF out) { inlineKeyboard.getRect(row, column, out); }
     private static android.graphics.Paint selectionPaint;
 
     protected int totalHeight;
@@ -415,6 +420,7 @@ public class TextBubbleCell extends View {
     private int textLeftOffset;
     private int timeX;
     private boolean emojiOnlyMode;
+    boolean isEmojiOnlyMode() { return emojiOnlyMode; }
     private TextPaint textPaint;
     protected final RectF timeRect = new RectF();
     /** The bubble drawable picked by the last {@link #drawBubbleBackground} (media cells hand it to RadialProgress2). */
@@ -607,6 +613,9 @@ public class TextBubbleCell extends View {
      * @param pinnedBottom next message is from the same side (no tail, small bottom corner)
      */
     public void setMessage(TextBubbleMessage message, boolean pinnedTop, boolean pinnedBottom) {
+        inlineKeyboard.cancel();
+        if (message == null || message.inlineKeyboard == null || message.inlineKeyboard.isEmpty()) inlineKeyboard.clear();
+        requestLayout();
         boolean sameMessage = this.message != null && message != null && lastMessageId == message.id;
         boolean animateStatus = sameMessage && lastState == TextBubbleMessage.STATE_SENDING && message.state != TextBubbleMessage.STATE_SENDING && isAttachedToWindow();
         boolean reactionsChanged = layoutForWidth > 0 && !TextUtils.equals(layoutForReactions, reactionsKey(message));
@@ -746,6 +755,7 @@ public class TextBubbleCell extends View {
             Theme.key_chat_mediaTimeBackground, Theme.key_chat_mediaTimeText, Theme.key_chat_mediaSentCheck, Theme.key_chat_mediaSentClock,
             Theme.key_chat_mediaLoaderPhoto, Theme.key_chat_mediaLoaderPhotoSelected, Theme.key_chat_mediaLoaderPhotoIcon, Theme.key_chat_mediaLoaderPhotoIconSelected,
             Theme.key_chat_mediaProgress,
+            Theme.key_chat_botButtonText, Theme.key_chat_serviceIcon, Theme.key_chat_serviceBackgroundSelector,
             Theme.key_chat_inFileNameText, Theme.key_chat_outFileNameText, Theme.key_chat_inFileInfoText, Theme.key_chat_outFileInfoText,
             Theme.key_chat_inFileInfoSelectedText, Theme.key_chat_outFileInfoSelectedText,
             Theme.key_chat_inVenueInfoText, Theme.key_chat_outVenueInfoText,
@@ -784,6 +794,8 @@ public class TextBubbleCell extends View {
 
     /** Host callbacks for the reply quote and links (ChatMessageCellDelegate.didPressReplyMessage / didPressUrl). */
     public interface Delegate {
+        default void onInlineButtonPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.InlineButton button) { }
+        default void onInlineButtonLongPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.InlineButton button) { }
         default void onForwardPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.ForwardedFrom source) { }
         /** The reply quote was tapped; {@code replyTo.messageId} names the original message. */
         default void onReplyPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.ReplyTo replyTo) {
@@ -1112,7 +1124,7 @@ public class TextBubbleCell extends View {
 
     @Override
     protected boolean verifyDrawable(Drawable who) {
-        return super.verifyDrawable(who) || who == replySelector;
+        return super.verifyDrawable(who) || who == replySelector || inlineKeyboard != null && inlineKeyboard.ownsDrawable(who);
     }
 
     private void resetReplyPressed() {
@@ -1588,6 +1600,7 @@ public class TextBubbleCell extends View {
             width = getParentWidth();
         }
         if (message == null) {
+            inlineKeyboardHeight = 0; inlineKeyboard.clear();
             setMeasuredDimension(width, 0);
             return;
         }
@@ -1609,11 +1622,19 @@ public class TextBubbleCell extends View {
             buildSideAuthorLayout(width);
         }
         if (incomingAvatarInset() != 0 && !pinnedBottom) totalHeight = Math.max(totalHeight, AndroidUtilities.dp(48));
-        setMeasuredDimension(width, totalHeight);
+        inlineKeyboardHeight = inlineKeyboard.measure(width, totalHeight);
+        setMeasuredDimension(width, totalHeight + inlineKeyboardHeight);
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+        if (inlineKeyboard.dispatch(event)) return true;
+        return super.dispatchTouchEvent(event);
     }
 
     @Override
     protected void onDetachedFromWindow() {
+        inlineKeyboard.clear();
         AnimatedEmojiSpan.release(this, animatedEmojiSpans);
         resetForwardPressed();
         animatedEmojiSpans = null;
@@ -1678,6 +1699,7 @@ public class TextBubbleCell extends View {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        if (message != null && message.inlineKeyboard != null && !message.inlineKeyboard.isEmpty()) requestLayout();
         animatedEmojiSpans = AnimatedEmojiSpan.update(0, this, animatedEmojiSpans, textLayout);
         if (checkBox != null) {
             checkBox.onAttachedToWindow();
@@ -1746,7 +1768,7 @@ public class TextBubbleCell extends View {
             int color = getThemedColor(Theme.key_chat_selectedBackground);
             selectionPaint.setColor(color);
             selectionPaint.setAlpha((int) (android.graphics.Color.alpha(color) * rowAlpha));
-            canvas.drawRect(0, 0, getMeasuredWidth(), getMeasuredHeight(), selectionPaint);
+            canvas.drawRect(0, 0, getMeasuredWidth(), getBubbleContentHeight(), selectionPaint);
         }
         int restore = canvas.save();
         if (!message.isOut) {
@@ -1754,6 +1776,7 @@ public class TextBubbleCell extends View {
         }
         drawContent(canvas);
         drawAvatar(canvas);
+        inlineKeyboard.draw(canvas);
         canvas.restoreToCount(restore);
         if (checkBox != null && (checkBoxVisible || checkBoxAnimationInProgress)) {
             int size = AndroidUtilities.dp(21);
@@ -1765,7 +1788,7 @@ public class TextBubbleCell extends View {
     protected void drawContent(Canvas canvas) {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
-        final int layoutHeight = getMeasuredHeight();
+        final int layoutHeight = getBubbleContentHeight();
 
         if (emojiOnlyMode) {
             bubbleBottom = layoutHeight - AndroidUtilities.dp(4);
@@ -1809,7 +1832,7 @@ public class TextBubbleCell extends View {
     protected int drawBubbleBackground(Canvas canvas) {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
-        final int layoutHeight = getMeasuredHeight();
+        final int layoutHeight = getBubbleContentHeight();
         Theme.MessageDrawable drawable;
         if (drawSelectionBackground) {
             if (pinnedBottom) {
@@ -1900,7 +1923,7 @@ public class TextBubbleCell extends View {
     protected void drawTimeAndStatus(Canvas canvas, int x) {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
-        final int layoutHeight = getMeasuredHeight();
+        final int layoutHeight = getBubbleContentHeight();
         timeX = x;
         Theme.chat_timePaint.setColor(getThemedColor(out ? (drawSelectionBackground ? Theme.key_chat_outTimeSelectedText : Theme.key_chat_outTimeText) : (drawSelectionBackground ? Theme.key_chat_inTimeSelectedText : Theme.key_chat_inTimeText)));
         canvas.save();

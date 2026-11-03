@@ -16,6 +16,21 @@ import java.util.ArrayList;
  */
 public class TextBubbleMessage {
 
+    /** Host-supplied inline keyboard button; all actions are handled by the host. */
+    public static final class InlineButton {
+        public enum Type { CALLBACK, URL, SWITCH_INLINE, COPY }
+        public final String id;
+        public final CharSequence text;
+        public final Type type;
+        public final boolean loading;
+        public InlineButton(String id, CharSequence text, Type type, boolean loading) {
+            if (id == null || type == null) throw new IllegalArgumentException("button id and type required");
+            this.id = id; this.text = text == null ? "" : text; this.type = type; this.loading = loading;
+        }
+    }
+    /** Ordered rows with unique button IDs; set a new snapshot and rebind to update text or loading state. */
+    public java.util.List<java.util.List<InlineButton>> inlineKeyboard = java.util.Collections.emptyList();
+
     /** Host-provided group identity; no account or network lookup is performed. */
     public static final class Sender {
         public final long id;

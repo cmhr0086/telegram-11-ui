@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | A 贴纸与 GIF | 已完成，限制见下 | PR #2，库/消费端/仪器及 MuMu 真操作通过；WEBM 首帧降级 |
 | B 附件菜单 | 已实现并推送 PR #3 | 主体/五页/权限/选择/确认与宿主回调；简化交互和人工补验见下 |
-| C 更多消息 | 进行中 | 未读/服务/群聊/转发/联系人/音乐/位置/投票/文件缩略图已完成；内联按钮和回复键盘待实现 |
+| C 更多消息 | 进行中 | 未读/服务/群聊/转发/联系人/音乐/位置/投票/文件缩略图/内联按钮已完成；回复键盘待实现 |
 | D 输入增强 | 未开始 | 提及、表情联想、命令、发送预览 |
 | E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
@@ -18,6 +18,8 @@
 roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；不能将 C–F 计为完成。
 
 ### 阶段 C 当前交接
+
+- 文件缩略图独立提交7d082f4已推送，PR #4已更新。inline keyboard现已实现并完成下述验证，随本次独立提交推送。
 
 - 已提交并推送未读 f4d10cd、服务 7db39c1、群聊 4441ce7、转发864201e；[PR #4](https://github.com/cmhr0086/telegram-11-ui/pull/4) 为 draft，目标 dev/ui-lib，汇总 A–F 状态和未验证部分。C 尚有后续功能，保持 draft；不合并，不改 main。联系人cc8d05a已提交推送。音乐00140ca已提交推送。位置气泡已实现并通过最终构建和设备验收，随本次独立提交推送。
 - ChatUnreadCell 经 tools/pull 搬运，保留原尺寸/密度资源/GPL；增加主题刷新、demo 锚点跳转和宿主预览。库release/demo/仪器构建及host debug/R8通过（TEMP/phase-c-unread-build.log、phase-c-unread-demo.log、phase-c-unread-host.log）；设备component=unread通过，实测聊天菜单跳转及夜→日刷新，截图TEMP/unread-night.png、unread-day.png。
@@ -53,7 +55,12 @@ roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功�
 - 文件审查修复：同对象替换图/方向/状态重算、READY有图隐藏FILE图标、取消/重绑/离窗释放父拦截、长按选择不误开文件、绘制后恢复宿主bounds。caption/反应间距和pinned行高按上游分支；有图forward+reply补2dp。曾因非上游min150导致240dp群聊长文件名+caption背景越界，已删除该下限并保留旧无图无caption原宽度公式，86dp图不缩小。RTL caption按TextLayoutBlocks最小lineLeft归一并按真实lineRight计宽，混排保留整体范围；夜间预览按钮按上游hasImageSet清除bubble gradient，避免下载箭头染色。
 - 文件构建：首轮库release/demo/test/publish（TEMP/phase-c-document-build.log）、host debug/R8（phase-c-document-host.log）及设备专项（phase-c-document-device.log）通过。最终root（phase-c-document-final-build.log）与加强设备专项（phase-c-document-final-device.log）通过；最终host debug/R8 release（phase-c-document-final-host.log）及完整MuMu Android15回归（phase-c-document-full-device.log）均通过，包含旧TGS完整周期/GIF重绑续播和收藏尺寸。专项覆盖旧无图44dp/新图86dp+居中48dp、240/400dp收发群/转发/回复/反应、三种下载状态、替换图实际像素和bounds、取消/重绑/选择/清空/长按、长文件名/说明的背景标题菜单边界、旧宽度兼容，以及纯RTL/混排各行在气泡内。
 - 文件真操作：日间带caption预览/打开宿主回调，下载→显示3.2MB/8MB→取消回箭头，菜单、长按多选和夜间切换均已操作。截图TEMP/document-{day,open,loading,cancel,actions,selected,night}.png；最终APK已重查夜间白色下载箭头、模拟下载完成后隐藏图标及再次点击正确文件名回调，截图document-final-night.png、document-ready.png、document-downloaded-open.png；无AndroidRuntime崩溃输出。demo下载为模拟进度，不声明真实网络或文件打开；sample展示AAR宿主状态回调。库不提供PDF封面生成/文件URI加载，说明链接暂无独立点击；文件相册/剧透/缩略图模糊和渐变尚未移植，其它Android版本/平板/大字体仍需人工检查。
-- 下一项：inline keyboard，然后reply keyboard。阶段 C 仍未完成，D–F 未开始；不得把已完成项当作整个目标完成。
+- 内联按钮实现：从固定上游ChatMessageCell 743/3803/9545/14039、MessageObject3999等分支抽取InlineKeyboardLayout，搬运Text及menu_copy_s资源，保留GPL。宿主InlineButton稳定ID/文字/类型/loading与行快照、短按/长按回调；支持CALLBACK/URL/SWITCH_INLINE/COPY，库不执行URL/复制/网络。原44dp按钮、48dp行距、15dp粗体、service色/底排外圆角、0.96按压缩放/350ms Overshoot(2)恢复及LoadingDrawable保留。
+- 内联审查修复：键盘高度与气泡内容高度分开，各媒体/说明/时间/群头像位置保持，键盘后消息断组；wanted宽度用上游StaticLayout/span测量及backgroundWidth下限，纯emoji走media背景分支。按压按screenRefreshRate推进，selector/loading纳入verifyDrawable，复用selector更新主题颜色并登记主题key；缓存行列几何避免宿主换快照时越界，重复ID拒绝；重绑/离窗取消手势和释放drawable/动画，重新挂载恢复布局。所有操作仍由宿主决定，无新依赖或旧API不兼容变更。
+- 内联验证：首轮root构建通过（TEMP/phase-c-inline-build.log）；修正后库release/demo/debugAndroidTest/publish（phase-c-inline-final-build.log）与独立host debug/R8（phase-c-inline-host.log）通过。component=inline（phase-c-inline-device.log）及完整MuMu Android15回归（phase-c-inline-full-device.log）通过，后者含旧TGS完整周期/GIF重绑续播/收藏尺寸。专项覆盖12种气泡×收发×240/400dp、原44dp/边界/占高、URL/loading对象身份、取消重绑选择/父拦截/真实长按、群聊forward+reply+反应的背景时间头像保持、纯emoji与detach/reattach；主题provider路径有覆盖，真实日夜由实操核验。
+- 内联真操作：夜间文字按钮Confirm本地loading→恢复、Website回调、Search here填入输入框、Copy code复制并粘贴出TGUI-1142、URL长按身份；切日间正确刷新。发出图片下按钮loading、长按图片选中1条、退出选择后图片打开正确第4/18张查看器并返回通过，无AndroidRuntime错误。截图TEMP/inline-{night,loading,url-final,query,copy,long,day,paste,photo,photo-loading,selected,viewer}.png。inline-url.png仍显示上一条排队Toast，正确URL回调证据为inline-url-final.png。
+- 内联限制：支付/收据/星币、Web App登录、Telegram邀请识别、服务端callback查询/布局形变过渡未移植；按钮逐项无障碍虚拟节点、多点触控取消未实现。URL样例仅Toast，不访问网络；Confirm为1200ms本地状态模拟。其它Android版本/平板/复杂RTL长按钮/大字体需人工检查；README/CHANGELOG/demo/sample已更新。
+- 下一项：reply keyboard。阶段 C 仍未完成，D–F 未开始；不得把已完成项当作整个目标完成。
 
 ### 阶段 B 当前交接
 

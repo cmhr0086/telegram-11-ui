@@ -131,6 +131,15 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         messages.add(hostDownload);
         messages.add(TextBubbleMessage.document(nextId++, false, "12:42", TextBubbleMessage.STATE_NONE,
                 "No_thumbnail.txt", 12_288, null, app.getString(com.example.tguihost.R.string.document_plain_caption)));
+        TextBubbleMessage inlineSample = new TextBubbleMessage(nextId++, app.getString(com.example.tguihost.R.string.inline_sample_text), false, "12:43", TextBubbleMessage.STATE_NONE);
+        inlineSample.inlineKeyboard = java.util.Arrays.asList(
+                java.util.Arrays.asList(
+                        new TextBubbleMessage.InlineButton("callback", app.getString(com.example.tguihost.R.string.inline_callback), TextBubbleMessage.InlineButton.Type.CALLBACK, false),
+                        new TextBubbleMessage.InlineButton("url", app.getString(com.example.tguihost.R.string.inline_url), TextBubbleMessage.InlineButton.Type.URL, false)),
+                java.util.Arrays.asList(
+                        new TextBubbleMessage.InlineButton("switch", app.getString(com.example.tguihost.R.string.inline_switch), TextBubbleMessage.InlineButton.Type.SWITCH_INLINE, false),
+                        new TextBubbleMessage.InlineButton("copy", app.getString(com.example.tguihost.R.string.inline_copy), TextBubbleMessage.InlineButton.Type.COPY, false)));
+        messages.add(inlineSample);
         for (TextBubbleMessage message : messages) bindGroupSender(message);
         TextBubbleMessage.ForwardedFrom source = new TextBubbleMessage.ForwardedFrom(-100,
                 app.getString(com.example.tguihost.R.string.forward_source_name));
@@ -679,6 +688,15 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 }
             });
             cell.setDelegate(new TextBubbleCell.Delegate() {
+                @Override public void onInlineButtonPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.InlineButton button) {
+                    Toast.makeText(context, context.getString(com.example.tguihost.R.string.inline_action, button.id), Toast.LENGTH_SHORT).show();
+                    if (button.type == TextBubbleMessage.InlineButton.Type.SWITCH_INLINE) enterView.setFieldText(context.getString(com.example.tguihost.R.string.inline_query));
+                    else if (button.type == TextBubbleMessage.InlineButton.Type.COPY) AndroidUtilities.addToClipboard(context.getString(com.example.tguihost.R.string.inline_copy_value));
+                }
+                @Override public void onInlineButtonLongPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.InlineButton button) {
+                    Toast.makeText(context, context.getString(com.example.tguihost.R.string.inline_long_action, button.id), Toast.LENGTH_SHORT).show();
+                }
+
                 @Override public void onForwardPressed(TextBubbleCell sourceCell, TextBubbleMessage item, TextBubbleMessage.ForwardedFrom source) {
                     Toast.makeText(context, context.getString(com.example.tguihost.R.string.forward_source_selected,
                             source.name, source.sourceId), Toast.LENGTH_SHORT).show();

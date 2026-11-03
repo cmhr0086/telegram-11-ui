@@ -206,7 +206,7 @@ public class MusicBubbleCell extends TextBubbleCell implements SeekBar.SeekBarDe
             Theme.chat_msgTextPaint.setColor(getThemedColor(out ? Theme.key_chat_messageTextOut : Theme.key_chat_messageTextIn));
             Theme.chat_msgTextPaint.linkColor = getThemedColor(out ? Theme.key_chat_messageLinkOut : Theme.key_chat_messageLinkIn);
             int captionX = backgroundLeft + AndroidUtilities.dp(out || pinnedBottom ? 11 : 17);
-            int captionY = getHeight() - captionHeight - AndroidUtilities.dp(pinnedTop ? 9 : 10) - reactionsLayoutInBubble.totalHeight;
+            int captionY = getBubbleContentHeight() - captionHeight - AndroidUtilities.dp(pinnedTop ? 9 : 10) - reactionsLayoutInBubble.totalHeight;
             canvas.save(); canvas.translate(captionX, captionY); captionLayout.draw(canvas); canvas.restore();
         }
         drawReactionsInBubble(canvas, backgroundLeft, captionLayout != null ? -AndroidUtilities.dp(14) : 0); drawTimeAndStatus(canvas);

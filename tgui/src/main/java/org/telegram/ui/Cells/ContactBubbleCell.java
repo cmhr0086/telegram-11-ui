@@ -127,7 +127,7 @@ public class ContactBubbleCell extends TextBubbleCell {
                 : AndroidUtilities.dp(incomingAvatarInset() != 0 ? 84 : 35);
         int avatarY = AndroidUtilities.dp(24) + namesOffset;
         avatarRect.set(avatarX, avatarY, avatarX + AndroidUtilities.dp(46), avatarY + AndroidUtilities.dp(46));
-        int instantY = getHeight() - AndroidUtilities.dp(62) - (reactionsLayoutInBubble.isEmpty ? 0 : reactionsLayoutInBubble.totalHeight);
+        int instantY = getBubbleContentHeight() - AndroidUtilities.dp(62) - (reactionsLayoutInBubble.isEmpty ? 0 : reactionsLayoutInBubble.totalHeight);
         int right = currentBackgroundDrawable.getBounds().right - AndroidUtilities.dp(10 + (out && !pinnedBottom ? 6 : 0));
         float textX = avatarX - AndroidUtilities.dp(13);
         contactRect.set(textX, avatarY - AndroidUtilities.dp(9), right, instantY + AndroidUtilities.dp(38));
