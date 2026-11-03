@@ -15,8 +15,8 @@
 | UndoView 撤销条 | 已完成 | 已通过 tools/pull.py 导入并裁剪归档/删除路径；保留归档 Lottie、删除 5 秒倒计时和原动画参数，已接入对话列表单项/批量操作。修复后 release/demo 构建通过；7 项设备边界测试已通过。单项/批量/过滤页原位恢复、超时、主题切换后数据保持均通过；外部宿主 debug/R8 release 通过。夜间缺字已在独立基线复现，确认是原有问题。 |
 | AnimatedEmojiDrawable / AnimatedEmojiSpan | 已完成 | 宿主本地 JSON/gzip TGS 经现有 rlottie 实际渲染；原输入栏/气泡/发送路径通过模拟器截图及原生帧、像素检查，release/demo、AAR 消费端 debug/R8 release 构建通过。边界测试见下。 |
 | 相册分组 | 已完成 | 已抽取 GroupedMessages 的特殊/通用布局；复用照片气泡组成相册，逐格查看器、整组多选、2–10 张和日夜切换已操作。release/demo、设备断言、AAR debug/R8 release 均通过，单 View 与上游多 cell 的 inset 差异已明确记录。 |
-| 圆形视频消息 | 未开始 | 复用现有气泡，播放由宿主或 MediaPlayer 承担。 |
-| 低风险限制补齐 | 未开始 | 前四项完成后再评估。 |
+| 圆形视频消息 | 已完成 | 上游普通圆视频分支与阴影，宿主模型/回调；demo MediaPlayer 实播/暂停恢复/切换/长按/夜间均操作，设备自动检查真实首帧、暂停/恢复和资源释放。构建及 AAR debug/R8 release 通过，限制见下。 |
+| 低风险限制补齐 | 已完成一项 | 修复回归中定位的 CRLF 主题色解析问题，夜间缺字在设备上已恢复，保持壁纸字节偏移。其它候选不扩范围。 |
 
 ## 验证门槛
 
@@ -41,11 +41,12 @@
 
 ## 提交与发布
 
-UndoView 已提交为 `886b99a`，本地动态表情为 `ecb00e3`。相册已满足门槛，将独立提交；下一步为圆形视频消息。整体目标未完成，尚未推送或创建最终 PR。
+UndoView `886b99a`、本地动态表情 `ecb00e3`、相册 `a3d5ef2`、主题 CRLF 修复 `871d103` 已独立提交。圆形视频已满足门槛，将独立提交。剩余为最终审查、推送 codex/roadmap 并创建目标 dev/ui-lib 的 PR；不合并，main 不改动。
 
 ## 正在定位的观察
 
 - MuMu 上切换夜间后对话列表标题、消息和筛选标签不可见，日间恢复。已创建 detached 基线工作树 `D:\Codex\telegram-ui-baseline-check` @ 7eb17f0，使用独立 applicationId 诊断，构建并安装独立包后复现同样症状，确认是本次改动前存在的问题；主工作树源代码未因该诊断改变，保留工作树供后续排查。
+- 上述问题现已定位并修复，见下面“主题 CRLF 修复”；保留基线工作树和截图作修复前证据。
 - 筛选标签的无障碍描述出现 LOC_ERR:AccDescrUnreadCount_other，记录为后续低风险候选，当前未修改。
 
 ### UndoView 最终验证
@@ -84,3 +85,14 @@ UndoView 已提交为 `886b99a`，本地动态表情为 `ecb00e3`。相册已满
 - 根因：Windows 工作树 .attheme 文件使用 CRLF，Theme.getThemeFileValues 去掉 LF 却保留 CR；严格的 Utilities.parseInt 将 `-328966\r` 读为0。改为解析前只剥行尾 CR，保留原字节长度用于 WPS offset；新增 .gitattributes，attheme 后续检出用LF。不改变 Utilities 的全局解析语义。
 - ThemeFileDeviceChecks 验证 LF/CRLF 的负数颜色、十六进制颜色、WLS链接、WPS二进制字节位置和打包 night/darkblue 文字色。原 AnimatedEmojiDeviceChecks 的帧/像素断言未放宽，失败诊断会保存截图和详细 paint/native 状态。
 - 修复后 `:tgui:assembleRelease :demo:assembleDebug :demo:assembleDebugAndroidTest :tgui:publishToMavenLocal` 通过，TEMP/roadmap-theme-round-final.log；完整设备测试输出 `UndoView + AnimatedEmojiDeviceChecks + AlbumDeviceChecks + RoundVideoDeviceChecks passed`（含主题格式检查）。
+- 消费端 debug/R8 release 通过，TEMP/roadmap-theme-round-host.log。定向 UI 回归夜间列表的 All/Unread/Personal、姓名/消息/时间恢复可见，切回日间正常，TEMP/theme-night-fixed.png、theme-day-fixed.png。
+
+## 圆形视频
+
+- RoundVideoBubbleCell 从固定 upstream ChatMessageCell 的普通圆视频分支裁剪；普通直径0.6最小侧，圆形 center crop、17dp时长条/6dp圆角/服务底50%、未读点、3dp圆头0x9fffffff进度环和单个时间/发送状态；复用照片 PhotoRenderer 与 RadialProgress2。RoundVideoShadow 用 tools/pull.py 原样搬入并在 Theme 初始化。业务媒体控制器换成纯模型/MediaDelegate 回调。
+- demo LocalRoundVideoPlayer 在透明列表后、壁纸前放圆形 TextureView，首帧后只隐藏 cell 缩略图，cell 继续画环/状态且可点暂停。MediaPlayer 本地播放、居中裁剪、音频焦点、暂停/恢复、另一条播放、离屏/页面暂停/主题重建和选择状态都回收播放器/Surface/覆盖层。现有语音播放与圆视频互相停止。
+- 修复审查与真实 UI 发现的问题：暂停后时长跳回总时长，新增 videoPaused 区分暂停会话和停止；圆视频下载状态刷新分支缺失；原 Theme 声明阴影却未初始化；隐藏缩略图时原先也隐藏环且不能点暂停；圆外触摸不播放、移动和detach取消长按/释放父拦截锁。
+- 构建：release/demo/测试 APK/publishToMavenLocal，TEMP/roadmap-theme-round-final.log；消费端 debug/R8 release，roadmap-theme-round-host.log。最终完整设备仪器包括 Theme/Undo/Emoji/Album/Round，输出全部 passed。
+- RoundVideoDeviceChecks：240/400dp × 收发，直径/中心裁剪/框内边界/一次时间；圆内点击/圆外不播放/移动取消/长按与detach取消；隐藏缩略图仍画半圈进度并可点；暂停剩余时长保持；下载/加载/停止绘制；另用真正本地 MediaPlayer 等待首帧和进度>600ms，暂停450ms位置稳定、恢复400ms进度推进，stop后 player/surface/layer 均null且状态清空、重复stop安全。
+- 真实 UI：视频帧/环/倒计时变化、暂停两秒画面不动、恢复至结束回播放图标、切第二条停止第一条、离屏返回能重播、退出页面、长按整条计数1、夜间圆形预览/时间；TEMP/round-play1.png、round-play2.png、round-pause1.png、round-pause2.png、round-resume.png、round-finished.png、round-switch.png、round-return.png、round-replay.png、round-select.png、round-night.png。暂停修复后剩余00:04保持两秒，恢复到00:03：round-pause-fixed.png、round-pause-fixed2.png、round-resume-fixed.png。
+- 未验证扬声器实际输出或音轨；退出/离屏无声不作为听觉观察结论，资源释放有设备断言。播放扩大/过渡、拖环seek、转写、阅后即焚、PiP、圆消息自身reply/reactions未移植，README已明确；其它气泡原功能保留，demo不向圆消息显示未实现的反应菜单。

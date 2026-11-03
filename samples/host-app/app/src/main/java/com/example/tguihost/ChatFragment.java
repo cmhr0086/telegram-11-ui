@@ -83,6 +83,8 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         }
         messages.add(TextBubbleMessage.album(nextId++, false, "12:34", TextBubbleMessage.STATE_NONE,
                 photos, org.telegram.messenger.ApplicationLoader.applicationContext.getString(com.example.tguihost.R.string.local_album_sample)));
+        messages.add(TextBubbleMessage.roundVideo(nextId++, true, "12:35", TextBubbleMessage.STATE_READ,
+                photos.get(0).photo, null, 6));
         return super.onFragmentCreate();
     }
 
@@ -368,11 +370,16 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         @NonNull
         @Override
         public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            TextBubbleCell cell = viewType == TextBubbleMessage.TYPE_ALBUM
-                    ? new org.telegram.ui.Cells.AlbumBubbleCell(context, getResourceProvider())
-                    : new TextBubbleCell(context, getResourceProvider());
+            TextBubbleCell cell;
+            if (viewType == TextBubbleMessage.TYPE_ALBUM) cell = new org.telegram.ui.Cells.AlbumBubbleCell(context, getResourceProvider());
+            else if (viewType == TextBubbleMessage.TYPE_ROUND_VIDEO) cell = new org.telegram.ui.Cells.RoundVideoBubbleCell(context, getResourceProvider());
+            else cell = new TextBubbleCell(context, getResourceProvider());
             cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
-                @Override public void onMediaPressed(TextBubbleCell source, TextBubbleMessage item) { }
+                @Override public void onMediaPressed(TextBubbleCell source, TextBubbleMessage item) {
+                    if (item.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
+                        Toast.makeText(context, com.example.tguihost.R.string.round_video_host, Toast.LENGTH_SHORT).show();
+                    }
+                }
                 @Override public void onAlbumMediaPressed(org.telegram.ui.Cells.AlbumBubbleCell source,
                         TextBubbleMessage album, TextBubbleMessage item, int index) {
                     Toast.makeText(context, context.getString(com.example.tguihost.R.string.album_item, index + 1), Toast.LENGTH_SHORT).show();

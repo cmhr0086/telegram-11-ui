@@ -21,6 +21,7 @@ public class TextBubbleMessage {
     public static final int TYPE_PHOTO = 2;
     public static final int TYPE_DOCUMENT = 3;
     public static final int TYPE_ALBUM = 4;
+    public static final int TYPE_ROUND_VIDEO = 5;
 
     /** Media is available locally: voice shows play / pause, files show their extension icon. */
     public static final int MEDIA_READY = 0;
@@ -54,6 +55,8 @@ public class TextBubbleMessage {
     /** Upstream 5-bit packed waveform (as recorded by MediaController / ChatActivityEnterView), may be null. */
     public byte[] waveform;
     public boolean playing;
+    /** Round video has a prepared but paused session; keeps remaining time/progress visible. */
+    public boolean videoPaused;
     public float audioProgress;
     public int audioProgressSec;
     /** Not listened yet: the small dot after the duration. */
@@ -172,6 +175,9 @@ public class TextBubbleMessage {
                     case TYPE_ALBUM:
                         text = org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.tgui_album);
                         break;
+                    case TYPE_ROUND_VIDEO:
+                        text = org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.tgui_round_video);
+                        break;
                     default:
                         text = message.fileName != null ? message.fileName : "File";
                         break;
@@ -180,6 +186,8 @@ public class TextBubbleMessage {
             ReplyTo reply = new ReplyTo(message.id, name, text);
             reply.media = media;
             if (message.type == TYPE_PHOTO) {
+                reply.thumb = message.photo;
+            } else if (message.type == TYPE_ROUND_VIDEO) {
                 reply.thumb = message.photo;
             } else if (message.type == TYPE_ALBUM && !message.albumMedia.isEmpty()) {
                 reply.thumb = message.albumMedia.get(0).photo;
@@ -241,6 +249,17 @@ public class TextBubbleMessage {
         TextBubbleMessage message = new TextBubbleMessage(id, caption, isOut, time, state);
         message.type = TYPE_ALBUM;
         message.albumMedia.addAll(items);
+        return message;
+    }
+
+    /** Local circular video; the host owns decoding, audio focus, playback and progress updates. */
+    public static TextBubbleMessage roundVideo(long id, boolean isOut, String time, int state,
+                                               Drawable thumb, android.net.Uri uri, int duration) {
+        TextBubbleMessage message = new TextBubbleMessage(id, null, isOut, time, state);
+        message.type = TYPE_ROUND_VIDEO;
+        message.photo = thumb;
+        message.videoUri = uri;
+        message.duration = Math.max(0, duration);
         return message;
     }
 }

@@ -52,13 +52,14 @@ public class RoadmapInstrumentation extends Instrumentation {
                 sendStatus(1, status);
                 AnimatedEmojiDeviceChecks.run(this, activity);
                 AlbumDeviceChecks.run(this, activity);
+                RoundVideoDeviceChecks.run(this, activity);
                 main(() -> {
                     if (container != null && container.getParent() instanceof ViewGroup) {
                         ((ViewGroup) container.getParent()).removeView(container);
                     }
                     activity.finish();
                 });
-                result.putString("stream", "\nRoadmapInstrumentation: UndoView + AnimatedEmojiDeviceChecks + AlbumDeviceChecks passed\n");
+                result.putString("stream", "\nRoadmapInstrumentation: UndoView + AnimatedEmojiDeviceChecks + AlbumDeviceChecks + RoundVideoDeviceChecks passed\n");
                 finish(Activity.RESULT_OK, result);
             } catch (Throwable failure) {
                 StringWriter trace = new StringWriter();

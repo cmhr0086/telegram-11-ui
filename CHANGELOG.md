@@ -5,6 +5,7 @@
 ## Unreleased
 
 ### 新增
+- `RoundVideoBubbleCell`：从上游普通圆视频分支裁剪圆形预览、0.6 直径、阴影、时长/未读点、播放进度环和媒体回调；`TextBubbleMessage.roundVideo` / `videoPaused` 表达宿主数据。demo 以本地 MediaPlayer + 圆形 TextureView 实播，支持暂停恢复、切换、离屏/页面退出释放；消费端有纯 UI 示例，设备检查覆盖几何/手势与真实播放器生命周期。
 - 相册分组：从上游 `MessageObject.GroupedMessages` 抽取 `GroupedMediaLayout`，`AlbumBubbleCell` 复用原照片气泡展示 2–10 张本地照片/视频缩略图、说明、回复、反应和单个时间；每格下载状态/播放图标、点击及查看器来源 API，长按选择整组。demo 含 2/3/4/5 张及菜单 10 张样例，消费端含三图相册。单行组合的内部边距与上游多 cell 存在已记录差异。
 - 阶段 C 本地动态表情：`AnimatedEmojiDrawable.SourceProvider` 将 documentId 映射至宿主 JSON / gzip TGS 文件，经私有缓存副本交给既有 rlottie；最后解绑回收，支持重新绑定和来源切换。无账号、下载或 Telegram 服务器依赖。
 - `AnimatedEmojiSpan` 从占位恢复真实行内绘制、上游尺寸/位置、布局分组生命周期、深克隆；原输入栏和文字气泡可混排普通/自定义 emoji，demo 可插入和发送，外部 AAR 样例也接入。

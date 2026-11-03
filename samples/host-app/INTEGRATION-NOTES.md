@@ -180,3 +180,7 @@ HostApp 将库中现有 JSON 插画复制成宿主文件，以 SourceProvider �
 ## 2026-11-03：相册消费验证
 
 Chat 页增加三图相册，adapter 使用 TYPE_ALBUM / AlbumBubbleCell，单格点击回调宿主并显示素材序号。公开模型、资源和回调 API 经 Maven local AAR 构建 debug 与 R8 release 通过；完整查看器/长按操作测试在主 demo，结果见 PROGRESS。
+
+## 2026-11-03：圆形视频消费验证
+
+Chat 页追加 roundVideo 模型和 RoundVideoBubbleCell，回调提示宿主提供视频 Surface 与播放，不伪装本样例已提供本地播放器。消费端 debug/R8 release 通过；真实 MediaPlayer 播放和设备生命周期断言在主 demo，详见 PROGRESS。

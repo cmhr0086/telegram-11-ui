@@ -45,6 +45,7 @@ import org.telegram.ui.Cells.ChatActionCell;
 import org.telegram.ui.Cells.DocumentBubbleCell;
 import org.telegram.ui.Cells.PhotoBubbleCell;
 import org.telegram.ui.Cells.AlbumBubbleCell;
+import org.telegram.ui.Cells.RoundVideoBubbleCell;
 import org.telegram.ui.Cells.VoiceBubbleCell;
 import org.telegram.ui.Components.ChatActivityEnterView;
 import org.telegram.ui.Components.ChatBubbleItemAnimator;
@@ -128,6 +129,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private final HashMap<Long, String> voicePaths = new HashMap<>();
     private TextBubbleMessage playingVoice;
     private MediaPlayer voicePlayer;
+    private LocalRoundVideoPlayer roundPlayer;
     private long fakePlayStart;
     private final Runnable voiceProgressUpdater = this::updateVoiceProgress;
 
@@ -199,6 +201,12 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         addSample(sampleAlbum(3, true, true));
         addSample(sampleAlbum(4, false, true));
         addSample(sampleAlbum(5, true, false));
+        TextBubbleMessage roundIncoming = TextBubbleMessage.roundVideo(nextId++, false, "10:15", TextBubbleMessage.STATE_NONE,
+                sampleVideoThumb(videoUri), videoUri, 6);
+        roundIncoming.contentUnread = true;
+        addSample(roundIncoming);
+        addSample(TextBubbleMessage.roundVideo(nextId++, true, "10:15", TextBubbleMessage.STATE_READ,
+                sampleVideoThumb(videoUri), videoUri, 6));
         rebuildRows();
         return super.onFragmentCreate();
     }
@@ -211,6 +219,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         }
         stopFakeVideo();
         stopVoice();
+        if (roundPlayer != null) roundPlayer.stop();
         super.onFragmentDestroy();
     }
 
@@ -329,6 +338,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     @Override
     public View createView(Context context) {
+        if (roundPlayer != null) roundPlayer.stop();
         // BackDrawable like ChatActivity: the arrow turns into × in selection mode
         actionBar.setBackButtonDrawable(new BackDrawable(false));
         actionBar.setAllowOverlayTitle(true);
@@ -445,6 +455,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         contentView.addView(floatingDateView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.LEFT, 0, 4, 0, 0));
         floatingDateView.setTranslationY(ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0));
         contentView.setContentView(listView);
+        roundPlayer = new LocalRoundVideoPlayer(contentView, listView);
 
         enterView = new ChatActivityEnterView(getParentActivity(), contentView, this, true, getResourceProvider());
         enterView.setDelegate(new EnterViewDelegate());
@@ -560,6 +571,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
 
     private void showActionMode(TextBubbleMessage message) {
+        if (roundPlayer != null) roundPlayer.stop();
         createActionMode();
         updateActionModeColors();
         if (enterView.isPopupShowing()) {
@@ -736,7 +748,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             menu.addItem(R.drawable.msg_edit, "Edit", () -> startEdit(message));
         }
         menu.addItem(R.drawable.msg_delete, "Delete", () -> deleteMessage(message));
-        menu.setReactions(MessageContextMenu.DEFAULT_REACTIONS);
+        if (message.type != TextBubbleMessage.TYPE_ROUND_VIDEO) {
+            menu.setReactions(MessageContextMenu.DEFAULT_REACTIONS);
+        }
         menu.setSelectedReactions(message);
         menu.setDelegate(new MessageContextMenu.Delegate() {
             @Override
@@ -1035,6 +1049,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     @Override
     public void onPause() {
         super.onPause();
+        if (roundPlayer != null) roundPlayer.stop();
         if (contentView != null) {
             contentView.onPause();
         }
@@ -1100,6 +1115,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     /** What the reply panel / copy shows for a message: the text, or a media label like upstream's MessageObject.messageText. */
     private static CharSequence previewText(TextBubbleMessage message) {
+        if (message.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
+            return ApplicationLoader.applicationContext.getString(R.string.tgui_round_video);
+        }
         if (message.type == TextBubbleMessage.TYPE_VOICE) {
             return "🎤 Voice message";
         } else if (message.type == TextBubbleMessage.TYPE_PHOTO) {
@@ -1330,6 +1348,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     ((PhotoBubbleCell) child).updateButtonState(true);
                 } else if (child instanceof DocumentBubbleCell) {
                     ((DocumentBubbleCell) child).updateButtonState(true);
+                } else if (child instanceof RoundVideoBubbleCell) {
+                    ((RoundVideoBubbleCell) child).updatePlayingMessageProgress();
                 }
             }
         }
@@ -1469,7 +1489,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
         @Override
         public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) {
-            if (message.type == TextBubbleMessage.TYPE_VOICE) {
+            if (message.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
+                if (message.mediaState == TextBubbleMessage.MEDIA_READY) {
+                    stopVoice();
+                    roundPlayer.toggle(message);
+                } else toggleFakeDownload(message);
+            } else if (message.type == TextBubbleMessage.TYPE_VOICE) {
+                if (roundPlayer != null) roundPlayer.stop();
                 toggleVoice(message);
             } else if (message.type == TextBubbleMessage.TYPE_PHOTO && message.mediaState == TextBubbleMessage.MEDIA_READY) {
                 if (actionBar.isActionModeShowed()) {
@@ -1484,6 +1510,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
         @Override
         public void onSeek(TextBubbleCell cell, TextBubbleMessage message, float progress) {
+            if (message.type == TextBubbleMessage.TYPE_ROUND_VIDEO && roundPlayer != null) {
+                roundPlayer.seek(message, progress);
+                return;
+            }
             if (message == playingVoice && voicePlayer != null) {
                 voicePlayer.seekTo((int) (progress * voicePlayer.getDuration()));
             } else if (message == playingVoice) {
@@ -1641,6 +1671,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 cell = new PhotoBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_ALBUM) {
                 cell = new AlbumBubbleCell(context, getResourceProvider());
+            } else if (viewType == TextBubbleMessage.TYPE_ROUND_VIDEO) {
+                cell = new RoundVideoBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_DOCUMENT) {
                 cell = new DocumentBubbleCell(context, getResourceProvider());
             } else {

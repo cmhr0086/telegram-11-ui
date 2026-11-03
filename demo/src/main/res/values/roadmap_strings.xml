@@ -4,4 +4,5 @@
     <string name="local_emoji_insert">Insert local animated emoji</string>
     <string name="album_caption">Album · %1$d photos</string>
     <string name="album_ten">Send a 10-photo album</string>
+    <string name="round_video_error">This local video could not be played</string>
 </resources>
