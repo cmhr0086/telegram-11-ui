@@ -1541,6 +1541,11 @@ public class TextBubbleCell extends View {
 
     /** Checks / clock with their right edge at {@code layoutWidth - 18dp}; {@code media}: white ones for the time pill. */
     protected void drawStatus(Canvas canvas, int layoutWidth, int layoutHeight, boolean media) {
+        drawStatus(canvas, layoutWidth, layoutHeight, media, false);
+    }
+
+    /** Sticker time/status uses the wallpaper-derived service text color. */
+    protected void drawStatus(Canvas canvas, int layoutWidth, int layoutHeight, boolean media, boolean service) {
         int state = message.state;
         float progress = statusProgress;
         boolean useScale = progress != 1f;
@@ -1551,7 +1556,7 @@ public class TextBubbleCell extends View {
             MsgClockDrawable clock = Theme.chat_msgClockDrawable;
             float alpha = state == TextBubbleMessage.STATE_SENDING ? 1f : 1f - progress;
             if (alpha > 0) {
-                clock.setColor(getThemedColor(media ? Theme.key_chat_mediaSentClock : Theme.key_chat_outSentClock));
+                clock.setColor(getThemedColor(service ? Theme.key_chat_serviceText : media ? Theme.key_chat_mediaSentClock : Theme.key_chat_outSentClock));
                 setBounds(clock, layoutWidth - AndroidUtilities.dp(18.5f) - clock.getIntrinsicWidth(), layoutHeight - AndroidUtilities.dp(8.5f) - clock.getIntrinsicHeight());
                 clock.setAlpha((int) (255 * alpha));
                 clock.draw(canvas);
@@ -1566,7 +1571,7 @@ public class TextBubbleCell extends View {
         }
         boolean read = state == TextBubbleMessage.STATE_READ;
         Drawable check = media ? Theme.chat_msgMediaCheckDrawable : read ? Theme.chat_msgOutCheckReadDrawable : Theme.chat_msgOutCheckDrawable;
-        Theme.setDrawableColor(check, getThemedColor(media ? Theme.key_chat_mediaSentCheck : read ? Theme.key_chat_outSentCheckRead : Theme.key_chat_outSentCheck));
+        Theme.setDrawableColor(check, getThemedColor(service ? Theme.key_chat_serviceText : media ? Theme.key_chat_mediaSentCheck : read ? Theme.key_chat_outSentCheckRead : Theme.key_chat_outSentCheck));
         if (read) {
             setBounds(check, layoutWidth - AndroidUtilities.dp(22.5f) - check.getIntrinsicWidth(), checkY - check.getIntrinsicHeight());
         } else {
@@ -1575,7 +1580,7 @@ public class TextBubbleCell extends View {
         drawScaled(canvas, check, useScale, scale, progress);
         if (read) {
             Drawable half = media ? Theme.chat_msgMediaHalfCheckDrawable : Theme.chat_msgOutHalfCheckDrawable;
-            Theme.setDrawableColor(half, getThemedColor(media ? Theme.key_chat_mediaSentCheck : Theme.key_chat_outSentCheckRead));
+            Theme.setDrawableColor(half, getThemedColor(service ? Theme.key_chat_serviceText : media ? Theme.key_chat_mediaSentCheck : Theme.key_chat_outSentCheckRead));
             setBounds(half, layoutWidth - AndroidUtilities.dp(18) - half.getIntrinsicWidth(), checkY - half.getIntrinsicHeight());
             drawScaled(canvas, half, useScale, scale, progress);
         }
