@@ -15,7 +15,7 @@
 | E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
 
-roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A 代码已按功能提交，库/demo、消费端及仪器检查已通过；真实页面操作已通过，已推送并创建 PR #2，不能将 B–F 计为完成。
+roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；不能将 C–F 计为完成。
 
 ### 阶段 B 当前交接
 
@@ -23,7 +23,9 @@ roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A 代码已按
 - AttachmentAccess 发起运行时图片/视频权限，兼容 Android14 选中照片授权；文件使用 ACTION_OPEN_DOCUMENT，联系人不申请系统联系人权限，地图由宿主提供。配置变化销毁 Activity 时取消待处理回调，由新宿主重新打开；不冒用旧 Activity 回调。
 - 相册后台查询 content URI、按时间混排照片视频，选择按 URI 隔离；焦点恢复重新检查授权，权限申请中禁止焦点刷新抢占回调。代码已修单类媒体授权被误当完整权限、前1000图片排除视频、迟到回调和销毁后setter更新。
 - 投票保留255/100与2..10、匿名/多选，无quiz/拖动排序；位置无GPS/live/在线POI。发送前预览为精简确认列表及字幕，未迁移PhotoViewer编辑器。
-- 首轮`:tgui:assembleRelease :demo:assembleDebug`通过（TEMP/phase-b-first.log）；后续修改与新测试尚未最终验收，当前B未提交/未创建PR。
+- 库 release、demo debug/androidTest、publishToMavenLocal 通过（TEMP/phase-b-api-build.log）；消费端 debug/R8 release 通过（TEMP/phase-b-final-host.log）。全部仪器通过（TEMP/phase-b-final-device.log），覆盖权限状态、联系人快照、poll边界、文件迟到回调、宿主地图替换、分页隔离、展开/收起、确认快照/字幕/双击只发送一次。
+- MuMu Android15真实操作通过：首次拒绝→重新请求→系统仅选两张→网格仅显示两张→多选Send(2)→caption→缩略图确认→发送；日/夜主题重新打开菜单均正常，截图TEMP/attachment-preview.png与attachment-dark.png。全授权、API21–33、旋转/系统回收、文件供应商撤回URI权限需要人工补验。宿主demo收到媒体后显示名称/URI摘要，真实媒体模型仍由宿主准备。
+- 无新增运行依赖。已按功能提交并推送 [PR #3](https://github.com/cmhr0086/telegram-11-ui/pull/3)，目标dev/ui-lib；未合并。包含用户反馈的两项贴纸修复，后续从本分支继续阶段C。
 
 ### 阶段 A 实现及验证记录
 
