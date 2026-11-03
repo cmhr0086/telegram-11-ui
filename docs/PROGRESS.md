@@ -6,6 +6,8 @@
 
 上游再次核实为 `release-11.4.2-5469`。基线 `:tgui:assembleRelease :demo:assembleDebug` 通过（TEMP/phase-a-baseline.log）。继续复用 tgui、原包名、RecyclerView fork 与 GPL 头，不引入网络层或平行模块。
 
+2026-11-04交付状态：阶段F实现54fc04a已推送；[PR #7](https://github.com/cmhr0086/telegram-11-ui/pull/7)已更新A–F完成范围、未移植分支/原因、人工补验清单并转为ready。PR #2–#7均open、目标dev/ui-lib、未合并。后续从codex/phase-f读取本文件及README限制继续，不重建现有组件；最新完整设备回归为TEMP/phase-f-final-full-device.log。宿主冷启动问题已修复，旧“未响应/待验证”段落仅保留定位历史。
+
 | 阶段 | 状态 | 剩余工作 |
 | --- | --- | --- |
 | A 贴纸与 GIF | 已完成，限制见下 | PR #2，库/消费端/仪器及 MuMu 真操作通过；WEBM 首帧降级 |
