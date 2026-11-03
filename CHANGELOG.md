@@ -5,6 +5,7 @@
 ## Unreleased
 
 ### 新增
+- 阶段 C：`ServiceMessage` 为既有 `ChatActionCell` 提供加入/邀请/改名/置顶/自定义事件，移植上游文字分支与 Android 资源，保留原文字胶囊；新增用户/置顶目标回调。demo 可点击置顶跳转，host sample 可预览；不改变既有日期 API。
 - 阶段 C：直接搬运 `ChatUnreadCell` 及原分隔条/箭头资源，保留 40dp 行高和三个 unread 颜色 key；`updateColors()` 便于主题重用。demo 聊天增加未读锚点和菜单定位，外部宿主增加预览。
 - 阶段 B：新增 `ChatAttachAlert` 附件面板和 `Attachment` 模型，支持相册、系统文件选择、宿主联系人与位置视图、本地投票，以及说明文字和发送回调。相册按系统版本请求权限，文件 URI 的长期授权与内容读取由宿主处理；Activity 重建会取消待处理的选择，需要重新打开。预览为精简列表，不含图片编辑；顶部拖动未实现上游完整整页联动。demo 将媒体显示为 URI 文字摘要。
 - 阶段 A：宿主 `MediaSource` / `StickerSet` / `Sticker` / `Gif`，本地 WEBP/TGS/GIF 渲染和 WEBM 首帧回退，无新增运行依赖；加载取消、复用隔离、隐藏停止及 detach 释放。
@@ -24,6 +25,7 @@
 - demo：点图片 / 视频打开查看器，可在聊天里所有已下载的图片和视频之间翻页；加了一条 6 秒的示例视频消息（`demo/res/raw/sample_video.mp4`，80 KB）。
 
 ### 修复
+- `ChatActionCell` 复用同文案时更新点击目标；清空文本不再保留旧布局，Telegram emoji 替换保留可点击 span。
 - 修复贴纸/GIF 在发送状态更新时被 RecyclerView 临时 detach/rebind 误暂停：恢复可见绘制时继续当前动画；保留显式暂停。设备回归覆盖完整 TGS 周期、重绑和 GIF 像素推进。
 - 贴纸页收藏/最近标签恢复上游 33×36dp、24dp 图标，包封面恢复 26dp，避免原始 38dp 收藏图标被裁切。
 - 将 demo 与 tgui 的 roadmap_strings.xml 合并回各自 strings.xml。

@@ -153,6 +153,32 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                     org.telegram.ui.ActionBar.BottomSheet sheet = new org.telegram.ui.ActionBar.BottomSheet(context, false, getResourceProvider());
                     sheet.setCustomView(unread);
                     showDialog(sheet);
+                } else if (id == 4) {
+                    android.widget.LinearLayout events = new android.widget.LinearLayout(context);
+                    events.setOrientation(android.widget.LinearLayout.VERTICAL);
+                    org.telegram.ui.Cells.ServiceMessage.Person alice = new org.telegram.ui.Cells.ServiceMessage.Person(1L, "Alice");
+                    org.telegram.ui.Cells.ServiceMessage[] examples = {
+                        org.telegram.ui.Cells.ServiceMessage.join(1, alice, false),
+                        org.telegram.ui.Cells.ServiceMessage.invite(2, alice,
+                            new org.telegram.ui.Cells.ServiceMessage.Person(2L, "Bob"), false, false),
+                        org.telegram.ui.Cells.ServiceMessage.pin(3, alice, false, messages.get(0).id, messages.get(0).text)
+                    };
+                    for (org.telegram.ui.Cells.ServiceMessage event : examples) {
+                        org.telegram.ui.Cells.ChatActionCell cell = new org.telegram.ui.Cells.ChatActionCell(context, getResourceProvider());
+                        cell.setMessage(event);
+                        cell.setDelegate(new org.telegram.ui.Cells.ChatActionCell.Delegate() {
+                            @Override public void onUserPressed(Object userId) {
+                                android.widget.Toast.makeText(context, context.getString(com.example.tguihost.R.string.service_user_selected, userId), android.widget.Toast.LENGTH_SHORT).show();
+                            }
+                            @Override public void onPinnedMessagePressed(Object messageId) {
+                                android.widget.Toast.makeText(context, context.getString(com.example.tguihost.R.string.service_pin_selected, messageId), android.widget.Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                        events.addView(cell, new android.widget.LinearLayout.LayoutParams(-1, -2));
+                    }
+                    org.telegram.ui.ActionBar.BottomSheet sheet = new org.telegram.ui.ActionBar.BottomSheet(context, false, getResourceProvider());
+                    sheet.setCustomView(events);
+                    showDialog(sheet);
                 } else if (id == ACTION_DELETE) {
                     for (TextBubbleMessage m : new ArrayList<>(selected)) {
                         int index = messages.indexOf(m);
@@ -165,6 +191,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         });
         actionBar.createMenu().addItem(MENU_NIGHT, R.drawable.msg_theme);
         actionBar.createMenu().addItem(3, R.drawable.ic_ab_new).setContentDescription(context.getString(R.string.UnreadMessages));
+        actionBar.createMenu().addItem(4, R.drawable.msg_info).setContentDescription(context.getString(com.example.tguihost.R.string.service_messages));
         actionBar.createMenu().addItem(2, R.drawable.msg_emoji_smiles)
                 .setContentDescription(context.getString(com.example.tguihost.R.string.local_emoji_insert));
 

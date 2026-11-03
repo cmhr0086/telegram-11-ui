@@ -42,6 +42,7 @@ import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Cells.TextBubbleCell;
 import org.telegram.ui.Cells.TextBubbleMessage;
 import org.telegram.ui.Cells.ChatActionCell;
+import org.telegram.ui.Cells.ServiceMessage;
 import org.telegram.ui.Cells.DocumentBubbleCell;
 import org.telegram.ui.Cells.PhotoBubbleCell;
 import org.telegram.ui.Cells.AlbumBubbleCell;
@@ -96,6 +97,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_LOCAL_EMOJI = 3;
     private static final int MENU_ALBUM_TEN = 4;
     private static final int MENU_UNREAD = 5;
+    private static final int MENU_SERVICE = 6;
     // action mode (ChatActivity.createActionMode ids)
     private static final int ACTION_EDIT = 10;
     private static final int ACTION_COPY = 11;
@@ -115,10 +117,12 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private long nextId = 1;
     private int replyIndex;
     private TextBubbleMessage replyingTo;
-    /** Adapter rows: a TextBubbleMessage, or a Long (start of day, unix seconds) for a date separator. */
+    /** Adapter rows: messages, service events, unread marker, or Long day separators. */
     private final ArrayList<Object> rows = new ArrayList<>();
+    private final ArrayList<ServiceMessage> serviceEvents = new ArrayList<>();
     private static final int VIEW_TYPE_DATE = 100;
     private static final int VIEW_TYPE_UNREAD = 101;
+    private static final int VIEW_TYPE_SERVICE = 102;
     private static final Object UNREAD_MARKER = new Object();
     private long firstUnreadId;
     private ChatActionCell floatingDateView;
@@ -232,6 +236,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     stickerSamples.gifs.get(0), ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.local_gif_caption)));
         } catch (java.io.IOException error) { org.telegram.messenger.FileLog.e(error); }
         if (!messages.isEmpty()) firstUnreadId = messages.get(messages.size() - 1).id;
+        ServiceMessage.Person alice = new ServiceMessage.Person(1L, "Alice");
+        ServiceMessage.Person bob = new ServiceMessage.Person(2L, "Bob");
+        serviceEvents.add(ServiceMessage.join("join", alice, false));
+        serviceEvents.add(ServiceMessage.invite("invite", alice, bob, false, false));
+        serviceEvents.add(ServiceMessage.title("title", bob, false,
+                ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.service_group_title)));
+        serviceEvents.add(ServiceMessage.pin("pin", alice, false, looksLike.id, looksLike.text));
         rebuildRows();
         return super.onFragmentCreate();
     }
@@ -293,7 +304,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 rows.add(day);
                 lastDay = day;
             }
-            if (message.id == firstUnreadId) rows.add(UNREAD_MARKER);
+            if (message.id == firstUnreadId) {
+                rows.addAll(serviceEvents);
+                rows.add(UNREAD_MARKER);
+            }
             rows.add(message);
         }
     }
@@ -343,7 +357,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         }
         floatingDateView.setCustomDate(day);
         // the real separator of this day is on screen right below the header: let it show instead
-        boolean separatorAtTop = topChild instanceof ChatActionCell && topChild.getTop() > top - topChild.getHeight();
+        boolean separatorAtTop = position >= 0 && position < rows.size() && rows.get(position) instanceof Long
+                && topChild.getTop() > top - topChild.getHeight();
         if (scrolling && !separatorAtTop) {
             AndroidUtilities.cancelRunOnUIThread(hideFloatingDate);
             showFloatingDate(true);
@@ -404,6 +419,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 } else if (id == MENU_UNREAD) {
                     int row = rows.indexOf(UNREAD_MARKER);
                     if (row >= 0) layoutManager.scrollToPositionWithOffset(row, 0);
+                } else if (id == MENU_SERVICE && !serviceEvents.isEmpty()) {
+                    int row = rows.indexOf(serviceEvents.get(0));
+                    if (row >= 0) layoutManager.scrollToPositionWithOffset(row, 0);
                 }
             }
         });
@@ -416,6 +434,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.addSubItem(MENU_LOCAL_EMOJI, R.drawable.msg_emoji_smiles, context.getString(org.telegram.uidemo.R.string.local_emoji_insert));
         otherItem.addSubItem(MENU_ALBUM_TEN, R.drawable.msg_photos, context.getString(org.telegram.uidemo.R.string.album_ten));
         otherItem.addSubItem(MENU_UNREAD, R.drawable.ic_ab_new, context.getString(R.string.UnreadMessages));
+        otherItem.addSubItem(MENU_SERVICE, R.drawable.msg_info, context.getString(org.telegram.uidemo.R.string.service_messages));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -821,7 +840,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         messages.remove(index);
         // the day's separator goes too when this was its only message
         int firstRemoved = row;
-        if (firstRemoved > 0 && rows.get(firstRemoved - 1) == UNREAD_MARKER) firstRemoved--;
+        while (firstRemoved > 0 && (rows.get(firstRemoved - 1) == UNREAD_MARKER
+                || rows.get(firstRemoved - 1) instanceof ServiceMessage)) firstRemoved--;
         boolean removeSeparator = firstRemoved > 0 && rows.get(firstRemoved - 1) instanceof Long && (row + 1 >= rows.size() || rows.get(row + 1) instanceof Long);
         if (removeSeparator) firstRemoved--;
         int removedCount = row - firstRemoved + 1;
@@ -1789,12 +1809,14 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
         @Override
         public boolean isEnabled(RecyclerView.ViewHolder holder) {
-            return holder.getItemViewType() != VIEW_TYPE_DATE && holder.getItemViewType() != VIEW_TYPE_UNREAD;
+            return holder.getItemViewType() != VIEW_TYPE_DATE && holder.getItemViewType() != VIEW_TYPE_UNREAD
+                    && holder.getItemViewType() != VIEW_TYPE_SERVICE;
         }
 
         @Override
         public int getItemViewType(int position) {
             if (rows.get(position) == UNREAD_MARKER) return VIEW_TYPE_UNREAD;
+            if (rows.get(position) instanceof ServiceMessage) return VIEW_TYPE_SERVICE;
             TextBubbleMessage message = messageAt(position);
             return message == null ? VIEW_TYPE_DATE : message.type;
         }
@@ -1807,7 +1829,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 cell.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
                 return new RecyclerListView.Holder(cell);
             }
-            if (viewType == VIEW_TYPE_DATE) {
+            if (viewType == VIEW_TYPE_DATE || viewType == VIEW_TYPE_SERVICE) {
                 ChatActionCell dateCell = new ChatActionCell(context, getResourceProvider());
                 dateCell.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
                 return new RecyclerListView.Holder(dateCell);
@@ -1845,7 +1867,22 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 return;
             }
             if (holder.itemView instanceof ChatActionCell) {
-                ((ChatActionCell) holder.itemView).setCustomDate((Long) rows.get(position));
+                ChatActionCell cell = (ChatActionCell) holder.itemView;
+                Object row = rows.get(position);
+                if (row instanceof ServiceMessage) {
+                    cell.setDelegate(new ChatActionCell.Delegate() {
+                        @Override public void onUserPressed(Object id) {
+                            Toast.makeText(context, context.getString(org.telegram.uidemo.R.string.service_user_selected, id), Toast.LENGTH_SHORT).show();
+                        }
+                        @Override public void onPinnedMessagePressed(Object id) {
+                            if (id instanceof Long) scrollToMessage((Long) id);
+                        }
+                    });
+                    cell.setMessage((ServiceMessage) row);
+                } else {
+                    cell.setDelegate(null);
+                    cell.setCustomDate((Long) row);
+                }
                 return;
             }
             TextBubbleMessage message = messageAt(position);

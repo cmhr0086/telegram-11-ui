@@ -17,4 +17,7 @@
     <string name="attach_contact_result">Contact: %1$s · %2$s</string>
     <string name="attach_location_result">Location: %1$s (%2$.3f, %3$.3f)</string>
     <string name="attach_poll_result">Poll: %1$s\n%2$s</string>
+    <string name="service_messages">Service messages</string>
+    <string name="service_group_title">Local UI group</string>
+    <string name="service_user_selected">Host user callback: %1$s</string>
 </resources>

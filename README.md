@@ -273,11 +273,27 @@ row.updateColors();
 
 demo 聊天菜单的 Unread Messages 可定位到分隔行；宿主示例菜单提供独立预览。是否已读和未读数量由宿主管理。
 
+服务消息继续使用 `ChatActionCell` 的原版文字胶囊；`ServiceMessage` 提供普通群返回、大型群加入、邀请、改名、置顶及宿主自定义事件。名字和置顶目标只保存宿主 ID，不查询账号或服务器。
+
+```java
+ServiceMessage.Person alice = new ServiceMessage.Person(userId, "Alice");
+ChatActionCell cell = new ChatActionCell(context, resourcesProvider);
+cell.setMessage(ServiceMessage.pin(eventId, alice, false, messageId, "Pinned preview"));
+cell.setDelegate(new ChatActionCell.Delegate() {
+    @Override public void onUserPressed(Object id) { /* host opens profile */ }
+    @Override public void onPinnedMessagePressed(Object id) { /* host locates message */ }
+});
+// join(id, person, isSelf, true) selects the upstream megagroup joined wording.
+```
+
+demo 的 “Service messages” 菜单定位示例；点击置顶正文跳到原消息。宿主 sample 的信息按钮打开 AAR 服务消息预览。文案通过 Android 资源翻译；媒体置顶类型由 `PinnedKind` 指定，文本预览沿用上游 20 字符截断。仅实现文字服务事件，未包含头像变更卡片、礼物、按钮、剧透、链接按压高亮或逐链接无障碍导航；其它事件可由宿主通过 `custom` 提供。
+
 ## 包含的组件
 
 | 类别 | 类 |
 | --- | --- |
 | 未读消息 | `ChatUnreadCell`：原版 40dp 分隔行、主题颜色和宿主未读文案 |
+| 服务消息 | `ChatActionCell` / `ServiceMessage`：加入、邀请、改名、置顶，用户与消息回调 |
 | 附件面板 | `ChatAttachAlert`、`Attachment`、`AttachmentAccess`：相册、文件、联系人、位置与投票选择及宿主回调 |
 | 圆形视频 | `RoundVideoBubbleCell`、`TextBubbleMessage.roundVideo(...)`、上游 `RoundVideoShadow`：圆形预览、时长、未读/下载状态、播放环及宿主回调 |
 | 贴纸与 GIF | `StickerBubbleCell` / `GifBubbleCell`、`StickerSet` / `Sticker` / `Gif` / `MediaSource`、`LocalMediaView`；本地 WEBP/TGS/GIF、WEBM 首帧，自动播放及宿主加载回调 |
