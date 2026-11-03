@@ -117,6 +117,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_REPLY_KEYBOARD = 25;
     private static final int MENU_MENTIONS = 26;
     private static final int MENU_SUGGEST_EMOJI = 27;
+    private static final int MENU_BOT_COMMANDS = 28;
     private long firstInlineId;
     private final ArrayList<Runnable> inlineCompletions = new ArrayList<>();
     private long firstDocumentThumbnailId;
@@ -580,6 +581,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     scrollToMessage(firstLocationId);
                 } else if (id == MENU_POLL) {
                     scrollToMessage(firstPollId);
+                } else if (id == MENU_BOT_COMMANDS) {
+                    enterView.showBotCommandsMenu();
                 } else if (id == MENU_SUGGEST_EMOJI) {
                     new org.telegram.ui.ActionBar.AlertDialog.Builder(getParentActivity(), getResourceProvider())
                             .setTitle(getParentActivity().getString(org.telegram.uidemo.R.string.suggest_emoji_menu))
@@ -623,6 +626,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.addSubItem(MENU_REPLY_KEYBOARD, R.drawable.input_bot2, context.getString(org.telegram.uidemo.R.string.reply_keyboard_menu));
         otherItem.addSubItem(MENU_MENTIONS, R.drawable.msg_addcontact, context.getString(org.telegram.uidemo.R.string.mention_menu));
         otherItem.addSubItem(MENU_SUGGEST_EMOJI, R.drawable.msg_emoji_smiles, context.getString(org.telegram.uidemo.R.string.suggest_emoji_menu));
+        otherItem.addSubItem(MENU_BOT_COMMANDS, R.drawable.input_bot2, context.getString(org.telegram.uidemo.R.string.bot_commands_menu));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -704,6 +708,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         contentView.addView(enterView, contentView.getChildCount(), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
         contentView.setEnterView(enterView);
         enterView.setReplyKeyboard(sampleReplyKeyboard(context, true, false), false);
+        enterView.setBotCommands(java.util.Arrays.asList(
+                new org.telegram.ui.bots.BotCommand("start", "start", context.getString(org.telegram.uidemo.R.string.bot_command_start)),
+                new org.telegram.ui.bots.BotCommand("help", "help", context.getString(org.telegram.uidemo.R.string.bot_command_help)),
+                new org.telegram.ui.bots.BotCommand("settings", "settings", context.getString(org.telegram.uidemo.R.string.bot_command_settings)),
+                new org.telegram.ui.bots.BotCommand("weather", "weather@local_demo", context.getString(org.telegram.uidemo.R.string.bot_command_weather)),
+                new org.telegram.ui.bots.BotCommand("about", "about", context.getString(org.telegram.uidemo.R.string.bot_command_about)),
+                new org.telegram.ui.bots.BotCommand("feedback", "feedback", context.getString(org.telegram.uidemo.R.string.bot_command_feedback))));
         java.util.List<Mention> mentionUsers = java.util.Arrays.asList(
                 new Mention(101, context.getString(org.telegram.uidemo.R.string.mention_alice), "alice", null),
                 new Mention(102, context.getString(org.telegram.uidemo.R.string.mention_bob), "bob", null),
@@ -1505,7 +1516,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             clearSelection();
             return false;
         }
-        if (enterView != null && enterView.isPopupShowing()) {
+        if (enterView != null && (enterView.botCommandsMenuIsShowing() || enterView.isPopupShowing())) {
             enterView.hidePopup(true);
             return false;
         }

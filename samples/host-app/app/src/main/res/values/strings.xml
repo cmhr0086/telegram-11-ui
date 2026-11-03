@@ -77,4 +77,10 @@
     <string name="suggest_emoji_keyword_example">Keyword suggestions</string>
     <string name="suggest_emoji_animated_example">Animated alternatives</string>
     <string name="suggest_emoji_host_action">Host preview callback: %1$s</string>
+    <string name="bot_command_start">Start a conversation 👋</string>
+    <string name="bot_command_help">Show help</string>
+    <string name="bot_command_settings">Conversation settings</string>
+    <string name="bot_command_weather">Weather for a location supplied by the host</string>
+    <string name="bot_command_about">About this local demo</string>
+    <string name="bot_command_feedback">Send feedback</string>
 </resources>

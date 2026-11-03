@@ -472,6 +472,24 @@ EmojiSuggestion animated = new EmojiSuggestion("duck", "🐥", localDocumentId);
 
 保留原44×52dp候选、66.66dp浮层、9dp圆角及hint panel颜色 key，普通 emoji 图集冷加载会自动刷新。demo ⋮ “Emoji suggestions” 可填入 `smile` 或两个普通 emoji，sample 输入同样内容可体验本地候选。宿主负责多语言搜索、排序和长按预览；未迁移 Telegram 关键词下载、Premium 策略或状态选择器。其它Android版本、平板、复杂RTL/大字体及真实软键盘过渡仍需人工补验。
 
+### 机器人命令菜单
+
+`org.telegram.ui.bots.BotCommandsMenuView` / `BotCommandsMenuContainer` 从同名上游组件搬运，接回现有 `ChatActivityEnterView` 左侧 Menu 入口。宿主发布纯命令快照：
+
+```java
+enterView.setBotCommands(Arrays.asList(
+        new BotCommand("start", "start", getString(R.string.command_start)),
+        new BotCommand("help", "help@my_bot", getString(R.string.command_help))));
+// Optional: open/dismiss explicitly; the input's Menu button also toggles it.
+enterView.showBotCommandsMenu();
+```
+
+`BotCommand` 的稳定字符串 ID 须唯一；命令规范为单个前导 `/`，可包含 `@bot`，不能含空白。说明文字和列表均为快照。短按沿用上游行为：清空草稿、关闭菜单后调用 delegate 的 `onBotCommandSelected(BotCommand)`；默认实现转发已有 `onSendText(command.command, emptyEntities, true, 0)`，宿主也可覆盖它处理自己的发送策略。长按覆盖输入为 `command + " "` 并关闭，不发送、不强制打开软键盘。更新快照后旧行不会发送旧命令，回调中发布并打开新菜单不受旧清理影响。
+
+Menu 在空输入且没有键盘/表情面板时展开文字；其它状态收成图标。编辑、录音、音视频待发送、暂停时关闭，空列表移除入口。文本变化关闭菜单；与底部表情/回复键盘可共存，菜单贴输入上沿，不占用底部面板高度，同时压制提及/表情联想。使用 `ChatInputLayout` 自动完成位置与位移，销毁由 `enterView.onDestroy()` 释放。宿主处理返回键时先判断 `botCommandsMenuIsShowing()`，调用 `dismissBotCommandsMenu()` 并消费事件；demo/sample已接入，也可与现有 `hidePopup(true)` 合用。
+
+保留原40dp图标宽/32dp入口高、15dp入口文字、16/14dp说明与命令文字、16/8dp行内边距、最多两行说明，以及320ms Overshoot(0.8)入场、150ms收起/回弹、下拉超过16dp关闭。行高由文字测量决定，36dp仅用于首次布局估算；初始显示前四行及下一行边缘，可滚动展开更多。demo/sample提供六个本地命令，默认发送为普通消息。菜单不查询机器人资料，不执行 Telegram 排程/慢速模式/Web App/支付；宿主负责权限和执行结果。尚不提供输入 `/` 的命令自动补全。
+
 ### 回复键盘（reply keyboard）
 
 `org.telegram.ui.bots.BotKeyboardView` 从同名上游类搬运，`ReplyKeyboard` 替代 TL 标记。集成在原 `ChatActivityEnterView` 内，不需要宿主另建底部容器：
@@ -494,7 +512,7 @@ enterView.showReplyKeyboard();
 
 原布局为42dp最小行高、16dp文字、4dp圆角、左右/首尾15dp及行列10dp间距；`resize=true` 按内容高度显示，false 填充记住的键盘高度，多行超过面板高度可滚动。行列表、按钮文字和占位文字都是快照，按钮ID在键盘内唯一；空总行列表表示无键盘，空单行/空按钮/重复ID会被拒绝。支持 TEXT、REQUEST_CONTACT、REQUEST_LOCATION、POLL、URL、COPY、WEB_VIEW，Web View 保留原右上角图标。实际发送、权限/同意、打开网址或应用都由宿主回调负责，库不访问账号、通讯录、定位或网络。
 
-demo 的 “Reply keyboard” 菜单可切紧凑/全高/单次/移除，普通文字按钮会发送消息，联系人按钮先确认虚构名片，位置和投票交给现有附件示例；sample 同样接入输入栏按钮。没有 Telegram 的 answered/closed 持久化、persistent 强制常驻、机器人命令/Web App容器或请求用户/群选择器；宿主负责这些业务策略。
+demo 的 “Reply keyboard” 菜单可切紧凑/全高/单次/移除，普通文字按钮会发送消息，联系人按钮先确认虚构名片，位置和投票交给现有附件示例；sample 同样接入输入栏按钮。没有 Telegram 的 answered/closed 持久化、persistent 强制常驻、Web App容器或请求用户/群选择器；宿主负责这些业务策略。
 
 ### 内联按钮（inline keyboard）
 
@@ -556,6 +574,7 @@ cell.setMessage(file, pinnedTop, pinnedBottom);
 | 转发来源 | `TextBubbleMessage.ForwardedFrom` / `ForwardBackground`：普通与无背景媒体来源头、头像、原按压动画、宿主来源回调；贴纸/圆视频旁侧回复 |
 | @提及 | 原 MentionsContainerView / MentionCell 普通用户分支，宿主候选查询、异步隔离、光标插入及ID span |
 | 表情联想 | 原 SuggestEmojiView 浮层与横向候选，宿主关键词/emoji查询、Unicode及本地动态表情替换 |
+| 机器人命令菜单 | 原 BotCommandsMenuView / Container，输入栏入口、滚动/下拉关闭、短按宿主发送/长按编辑 |
 | 回复键盘 | 原 `ui.bots.BotKeyboardView`，宿主不可变行快照、紧凑/全高/单次模式；原输入栏切换与按钮回调 |
 | 内联按钮 | 上游44dp按钮行、类型图标/按压/加载反馈；宿主行模型与短按/长按回调，所有既有气泡共用 |
 | 文件缩略图 | 既有 `DocumentBubbleCell`：宿主86dp缩略图、下载状态、说明文字及文件/菜单回调；旧无图布局保留 |
@@ -605,7 +624,7 @@ cell.setMessage(file, pinnedTop, pinnedBottom);
 | `ChatMessageCell` / `MessageObject` | 不整体移植，换成上面的轻量 `TextBubbleCell` / `TextBubbleMessage`；回复块（`replyNameLayout` / `replyTextLayout` / `drawNamesLayout` 的 hasReply 段 / `checkReplyTouchEvent`）、链接（`MessageObject.addLinks` + `checkTextBlockMotionEvent`）照上游数值移植进 `TextBubbleCell`；`ReplyMessageLine` 只保留单色条和底色（颜色来自 `ReplyTo.colorId`，不读服务器 peer color，没有双色 / 三色条纹、背景表情和加载动画）；`ChatActionCell` 只保留文字胶囊（礼物、头像、按钮、剧透都去掉）；`Theme.applyChatServiceMessageColor` 移植了服务消息颜色部分，`BitmapDrawable` 壁纸不做模糊 shader，用平均色；语音 / 图片 / 文件气泡按上游对应分支（`createDocumentLayout`、`setMessageContent`、`onLayout`、`drawContent`、`getIconForCurrentState`…）移植到 `VoiceBubbleCell` / `PhotoBubbleCell` / `DocumentBubbleCell`，每个类的头注释写明来源方法 |
 | `PhotoViewer` | 不移植（2 万行，含加载器、编辑、PiP、ExoPlayer）；改写成简易的 `MediaViewer`，见上表 |
 | `RadialProgress2` | 上游原版，去掉 `ImageReceiver` 覆盖图（音乐封面用的 `setImageOverlay`） |
-| `ChatActivityEnterView` 的业务边界 | 构造参数从 `ChatActivity` 换成 `BaseFragment`；`ChatActivityEnterViewDelegate` 全部改成 default 方法，并新增宿主回调：`onSendText(text, entities, notify, scheduleDate)`、`onSendVoice(RecordedAudio, …)`、`onEditDone`、`onSendContent`（键盘发来的 GIF / 贴纸）、`onImagePasted`、`onSilentChanged`、`onRecordTypingStatus`、`onTopViewTranslationChanged`、`canScheduleMessage` / `isInScheduleMode` / `isSelfChat` / `canSendWhenOnline`、`roundVideoNeedsCameraPermission`、`onEmojiPanelCreated`、`onSendSticker` / `onSendGif` / `onStickerSetRequested` / `onStickerFavoriteChanged` / `onGifRemoved`；聊天权限 / 频道 / 圆形视频 / 慢速模式用 `setChatPermissions()`、`setChannel()`、`setRoundVideoEnabled()`、`setSlowModeTimer()` 设置；回复目标是宿主的任意对象（`setReplyingMessageObject(Object)`），编辑用 `EditingMessage(id, text, entities, caption)`。删掉的业务分支：机器人键盘的发送/持久化业务（UI已恢复） / 命令菜单 / WebView 容器、以…身份发送、礼物按钮、生日提示、Premium / 动态表情检查、快捷回复与商务链接、网页预览、`MessageSendPreview`（长按发送的消息预览，改用上游自带的弹出菜单）、草稿同步 |
+| `ChatActivityEnterView` 的业务边界 | 构造参数从 `ChatActivity` 换成 `BaseFragment`；`ChatActivityEnterViewDelegate` 全部改成 default 方法，并新增宿主回调：`onSendText(text, entities, notify, scheduleDate)`、`onSendVoice(RecordedAudio, …)`、`onEditDone`、`onSendContent`（键盘发来的 GIF / 贴纸）、`onImagePasted`、`onSilentChanged`、`onRecordTypingStatus`、`onTopViewTranslationChanged`、`canScheduleMessage` / `isInScheduleMode` / `isSelfChat` / `canSendWhenOnline`、`roundVideoNeedsCameraPermission`、`onEmojiPanelCreated`、`onSendSticker` / `onSendGif` / `onStickerSetRequested` / `onStickerFavoriteChanged` / `onGifRemoved`；聊天权限 / 频道 / 圆形视频 / 慢速模式用 `setChatPermissions()`、`setChannel()`、`setRoundVideoEnabled()`、`setSlowModeTimer()` 设置；回复目标是宿主的任意对象（`setReplyingMessageObject(Object)`），编辑用 `EditingMessage(id, text, entities, caption)`。删掉的业务分支：机器人键盘的发送/持久化业务和命令菜单的机器人资料/执行业务（UI已恢复） / WebView 容器、以…身份发送、礼物按钮、生日提示、Premium / 动态表情检查、快捷回复与商务链接、网页预览、`MessageSendPreview`（长按发送的消息预览，改用上游自带的弹出菜单）、草稿同步 |
 | `MediaController` | 只保留语音消息录制 / 预览接口，交给可替换的 `MediaController.Recorder`；默认实现 `DefaultRecorder` 用 `MediaRecorder`（AAC .m4a，按 `getMaxAmplitude()` 出波纹和 5-bit 波形，打包格式与上游 native `set_bits` 相同）+ `MediaPlayer` 试听。宿主可换成自己的 Opus 编码器；录制状态仍通过上游的 `NotificationCenter` 事件（`recordStarted` / `recordProgressChanged` / `recordStopped` / `audioDidSent`…）回到输入栏，新增 `voiceRecordedForSend` 表示松手直接发送。圆形视频的相机（上游 `InstantCameraView`）由宿主在 `needStartRecordVideo` 里实现 |
 | `TLRPC` / `MediaDataController` | `TLRPC` 只剩消息实体（粗体、链接、自定义表情 id…）的纯数据类；`MediaDataController` 只保留文字实体相关的静态方法（`getEntities`、`addStyleToText`、`addTextStyleRuns`…，原样复制） |
 | `ProfileActivity` | 只移植了用户资料页的头部（`needLayout` / `setAvatarExpandProgress` / `needLayoutText` / `TopView` / `OverlaysView` 的数值和动画）、写消息按钮和信息行的单元格，改写成 `ProfileFragment` + 纯模型；去掉头像相册翻页（`ProfileGalleryView`，展开的就是那张 `Profile.photo`）、`SharedMediaLayout` 共享媒体分页（换成 `TextCell` 计数行）、群组 / 频道资料、成员列表、Stories、表情状态、Premium、个人颜色背景与图案、二维码 / 搜索 / 通话按钮、从聊天头像飞入的打开动画、修改头像、`AboutLinkCell`（简介用多行 `TextDetailCell`）、`UndoView` |
@@ -628,7 +647,7 @@ cell.setMessage(file, pinnedTop, pinnedBottom);
 
 - 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸、GIF、联系人、音乐、位置和投票；已有群聊头像、名字和转发来源；文件已支持宿主缩略图和说明；尚缺文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 查看器 `MediaViewer`：只是简易版——没有缩略图条、分享 / 保存 / 转发 / 删除菜单、图片编辑、画中画、倍速、静音、视频缩略图预览、横屏全屏按钮、多图相册分组；视频用系统 `MediaPlayer`（格式取决于设备解码器，没有缓冲进度、不循环），播放中不能连续翻页预加载；图片直接画宿主给的 `Drawable`（大图要宿主自己先缩放）；打开 / 关闭动画不处理被 ActionBar 或输入栏遮住的那部分（上游会裁剪），起点用整张图片的位置；平板没有专门布局
-- 输入栏：附件按钮由宿主回调打开 `ChatAttachAlert`；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；已有宿主驱动的 @提及和表情联想列表；没有话题；回复键盘已有宿主模型/回调；没有命令菜单和 WebView 容器；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
+- 输入栏：附件按钮由宿主回调打开 `ChatAttachAlert`；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；已有宿主驱动的 @提及、表情联想、回复键盘和命令菜单；没有话题、命令自动补全和 WebView 容器；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 
 - 只支持主题自带的颜色/渐变壁纸和默认图案壁纸，不支持壁纸文件和视差（motion）效果；各强调色原本的不同图案都显示成同一个 `default_pattern`
 - Lottie 只带了库内引用到的 `R.raw` JSON（对话列表的归档 / 滑动动作图标、骰子 / 飞镖等），外加上游 APK 自带的 46 个大幅插画：11 只 Utya 小鸭子 `R.raw.utyan_*`、两步验证猴子 `tsv_setup_monkey_*` / `tsv_monkey_close`、设置和邮箱引导（`tsv_setup_*`、`email_*`）、钱包 `wallet_*`、`qr_login`、`filter_new` 等，以及一批白色线条图标（`passcode_lock`、`stats`、`fragment*`、`boosts` 等，上游画在彩色圆形上，可配合 `AlertDialog.Builder.setTopAnimationIsNew(true)` 使用），demo 的 "Lottie illustrations" 页分组展示全部动画。客户端里另一些鸭子（搜索无结果等空状态）和动态表情、贴纸是运行时从服务器贴纸包下载的，不在 APK 里；其它动画 JSON 由宿主放进自己的 `res/raw`，再 `setTopAnimation(R.raw.xxx, …)` / `new RLottieDrawable(R.raw.xxx, …)` 使用
@@ -651,7 +670,7 @@ cell.setMessage(file, pinnedTop, pinnedBottom);
 7. **对话列表（已完成）**：`DialogCell`、滑动动作、多选、列表动画、文件夹标签、抽屉、写消息按钮；下拉显示隐藏归档（`PullForegroundDrawable`）、文件夹左右翻页（`DialogsViewPager`）也已完成；对话搜索（`DialogsSearchController`）也已完成；`UndoView` 归档/删除撤销已提供，隐藏归档等其它提示尚未移植
 8. **消息菜单与多选（已完成静态版）**：`MessageContextMenu`（单击：遮罩、浮起气泡、弹出菜单、静态表情反应条），长按多选（复选框、ActionMode、底部回复 / 转发栏、拖动连选）；气泡里的反应胶囊（`ReactionsLayoutInBubble`，静态表情 + 计数动画）已完成；后续：动态反应（上游 lottie 选中 / 飞入动画、反应者头像、展开全部反应、自定义表情反应），依赖阶段 C
 9. **媒体气泡（已完成第一批）**：语音、图片、文件；回复引用、链接、日期分隔条、气泡里的反应已完成；视频缩略图 / 简易查看器、照片视频相册及普通圆形视频已提供；更高阶媒体能力见各组件限制
-10. 输入增强：`SuggestEmojiView`、提及列表、机器人回复键盘已接入；下一项命令菜单和 `MessageSendPreview`（长按发送的消息预览与特效）
+10. 输入增强：`SuggestEmojiView`、提及列表、机器人回复键盘和命令菜单已接入；下一项 `MessageSendPreview`（长按发送的消息预览与特效）
 
 ## 抽取工具（`tools/`）
 

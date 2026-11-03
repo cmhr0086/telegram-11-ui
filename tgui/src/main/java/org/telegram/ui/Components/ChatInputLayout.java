@@ -225,6 +225,9 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
     }
 
     private void updateSuggestionsTranslation() {
+        if (enterView != null && enterView.getBotCommandsMenuContainer() != null) {
+            enterView.getBotCommandsMenuContainer().setTranslationY(enterView.getTranslationY() + enterView.getTopViewTranslation());
+        }
         if (emojiSuggestionsView != null && enterView != null) {
             emojiSuggestionsView.setTranslationY(enterView.getTranslationY() + enterView.getTopViewTranslation());
         }
@@ -395,6 +398,9 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
                 int padding = extraTop > 0 ? extraTop : emojiViewPadding;
                 int h = Math.max(AndroidUtilities.dp(10), heightSize - inputFieldHeight - padding + extraTop + AndroidUtilities.dp(2));
                 child.measure(MeasureSpec.makeMeasureSpec(widthSize, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY));
+            } else if (child == enterView.getBotCommandsMenuContainer()) {
+                child.measure(MeasureSpec.makeMeasureSpec(widthSize, MeasureSpec.EXACTLY),
+                        MeasureSpec.makeMeasureSpec(heightSize, MeasureSpec.EXACTLY));
             } else if (child == emojiSuggestionsView) {
                 child.measure(MeasureSpec.makeMeasureSpec(widthSize, MeasureSpec.EXACTLY),
                         MeasureSpec.makeMeasureSpec(Math.max(0, heightSize - emojiViewPadding), MeasureSpec.AT_MOST));
@@ -490,6 +496,12 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
             updateSuggestionsTranslation();
         }
         positionEmojiSuggestions();
+        View commands = enterView.getBotCommandsMenuContainer();
+        if (commands != null && commands.getVisibility() != GONE) {
+            int bottom = enterView.getTop();
+            commands.layout(0, bottom - commands.getMeasuredHeight(), commands.getMeasuredWidth(), bottom);
+            updateSuggestionsTranslation();
+        }
         // keyboard opened or closed: keep the input where it is on screen and ease it into place
         int newInputBottom = enterView.getBottom();
         if (imeAnimating) {

@@ -310,6 +310,13 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         contentView.addView(enterView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
         contentView.setEnterView(enterView);
         enterView.setReplyKeyboard(sampleReplyKeyboard(context, true, false), false);
+        enterView.setBotCommands(java.util.Arrays.asList(
+                new org.telegram.ui.bots.BotCommand("start", "start", context.getString(com.example.tguihost.R.string.bot_command_start)),
+                new org.telegram.ui.bots.BotCommand("help", "help", context.getString(com.example.tguihost.R.string.bot_command_help)),
+                new org.telegram.ui.bots.BotCommand("settings", "settings", context.getString(com.example.tguihost.R.string.bot_command_settings)),
+                new org.telegram.ui.bots.BotCommand("weather", "weather@local_demo", context.getString(com.example.tguihost.R.string.bot_command_weather)),
+                new org.telegram.ui.bots.BotCommand("about", "about", context.getString(com.example.tguihost.R.string.bot_command_about)),
+                new org.telegram.ui.bots.BotCommand("feedback", "feedback", context.getString(com.example.tguihost.R.string.bot_command_feedback))));
         java.util.List<Mention> mentionUsers = java.util.Arrays.asList(
                 new Mention(101, context.getString(com.example.tguihost.R.string.mention_alice), "alice", null),
                 new Mention(102, context.getString(com.example.tguihost.R.string.mention_bob), "bob", null),
@@ -616,7 +623,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             clearSelection();
             return false;
         }
-        if (enterView != null && enterView.isPopupShowing()) {
+        if (enterView != null && (enterView.botCommandsMenuIsShowing() || enterView.isPopupShowing())) {
             enterView.hidePopup(true);
             return false;
         }
