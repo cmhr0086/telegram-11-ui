@@ -2,6 +2,8 @@
 
 最后更新：2026-11-03。工作分支：`codex/roadmap`，基线 `origin/dev/ui-lib` @ `7eb17f0`，PR 目标 `dev/ui-lib`。禁止修改或推送 main，完成后推送工作分支并创建 PR，不自行合并。
 
+已推送并创建 [PR #1：恢复 UndoView、本地动态表情、相册与圆形视频](https://github.com/cmhr0086/telegram-11-ui/pull/1)，目标 `dev/ui-lib`，未合并。六个实现/修复提交已在远端；本地和设备验收通过。GitHub Actions 已触发，最后查询为运行中，不能把它记成 CI 已通过。
+
 ## 当前方向
 
 继续扩展已有 `tgui`，直接搬运并裁剪 Telegram Android `release-11.4.2-5469`。保留上游包名、GPL 版权声明和 `org.telegram.tgui.recyclerview` fork；新增示例放进现有 demo。旧 `codex/ui-library` 及其 core/ui/独立 demo 方案已放弃，未合并或带入本分支。
@@ -41,7 +43,7 @@
 
 ## 提交与发布
 
-UndoView `886b99a`、本地动态表情 `ecb00e3`、相册 `a3d5ef2`、主题 CRLF 修复 `871d103`、圆形视频 `1832e76` 已独立提交。最后审查补充的 TGS inflater 显式关闭及异常文件用例也已验证通过。剩余仅推送 codex/roadmap 并创建目标 dev/ui-lib 的 PR；不合并，main 不改动。
+UndoView `886b99a`、本地动态表情 `ecb00e3`、相册 `a3d5ef2`、主题 CRLF 修复 `871d103`、圆形视频 `1832e76`，以及 TGS 流关闭/异常源 `b7fd21b` 已分别提交并推送。PR #1 已创建，目标 dev/ui-lib，未合并；main 未改动。接续任务从此文件和 README 的组件限制开始，不重新建立 core/ui，不重复实现已经完成的四项。
 
 ## 正在定位的观察
 
