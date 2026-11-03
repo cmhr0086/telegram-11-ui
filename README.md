@@ -181,7 +181,7 @@ cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
 
 `GroupedMediaLayout` 直接抽取上游 `MessageObject.GroupedMessages` 的 2/3/4 张特殊布局及多图行枚举/评分，保留 800/1000 span、814 高度基准、比例裁剪和边缘标志。照片尺寸来自 `photoWidth/photoHeight` 或 Drawable intrinsic，未知时按正方形处理。`AlbumBubbleCell` 复用 `PhotoBubbleCell` 的中心裁剪、背景、说明、回复、反应、时间和长按；每格支持原下载/取消/播放图标及视频时长，点击回调给出原 item，整组只显示一次时间/状态。修改成员、尺寸或组说明后重新 `setMessage`。
 
-此处以一个 RecyclerView 行呈现整组，按行将上游逻辑宽归一化、相邻格留 2dp，保留外边圆角和 4dp 内角；没有复制上游多 ChatMessageCell + GridLayoutManager 的不对称 inset 和父层延后绘制，因此不宣称所有像素都与客户端相同。当前是照片/视频缩略图相册，不含文件组、各格独立消息多选/删除、captionAbove、头像让位或组布局变化动画。宿主负责下载、解码、数据持久化和播放。
+此处以一个 RecyclerView 行呈现整组，按行将上游逻辑宽归一化、相邻格留 2dp，保留外边圆角和 4dp 内角；没有复制上游多 ChatMessageCell + GridLayoutManager 的不对称 inset 和父层延后绘制，因此不宣称所有像素都与客户端相同。当前是照片/视频缩略图相册，不含文件组、各格独立消息多选/删除、captionAbove 或组布局变化动画。群聊头像列由整行统一让位。宿主负责下载、解码、数据持久化和播放。
 
 查看器可通过 `getTileRectOnScreen(index, rect)` / `getTileRadii(index)` 获取来源，`setTileVisible(index, visible)` 隐藏单格。demo 将相册成员与现有媒体展平成查看器序列，翻页/返回对应格；成员无单独说明时每页显示共享说明。同组成员必须是各自独立的消息对象，复用照片可另建模型。Chat 页有 2/3/4/5 张样例，更多菜单可发送 10 张，长按选择整组。AAR 消费示例也有三图相册。
 
@@ -288,12 +288,28 @@ cell.setDelegate(new ChatActionCell.Delegate() {
 
 demo 的 “Service messages” 菜单定位示例；点击置顶正文跳到原消息。宿主 sample 的信息按钮打开 AAR 服务消息预览。文案通过 Android 资源翻译；媒体置顶类型由 `PinnedKind` 指定，文本预览沿用上游 20 字符截断。仅实现文字服务事件，未包含头像变更卡片、礼物、按钮、剧透、链接按压高亮或逐链接无障碍导航；其它事件可由宿主通过 `custom` 提供。
 
+群聊通过既有消息模型启用；姓名使用上游按用户 ID 选择的颜色，宿主也可提供 `Sender.colorId` 色板下标。`avatar` 为静态 Drawable，缺省使用上游首字母头像。普通消息在组首显示姓名；贴纸、圆视频、纯 emoji 使用媒体旁的服务色姓名胶囊。
+
+```java
+message.group = true;
+message.sender = new TextBubbleMessage.Sender(userId, displayName, avatar);
+message.date = unixSeconds;
+cell.setMessage(message, MessageGrouping.canMerge(previous, message),
+        MessageGrouping.canMerge(message, next));
+// Add once to the fork RecyclerView, then enable on each bound cell:
+list.addItemDecoration(new ChatAvatarDecoration());
+cell.setAvatarDrawnByList(true);
+```
+
+`MessageGrouping` 要求同发送者、同收发方向、同群聊上下文、时间相隔不超过 300 秒；未知发送者/时间不合并。日期、服务和未读行应以 null 邻居打断分组。头像为 42dp、左侧列留 48dp；列表装饰在可见区域底部绘制连续组头像，遵守列表 padding 和行透明度。不启用装饰时仍使用行内头像。demo 的 “Group names and avatars” 可切换；host sample 使用群聊模型。尚未包含头像点击/动态头像、管理员头衔/频道签名、Premium 多色姓名，以及圆视频播放放大的姓名过渡；RTL/平板仍需人工检查。
+
 ## 包含的组件
 
 | 类别 | 类 |
 | --- | --- |
 | 未读消息 | `ChatUnreadCell`：原版 40dp 分隔行、主题颜色和宿主未读文案 |
 | 服务消息 | `ChatActionCell` / `ServiceMessage`：加入、邀请、改名、置顶，用户与消息回调 |
+| 群聊消息 | `TextBubbleMessage.Sender` / `MessageGrouping` / `ChatAvatarDecoration`：原配色姓名、头像列、连续消息及滚动吸底头像 |
 | 附件面板 | `ChatAttachAlert`、`Attachment`、`AttachmentAccess`：相册、文件、联系人、位置与投票选择及宿主回调 |
 | 圆形视频 | `RoundVideoBubbleCell`、`TextBubbleMessage.roundVideo(...)`、上游 `RoundVideoShadow`：圆形预览、时长、未读/下载状态、播放环及宿主回调 |
 | 贴纸与 GIF | `StickerBubbleCell` / `GifBubbleCell`、`StickerSet` / `Sticker` / `Gif` / `MediaSource`、`LocalMediaView`；本地 WEBP/TGS/GIF、WEBM 首帧，自动播放及宿主加载回调 |

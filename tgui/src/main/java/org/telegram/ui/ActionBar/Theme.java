@@ -6079,6 +6079,9 @@ public class Theme {
     // tgui: only the bubble / text / time / check-mark part of upstream createChatResources
     public static void createChatResources(Context context, boolean fontsOnly) {
         createCommonChatResources();
+        // The first common-chat allocation replaces the name/reply paints. Apply the
+        // upstream font sizes to those final instances before the first cell measures.
+        createCommonMessageResources();
 
         if (!fontsOnly && chat_msgInDrawable == null) {
             Resources resources = context.getResources();

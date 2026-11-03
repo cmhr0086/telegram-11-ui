@@ -1,3 +1,8 @@
+/*
+ * Adapted from Telegram for Android release-11.4.2-5469.
+ * Copyright Nikolai Kudashov, 2013-2018. Licensed under GNU GPL v. 2 or later.
+ * See LICENSE in this archive.
+ */
 package org.telegram.ui.Cells;
 
 import android.graphics.drawable.Drawable;
@@ -10,6 +15,22 @@ import java.util.ArrayList;
  * {@link #type} picks the cell; for media messages {@link #text} is the optional caption.
  */
 public class TextBubbleMessage {
+
+    /** Host-provided group identity; no account or network lookup is performed. */
+    public static final class Sender {
+        public final long id;
+        public final CharSequence name;
+        /** Static host-owned drawable. To update its content, the host invalidates the cell or rebinds the message. */
+        public final Drawable avatar;
+        public final int colorId;
+        public Sender(long id, CharSequence name, Drawable avatar) { this(id, name, avatar, -1); }
+        public Sender(long id, CharSequence name, Drawable avatar, int colorId) {
+            this.id = id; this.name = name; this.avatar = avatar; this.colorId = colorId;
+        }
+    }
+    /** Explicit group context; absent on existing direct-chat models. */
+    public boolean group;
+    public Sender sender;
 
     public static final int STATE_NONE = 0;
     public static final int STATE_SENDING = 1;

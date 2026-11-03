@@ -110,7 +110,7 @@ public class RoundVideoBubbleCell extends TextBubbleCell {
     }
 
     @Override protected void drawContent(Canvas canvas) {
-        int left = message.isOut ? getMeasuredWidth() - diameter - AndroidUtilities.dp(12) : AndroidUtilities.dp(12);
+        int left = message.isOut ? getMeasuredWidth() - diameter - AndroidUtilities.dp(12) : AndroidUtilities.dp(12) + incomingAvatarInset();
         int top = AndroidUtilities.dp(5);
         videoRect.set(left, top, left + diameter, top + diameter);
         bubbleBottom = (int) videoRect.bottom + AndroidUtilities.dp(2);
@@ -140,6 +140,7 @@ public class RoundVideoBubbleCell extends TextBubbleCell {
         drawDuration(canvas);
         // One message timestamp/status overlay; the host may cover only the video circle.
         drawTimePill(canvas, (int) videoRect.right - AndroidUtilities.dp(5), (int) videoRect.bottom - AndroidUtilities.dp(5), AndroidUtilities.dp(6));
+        if (!message.isOut) drawSideAuthor(canvas, sideAuthorBackgroundRight(true));
     }
 
     private void drawDuration(Canvas canvas) {

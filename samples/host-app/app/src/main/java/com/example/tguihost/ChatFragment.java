@@ -111,6 +111,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         messages.add(TextBubbleMessage.sticker(nextId++, false, "12:36", TextBubbleMessage.STATE_NONE, sticker));
         messages.add(TextBubbleMessage.gif(nextId++, true, "12:37", TextBubbleMessage.STATE_READ, localGifs.get(0),
                 app.getString(com.example.tguihost.R.string.local_gif_caption)));
+        for (TextBubbleMessage message : messages) bindGroupSender(message);
         return super.onFragmentCreate();
     }
 
@@ -126,6 +127,12 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
 
     private void add(CharSequence text, boolean out, int state) {
         messages.add(new TextBubbleMessage(nextId++, text, out, timeFormat.format(new Date()), state));
+    }
+
+    private void bindGroupSender(TextBubbleMessage message) {
+        message.group = true;
+        if (message.date == 0) message.date = System.currentTimeMillis() / 1000;
+        message.sender = new TextBubbleMessage.Sender(message.isOut ? 99 : 1, message.isOut ? "Me" : title, null);
     }
 
     @Override
@@ -204,6 +211,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         layoutManager.setStackFromEnd(true);
         listView.setLayoutManager(layoutManager);
         listView.setItemAnimator(new ChatBubbleItemAnimator());
+        listView.addItemDecoration(new org.telegram.ui.Cells.ChatAvatarDecoration());
         listView.setClipToPadding(false);
         listView.setPadding(0, ActionBar.getCurrentActionBarHeight() + AndroidUtilities.statusBarHeight + AndroidUtilities.dp(4), 0, AndroidUtilities.dp(3));
         listView.setAdapter(new Adapter(context));
@@ -322,6 +330,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
     }
 
     private void append(TextBubbleMessage m) {
+        bindGroupSender(m);
         messages.add(m);
         int position = messages.size() - 1;
         listView.getAdapter().notifyItemInserted(position);
@@ -560,9 +569,10 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         @Override
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
             TextBubbleMessage m = messages.get(position);
-            boolean pinnedTop = position > 0 && messages.get(position - 1).isOut == m.isOut;
-            boolean pinnedBottom = position < messages.size() - 1 && messages.get(position + 1).isOut == m.isOut;
+            boolean pinnedTop = position > 0 && org.telegram.ui.Cells.MessageGrouping.canMerge(messages.get(position - 1), m);
+            boolean pinnedBottom = position < messages.size() - 1 && org.telegram.ui.Cells.MessageGrouping.canMerge(m, messages.get(position + 1));
             TextBubbleCell cell = (TextBubbleCell) holder.itemView;
+            cell.setAvatarDrawnByList(true);
             cell.setMessage(m, pinnedTop, pinnedBottom);
             cell.setCheckBoxVisible(actionBar.isActionModeShowed(), false);
             cell.setChecked(selected.contains(m), false);

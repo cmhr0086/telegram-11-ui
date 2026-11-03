@@ -1,3 +1,8 @@
+/*
+ * Adapted from Telegram for Android release-11.4.2-5469.
+ * Copyright Nikolai Kudashov, 2013-2018. Licensed under GNU GPL v. 2 or later.
+ * See LICENSE in this archive.
+ */
 package org.telegram.ui.Cells;
 
 import android.content.Context;
@@ -135,7 +140,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
             imageH = message.photo.getIntrinsicHeight();
         }
 
-        int[] size = measurePhoto(width, imageW, imageH);
+        int[] size = measurePhoto(Math.max(1, width - incomingAvatarInset()), imageW, imageH);
         int w = size[0];
         int h = size[1];
 
@@ -160,7 +165,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         int widthForCaption;
         boolean fixPhotoWidth = false;
         // MessageObject.getMaxMessageTextWidth without avatars
-        int minCaptionWidth = Math.min(width, AndroidUtilities.displaySize.y) - AndroidUtilities.dp(80);
+        int minCaptionWidth = Math.min(width - incomingAvatarInset(), AndroidUtilities.displaySize.y) - AndroidUtilities.dp(80);
         if (caption != null && photoWidth < minCaptionWidth) {
             widthForCaption = minCaptionWidth;
             fixPhotoWidth = true;
@@ -216,7 +221,8 @@ public class PhotoBubbleCell extends TextBubbleCell {
         }
 
         // totalHeight / photoImage y (no name / forward header)
-        namesOffset = buildReplyLayout(backgroundWidth - AndroidUtilities.dp(mediaBackground ? 22 : 31) - AndroidUtilities.dp(out ? 30 : 20), false);
+        namesOffset = authorHeight + buildReplyLayout(backgroundWidth - AndroidUtilities.dp(mediaBackground ? 22 : 31) - AndroidUtilities.dp(out ? 30 : 20), false);
+        if (hasAuthorLayout() && replyNameLayout == null) namesOffset += AndroidUtilities.dp(7);
         totalHeight = photoHeight + AndroidUtilities.dp(14) + namesOffset + additionHeight;
         if (pinnedTop) {
             namesOffset -= AndroidUtilities.dp(1);
@@ -236,7 +242,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         if (captionLayout != null || !reactionsLayoutInBubble.isEmpty) {
             bl = br = minRad;
         }
-        if (replyNameLayout != null) {
+        if (replyNameLayout != null || hasAuthorLayout()) {
             tl = tr = minRad;
         }
         if (pinnedTop) {
@@ -327,7 +333,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         } else {
             drawable = out ? Theme.chat_msgOutMediaDrawable : Theme.chat_msgInMediaDrawable;
         }
-        int backgroundLeft = out ? layoutWidth - backgroundWidth - AndroidUtilities.dp(9) : AndroidUtilities.dp(9);
+        int backgroundLeft = out ? layoutWidth - backgroundWidth - AndroidUtilities.dp(9) : AndroidUtilities.dp(9) + incomingAvatarInset();
         int offsetBottom;
         if (pinnedBottom && pinnedTop) {
             offsetBottom = 0;
@@ -363,6 +369,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
         int backgroundLeft = drawBubbleBackground(canvas);
+        drawAuthor(canvas, mediaBackground);
         drawReply(canvas, mediaBackground);
 
         // onLayout: photo x
@@ -370,7 +377,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         if (out) {
             x = mediaBackground ? layoutWidth - backgroundWidth - AndroidUtilities.dp(3) : layoutWidth - backgroundWidth + AndroidUtilities.dp(6);
         } else {
-            x = AndroidUtilities.dp(15);
+            x = AndroidUtilities.dp(15) + incomingAvatarInset();
         }
         x -= AndroidUtilities.dp(2);
         int y = photoY + namesOffset;
@@ -429,7 +436,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
             drawTimeAndStatus(canvas);
         } else {
             // drawTimeInternal on media: pill bottom = photo bottom - 6dp, right edge 5dp inside the photo
-            int right = out ? layoutWidth - AndroidUtilities.dp(18) : backgroundWidth;
+            int right = out ? layoutWidth - AndroidUtilities.dp(18) : backgroundWidth + incomingAvatarInset();
             drawTimePill(canvas, right, (int) photoRect.bottom - AndroidUtilities.dp(6), AndroidUtilities.dp(8));
         }
     }

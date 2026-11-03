@@ -43,6 +43,8 @@ import org.telegram.ui.Cells.TextBubbleCell;
 import org.telegram.ui.Cells.TextBubbleMessage;
 import org.telegram.ui.Cells.ChatActionCell;
 import org.telegram.ui.Cells.ServiceMessage;
+import org.telegram.ui.Cells.MessageGrouping;
+import org.telegram.ui.Cells.ChatAvatarDecoration;
 import org.telegram.ui.Cells.DocumentBubbleCell;
 import org.telegram.ui.Cells.PhotoBubbleCell;
 import org.telegram.ui.Cells.AlbumBubbleCell;
@@ -98,6 +100,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_ALBUM_TEN = 4;
     private static final int MENU_UNREAD = 5;
     private static final int MENU_SERVICE = 6;
+    private static final int MENU_GROUP = 7;
+    private boolean groupMode;
+    private ActionBarMenuSubItem groupItem;
     // action mode (ChatActivity.createActionMode ids)
     private static final int ACTION_EDIT = 10;
     private static final int ACTION_COPY = 11;
@@ -272,7 +277,15 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     private void addSample(TextBubbleMessage message) {
         message.date = sampleDate(sampleDaysAgo, message.time);
+        bindSampleSender(message);
         messages.add(message);
+    }
+
+    private void bindSampleSender(TextBubbleMessage message) {
+        message.group = groupMode;
+        long senderId = message.isOut ? 99L : (message.id / 4 % 2 == 0 ? 1L : 2L);
+        message.sender = new TextBubbleMessage.Sender(senderId,
+                senderId == 99 ? "Me" : senderId == 1 ? "Alice" : "Bob", null);
     }
 
     private static long sampleDate(int daysAgo, String time) {
@@ -422,6 +435,12 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 } else if (id == MENU_SERVICE && !serviceEvents.isEmpty()) {
                     int row = rows.indexOf(serviceEvents.get(0));
                     if (row >= 0) layoutManager.scrollToPositionWithOffset(row, 0);
+                } else if (id == MENU_GROUP) {
+                    groupMode = !groupMode;
+                    groupItem.setChecked(groupMode);
+                    for (TextBubbleMessage message : messages) message.group = groupMode;
+                    listView.getAdapter().notifyDataSetChanged();
+                    listView.invalidate();
                 }
             }
         });
@@ -435,6 +454,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.addSubItem(MENU_ALBUM_TEN, R.drawable.msg_photos, context.getString(org.telegram.uidemo.R.string.album_ten));
         otherItem.addSubItem(MENU_UNREAD, R.drawable.ic_ab_new, context.getString(R.string.UnreadMessages));
         otherItem.addSubItem(MENU_SERVICE, R.drawable.msg_info, context.getString(org.telegram.uidemo.R.string.service_messages));
+        groupItem = otherItem.addSubItem(MENU_GROUP, R.drawable.msg_groups, context.getString(org.telegram.uidemo.R.string.group_messages), true);
+        groupItem.setChecked(groupMode);
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -452,6 +473,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         layoutManager.setStackFromEnd(true);
         listView.setLayoutManager(layoutManager);
         listView.setItemAnimator(new ChatBubbleItemAnimator());
+        listView.addItemDecoration(new ChatAvatarDecoration());
         listView.setVerticalScrollBarEnabled(true);
         listView.setClipToPadding(false);
         listView.setPadding(0, ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + AndroidUtilities.dp(4), 0, AndroidUtilities.dp(3));
@@ -1121,6 +1143,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         if (message.date == 0) {
             message.date = System.currentTimeMillis() / 1000;
         }
+        bindSampleSender(message);
         messages.add(message);
         int oldCount = rows.size();
         rebuildRows();
@@ -1888,9 +1911,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             TextBubbleMessage message = messageAt(position);
             TextBubbleMessage prev = messageAt(position - 1);
             TextBubbleMessage next = messageAt(position + 1);
-            boolean pinnedTop = prev != null && prev.isOut == message.isOut;
-            boolean pinnedBottom = next != null && next.isOut == message.isOut;
+            boolean pinnedTop = MessageGrouping.canMerge(prev, message);
+            boolean pinnedBottom = MessageGrouping.canMerge(message, next);
             TextBubbleCell cell = (TextBubbleCell) holder.itemView;
+            cell.setAvatarDrawnByList(true);
             cell.setMessage(message, pinnedTop, pinnedBottom);
             cell.setCheckBoxVisible(actionBar.isActionModeShowed(), false);
             cell.setChecked(selectedMessages.contains(message), false);

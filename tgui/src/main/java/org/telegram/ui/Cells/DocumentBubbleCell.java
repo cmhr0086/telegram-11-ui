@@ -1,3 +1,8 @@
+/*
+ * Adapted from Telegram for Android release-11.4.2-5469.
+ * Copyright Nikolai Kudashov, 2013-2018. Licensed under GNU GPL v. 2 or later.
+ * See LICENSE in this archive.
+ */
 package org.telegram.ui.Cells;
 
 import android.content.Context;
@@ -139,7 +144,7 @@ public class DocumentBubbleCell extends TextBubbleCell {
         setReactionsLayout();
         // TYPE_FILE: backgroundWidth = messageObject.getMaxMessageTextWidth() (no avatar / share button)
         int minSize = AndroidUtilities.isTablet() ? AndroidUtilities.getMinTabletSide() : width;
-        backgroundWidth = minSize - AndroidUtilities.dp(80);
+        backgroundWidth = minSize - AndroidUtilities.dp(80) - incomingAvatarInset();
         // maxWidth = backgroundWidth - 86dp, and with no caption (maxTextWidth == 0) max(0, backgroundWidth - 138dp)
         int maxWidth = Math.max(0, backgroundWidth - AndroidUtilities.dp(86 + 52));
 
@@ -199,7 +204,7 @@ public class DocumentBubbleCell extends TextBubbleCell {
             additionHeight += reactionsLayoutInBubble.totalHeight;
         }
 
-        namesOffset = buildReplyLayout(backgroundWidth - AndroidUtilities.dp(31) - AndroidUtilities.dp(message.isOut ? 30 : 20), false);
+        namesOffset = authorHeight + buildReplyLayout(backgroundWidth - AndroidUtilities.dp(31) - AndroidUtilities.dp(message.isOut ? 30 : 20), false);
         totalHeight = photoHeight + AndroidUtilities.dp(14) + namesOffset + additionHeight;
         if (pinnedTop) {
             namesOffset -= AndroidUtilities.dp(2);
@@ -241,11 +246,12 @@ public class DocumentBubbleCell extends TextBubbleCell {
             return;
         }
         int backgroundLeft = drawBubbleBackground(canvas);
+        drawAuthor(canvas);
         drawReply(canvas, false);
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
         // onLayout
-        buttonX = out ? layoutWidth - backgroundWidth + AndroidUtilities.dp(14) : AndroidUtilities.dp(23);
+        buttonX = out ? layoutWidth - backgroundWidth + AndroidUtilities.dp(14) : AndroidUtilities.dp(23) + incomingAvatarInset();
         buttonY = AndroidUtilities.dp(13) + namesOffset;
         radialProgress.setProgressRect(buttonX, buttonY, buttonX + AndroidUtilities.dp(44), buttonY + AndroidUtilities.dp(44));
 

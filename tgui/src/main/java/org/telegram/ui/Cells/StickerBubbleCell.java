@@ -107,7 +107,7 @@ public class StickerBubbleCell extends PhotoBubbleCell {
         // then reattach its scrap without an onAttachedToWindow callback.
         // Recheck here so a visible sticker resumes without restarting its loop.
         updateAnimation();
-        int x = message.isOut ? getMeasuredWidth() - backgroundWidth - AndroidUtilities.dp(5) : AndroidUtilities.dp(13);
+        int x = message.isOut ? getMeasuredWidth() - backgroundWidth - AndroidUtilities.dp(5) : AndroidUtilities.dp(13) + incomingAvatarInset();
         int y = AndroidUtilities.dp(pinnedTop ? 4 : 5);
         photoRect.set(x, y, x + photoWidth, y + photoHeight);
         bubbleBottom = getMeasuredHeight() - AndroidUtilities.dp(2);
@@ -122,13 +122,14 @@ public class StickerBubbleCell extends PhotoBubbleCell {
             drawReactions(canvas);
         }
         drawStickerTime(canvas);
+        if (!message.isOut) drawSideAuthor(canvas, sideAuthorBackgroundRight(true));
     }
 
     protected void drawStickerTime(Canvas canvas) {
         // Upstream sticker status is inset by six dp; its time pill has an
         // additional two dp at each side and a 12dp radius.
         float timeX = message.isOut ? getMeasuredWidth() - timeWidth - AndroidUtilities.dp(42)
-                : Math.max(AndroidUtilities.dp(26), backgroundWidth - AndroidUtilities.dp(4) - timeWidth);
+                : Math.max(AndroidUtilities.dp(26), backgroundWidth - AndroidUtilities.dp(4) - timeWidth) + incomingAvatarInset();
         timeX -= AndroidUtilities.dp(STICKER_STATUS_OFFSET);
         float x1 = timeX - AndroidUtilities.dp(4);
         float offsetX = AndroidUtilities.dp(2);

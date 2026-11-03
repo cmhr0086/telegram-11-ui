@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | A 贴纸与 GIF | 已完成，限制见下 | PR #2，库/消费端/仪器及 MuMu 真操作通过；WEBM 首帧降级 |
 | B 附件菜单 | 已实现并推送 PR #3 | 主体/五页/权限/选择/确认与宿主回调；简化交互和人工补验见下 |
-| C 更多消息 | 进行中 | 未读/服务/群聊正在集成；转发、更多气泡和键盘待实现 |
+| C 更多消息 | 进行中 | 未读/服务/群聊已完成；转发、更多气泡和键盘待实现 |
 | D 输入增强 | 未开始 | 提及、表情联想、命令、发送预览 |
 | E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
@@ -21,7 +21,10 @@ roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功�
 
 - ChatUnreadCell 经 tools/pull 搬运，保留原尺寸/密度资源/GPL；增加主题刷新、demo 锚点跳转和宿主预览。库release/demo/仪器构建及host debug/R8通过（TEMP/phase-c-unread-build.log、phase-c-unread-demo.log、phase-c-unread-host.log）；设备component=unread通过，实测聊天菜单跳转及夜→日刷新，截图TEMP/unread-night.png、unread-day.png。
 - 服务消息已完成：复用 ChatActionCell 原文字胶囊，移植 MessageObject 文字分支为纯 ServiceMessage（普通群返回/大型群加入、邀请、改名、各媒体类型置顶、自定义），用户/置顶目标通过回调交宿主。demo 菜单定位和点击置顶跳原文、日夜显示通过；host 信息按钮预览。库release/demo/test/publish及host debug/R8通过（TEMP/phase-c-service-build.log、phase-c-service-test-build.log、phase-c-service-host.log）；component=service通过（phase-c-service-device.log）。覆盖模板占位、emoji span、同文字换ID、取消点击、两类群加入、20字符预览、清空layout和日期复用。初次测试把span插入顺序误认为文字顺序，已按真实文本位置排序并依实际layout坐标触摸，生产回调断言保留。截图service-day.png、service-night.png、service-pin.png。未迁移服务卡片/礼物、按压高亮、逐链接无障碍导航。
-- 群聊 Sender/名字/头像列及旁侧作者头正在验收；审查发现列表头像padding/透明度、API21比较器和贴纸旁侧姓名8dp偏移，修复中，尚未计完成。
+- 群聊已完成：Sender/原ID姓名配色、组首姓名、42dp头像/48dp列、300秒同发送者合并，复用既有各类气泡；贴纸/圆视频/纯emoji按无背景分支绘制旁侧名字，列表ChatAvatarDecoration复用上游可视组吸底逻辑。demo菜单可切换，sample使用群聊模型；旧API仍可默认行内绘制。头像padding/透明度、API21比较器和贴纸姓名8dp偏移已修；贴纸/圆视频保持原尺寸上限而非再扣头像列缩小。
+- 群聊设备检查发现首次Theme初始化把姓名画笔覆盖成默认12px，首条与后续字号不同，修正后保留原断言通过。component=group覆盖首次/同对象重绑/长姓名、颜色、300秒/未知ID边界、Photo姓名间隔和圆角、旁侧锚点、原贴纸/圆直径、长组末行屏外头像、clipToPadding=false+padding及半透明、宿主Drawable bounds恢复。最终库release/demo/test/publish及host debug/R8通过（TEMP/phase-c-group-size-build.log、phase-c-group-size-host.log）；设备phase-c-group-size-device.log通过。共享Theme修复后完整旧功能回归含服务/群聊已通过（phase-c-group-full-device.log；当时输出结尾漏列Group名称，但runner在返回前已执行该检查，现输出已补）。
+- MuMu群聊真操作：开关群聊、滚动、日夜切换；TGS及GIF继续动，圆视频点中播放并出现00:05/进度环，相册右列打开正确第11/17张后返回。截图group-night.png、group-stickers.png、group-round-size2.png、group-round-play.png、group-album-night.png、group-album-viewer.png、group-text-night.png。动画头像、头像点击、管理员头衔/Premium多色姓名、圆视频播放放大姓名过渡未移植；复杂RTL/平板需人工检查。
+- 下一项：转发头（含普通气泡及无背景媒体分支），之后音乐/联系人/位置/投票/文件缩略图、inline/reply keyboard。阶段C仍未完成，D–F未开始；不得把本批三项当作整个目标完成。
 
 ### 阶段 B 当前交接
 
