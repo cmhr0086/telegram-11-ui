@@ -63,6 +63,7 @@ public final class AnimatedEmojiDeviceChecks {
             checks.emojiOnlyAndInPlaceEdit();
             checks.status("missing and corrupt providers");
             checks.providerFailures();
+            checks.invalidCompressedSources();
             checks.status("shared bindings and reattachment");
             checks.sharedBindings();
             checks.status("queued native frame disposal stress");
@@ -363,6 +364,29 @@ public final class AnimatedEmojiDeviceChecks {
             LocalEmojiSamples.install(activity);
             main(() -> check(editSpans[0].getDrawable().isLoaded() && editSpans[1].getDrawable().isLoaded(), "provider restore must reload local sources"));
         } finally { broken.delete(); }
+    }
+
+    private void invalidCompressedSources() throws Exception {
+        File truncated = File.createTempFile("emoji-truncated-", ".tgs", activity.getCacheDir());
+        File oversized = File.createTempFile("emoji-oversized-", ".tgs", activity.getCacheDir());
+        try {
+            try (FileOutputStream output = new FileOutputStream(truncated)) { output.write(new byte[]{0x1f, (byte) 0x8b, 0}); }
+            try (java.util.zip.GZIPOutputStream output = new java.util.zip.GZIPOutputStream(new FileOutputStream(oversized))) {
+                byte[] block = new byte[1024 * 1024];
+                for (int i = 0; i < 5; i++) output.write(block);
+            }
+            main(() -> {
+                AnimatedEmojiDrawable drawable = editSpans[0].getDrawable();
+                AnimatedEmojiDrawable.setSourceProvider(id -> truncated);
+                check(!drawable.isLoaded() && truncated.isFile(), "truncated gzip falls back without deleting host source");
+                AnimatedEmojiDrawable.setSourceProvider(id -> oversized);
+                check(!drawable.isLoaded() && oversized.isFile(), "decompressed size limit preserves host source");
+            });
+        } finally {
+            truncated.delete();
+            oversized.delete();
+            LocalEmojiSamples.install(activity);
+        }
     }
 
     private void sharedBindings() {

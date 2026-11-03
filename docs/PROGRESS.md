@@ -41,7 +41,7 @@
 
 ## 提交与发布
 
-UndoView `886b99a`、本地动态表情 `ecb00e3`、相册 `a3d5ef2`、主题 CRLF 修复 `871d103` 已独立提交。圆形视频已满足门槛，将独立提交。剩余为最终审查、推送 codex/roadmap 并创建目标 dev/ui-lib 的 PR；不合并，main 不改动。
+UndoView `886b99a`、本地动态表情 `ecb00e3`、相册 `a3d5ef2`、主题 CRLF 修复 `871d103`、圆形视频 `1832e76` 已独立提交。最后审查补充的 TGS inflater 显式关闭及异常文件用例也已验证通过。剩余仅推送 codex/roadmap 并创建目标 dev/ui-lib 的 PR；不合并，main 不改动。
 
 ## 正在定位的观察
 
@@ -96,3 +96,12 @@ UndoView `886b99a`、本地动态表情 `ecb00e3`、相册 `a3d5ef2`、主题 CR
 - RoundVideoDeviceChecks：240/400dp × 收发，直径/中心裁剪/框内边界/一次时间；圆内点击/圆外不播放/移动取消/长按与detach取消；隐藏缩略图仍画半圈进度并可点；暂停剩余时长保持；下载/加载/停止绘制；另用真正本地 MediaPlayer 等待首帧和进度>600ms，暂停450ms位置稳定、恢复400ms进度推进，stop后 player/surface/layer 均null且状态清空、重复stop安全。
 - 真实 UI：视频帧/环/倒计时变化、暂停两秒画面不动、恢复至结束回播放图标、切第二条停止第一条、离屏返回能重播、退出页面、长按整条计数1、夜间圆形预览/时间；TEMP/round-play1.png、round-play2.png、round-pause1.png、round-pause2.png、round-resume.png、round-finished.png、round-switch.png、round-return.png、round-replay.png、round-select.png、round-night.png。暂停修复后剩余00:04保持两秒，恢复到00:03：round-pause-fixed.png、round-pause-fixed2.png、round-resume-fixed.png。
 - 未验证扬声器实际输出或音轨；退出/离屏无声不作为听觉观察结论，资源释放有设备断言。播放扩大/过渡、拖环seek、转写、阅后即焚、PiP、圆消息自身reply/reactions未移植，README已明确；其它气泡原功能保留，demo不向圆消息显示未实现的反应菜单。
+
+## 最终审查
+
+- 修复本地 TGS 流未显式关闭的问题（原文件输入虽关闭，gzip inflater 会延迟至 GC）：解压流纳入 try-with-resources，成功/异常均释放。补充截断 gzip 和超过 4 MiB 解压上限的回退断言，仍保留宿主原件。
+- 四个优先项均已实现，没有因编译卡住而跳过整项。未移植的上游分支、尺寸差异及人工验证范围已在各段/README记录；不将缺省、回调、模拟下载或未验证音频描述为真实服务功能。
+- 原无障碍描述 `LOC_ERR:AccDescrUnreadCount_other` 留待后续，未为此改动 LocaleController 的全局行为。其它 Android 版本、平板、复杂 RTL/超大字体、实际扬声器与长时间后台仍需人工补测。
+- 最终构建：`:tgui:assembleRelease :demo:assembleDebug :demo:assembleDebugAndroidTest :tgui:publishToMavenLocal` 通过（TEMP/roadmap-final-build.log）；最后发布 AAR 的消费端 debug + R8 release 通过（roadmap-final-host.log）。
+- 最终设备输出 `RoadmapInstrumentation: UndoView + AnimatedEmojiDeviceChecks + AlbumDeviceChecks + RoundVideoDeviceChecks passed`（roadmap-final-instrumentation.log），包含 ThemeFileDeviceChecks、损坏/超限压缩源以及实际 MediaPlayer 首帧/暂停/恢复/释放断言。不要仅凭 adb exit code 判定成功。
+- 2026-11-03 fetch 核实 origin/dev/ui-lib 仍为7eb17f0，无需重放已有提交。工作分支未修改 main，未合并旧 codex/ui-library。截图与日志在本机 TEMP，不作为已上传的远端附件；PR 记录本地证据及未验证范围。

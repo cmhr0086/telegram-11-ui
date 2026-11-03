@@ -19,6 +19,7 @@
 - demo：点图片 / 视频打开查看器，可在聊天里所有已下载的图片和视频之间翻页；加了一条 6 秒的示例视频消息（`demo/res/raw/sample_video.mp4`，80 KB）。
 
 ### 修复
+- 本地 TGS 解压流在成功和异常路径都显式关闭，避免反复加载依赖 GC 释放 inflater；设备用例补充截断 gzip 与超过 4 MiB 解压上限的回退及宿主原件保留。
 - 主题解析忽略 CRLF 的行尾 CR，避免 Windows 检出后数字颜色被读为 0、夜间文字透明；保持 WPS 二进制壁纸偏移，增加 LF/CRLF/打包暗色主题设备检查，并固定 attheme 检出换行。
 - `Emoji.replaceEmoji(createNew=true)` 保留已有样式和自定义表情 span，重建普通 EmojiSpan 时移除旧实例，避免混排丢失 ID 或重复 span；实体回填忽略负起点。
 - 点 `PhotoBubbleCell` 的图片会弹出消息菜单：现在图片区域的单击按上游 `didPressImage` 回调 `MediaDelegate.onMediaPressed`（任何下载状态），说明文字条和气泡其它位置仍然单击出菜单；长按图片照常进入多选、没有按下效果，手指移动超过阈值把手势还给列表滚动。

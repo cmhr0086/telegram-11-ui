@@ -175,8 +175,8 @@ public class AnimatedEmojiDrawable extends Drawable {
             input.mark(2);
             int first = input.read(), second = input.read();
             input.reset();
-            InputStream data = first == 0x1f && second == 0x8b ? new GZIPInputStream(input) : input;
-            try (FileOutputStream output = new FileOutputStream(copy)) {
+            try (InputStream data = first == 0x1f && second == 0x8b ? new GZIPInputStream(input) : input;
+                 FileOutputStream output = new FileOutputStream(copy)) {
                 byte[] buffer = new byte[8192];
                 int total = 0, read;
                 while ((read = data.read(buffer)) != -1) {
