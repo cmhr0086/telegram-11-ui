@@ -127,6 +127,23 @@ TelegramUI.toggleDayNight(anchorView);                  // 上游抽屉里太阳
 TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 ```
 
+### 归档与删除撤销条
+
+`UndoView` 从上游归档/删除分支裁剪而来，保留 5 秒期限、归档 Lottie、删除数字圆环、10dp 圆角和原进出场动画。先把它加到页面底部（左右/底部各 8dp），宿主立即更新列表的视觉状态，再显示：
+
+```java
+UndoView undo = new UndoView(context, getResourceProvider());
+container.addView(undo, LayoutHelper.createFrame(-1, -2, Gravity.BOTTOM, 8, 0, 8, 8));
+undo.showWithAction(UndoView.ACTION_DELETE, null,
+    () -> commitDeletion(),     // 5 秒到期或被下一条替换时执行一次
+    () -> restoreOriginalRows() // 点击 Undo 时执行一次
+);
+```
+
+支持 `ACTION_ARCHIVE` / `ACTION_ARCHIVE_FEW` / `ACTION_DELETE` / `ACTION_DELETE_FEW`。文案传 null 使用上游字符串，也可以传宿主文本。归档显示动画图标，删除显示数字倒计时。操作、原位置快照和持久化均由宿主负责，库不调用账号或消息控制器；重入时被更晚提示抢占的请求会立即执行 apply。离开页面可调用 `hide(true, 0)` 结算；从窗口移除也会结算待处理操作。主题变化时调用 `updateColors()`，如 demo 在 `getThemeDescriptions()` 中登记 undo 三个颜色键。进度仅在内存中，不承担进程重启后的业务恢复。
+
+示例：原 demo 的 Chat list 页，长按进入多选后归档/删除，或在 Swipe action 菜单选择 Archive/Delete；外部宿主 `samples/host-app` 长按条目可归档并撤销。原位恢复及文件夹过滤由示例代码维护。
+
 ## 包含的组件
 
 | 类别 | 类 |
@@ -144,6 +161,7 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 | 个人资料 | `ProfileFragment`（上游 `ProfileActivity` 的用户资料页：可折叠头部——头像 / 名字 / 状态随滚动缩放并收进 ActionBar，下拉把头像展开成全宽正方形、名字和状态落在渐变上，松手吸附；写消息浮动按钮的显示 / 隐藏动画；信息行用 `TextDetailCell`、`NotificationsCheckCell`、`TextCell`、红色操作行、`ShadowSectionCell`；⋮ 菜单项和点击回调由宿主提供；滑动返回和日夜切换与其它页面一致） |
 | 媒体查看器 | `MediaViewer`（简易全屏图片 / 视频查看器，不是 `PhotoViewer` 移植，只借用上游的外观和手势数值：从气泡图片位置放大打开、缩回关闭（200ms DecelerateInterpolator），下拉 30dp 后跟手、超过 1/6 屏高关闭、背景按 `max(127, 255 × (1 − |dy| / (宽/4)))` 变淡；双指缩放和双击放大到 3 倍（以手指为中心）、放大后拖动带边界回弹；左右翻页（超过 1/3 屏宽或 650dp/s，页间 15dp，250ms DecelerateInterpolator(1.5)）；0x7f000000 顶栏（返回、发送者、日期和“n of m”）和底部说明文字，单击显示 / 隐藏；视频用系统 `MediaPlayer` + `TextureView`，64dp 播放按钮、播放 / 暂停、可拖动进度条和“当前 / 总时长”；Android 9 到 16 边到边，按系统栏和刘海留出顶栏 / 底栏） |
 | 消息菜单与多选 | `MessageContextMenu`：上游 `ChatActivity.createMenu()` 的消息菜单按原数值移植到纯模型——全屏 0.2 黑色遮罩（`dimBehindView`，EASE_OUT_QUINT 320ms），被长按的气泡画在遮罩之上（裁到列表顶部以下）；`ActionBarPopupWindow` + `ActionBarMenuSubItem` 行（`popup_fixed_alert` 背景、200dp 最小宽度、220ms 收起），位置按上游算法以触点为锚、左右 / 上下夹在屏幕内；上方是 `ReactionsContainerLayout` 样式的反应条（药丸 + 阴影 + 两个小气泡圆点，250ms `OvershootInterpolator(0.5)` 从右向左展开，菜单随之放大淡入，表情按上游延迟依次弹出），表情是 `Emoji` 绘制的静态 Telegram 表情（默认 👍 👎 ❤ 🔥 🥰 👏）。用法：`new MessageContextMenu(context, resourcesProvider).addItem(icon, text, [destructive,] onClick)…setReactions(…).setDelegate(…).show(cell, touchX, touchY)`；颜色每次打开时按当前主题取，日夜都跟随。`setSelectedReactions(message)`（或传 emoji 集合）把已选的反应在反应条里画成上游的样子（`key_listSelector` 圆底、表情缩到 0.76）。和上游 ChatActivity 一样：**单击**消息打开这个菜单，**长按**进入多选；消息列表要 `setInstantClick(true)` + `setDisableHighlightState(true)`（不显示列表点按水波）。多选的单元格部分在 `TextBubbleCell.setCheckBoxVisible / setChecked`（上游 `ChatMessageCell`：21dp `CheckBoxBase` 从左侧滑入、来信气泡右移 35dp、200ms EASE_OUT / EASE_IN，选中时整行 `chat_selectedBackground` 高亮、气泡换成 Selected 颜色、时间用 `*TimeSelectedText`）；ActionMode 本身由宿主搭（demo 的 `DemoChatFragment` 照搬 `createActionMode` / `createBottomMessagesActionButtons`：数量 `NumberTextView`、编辑（单选自己的消息时）/ 复制 / 转发 / 删除图标及 250ms 纵向弹出、返回键变 ×、输入栏换成底部“回复 / 转发”栏，单击切换选中、长按后拖动连选 `RecyclerListView.startMultiselect`）。demo 菜单：回复、复制、编辑（仅自己的消息）、删除（带列表动画）、点反应条里的表情给消息加 / 换 / 取消反应（`toggleReaction` + `notifyItemChanged`，气泡里的胶囊带动画变化）；气泡里的胶囊单击同样切换，长按弹出计数提示 |
+| 撤销提示 | `UndoView`：归档/删除（单项和批量）、5 秒期限、删除倒计时圆环、归档动画，apply/undo 由宿主回调 |
 | 主题 | `Theme`（内置 Classic / Dark / Arctic / Day / Night，从上游 `.attheme` 资源加载；强调色、自动夜间模式（定时 / 光线 / 跟随系统））、`ThemeDescription`、`ThemeColors`、`OKLCH` |
 | 宿主 | `TelegramUI`（初始化 + 主题切换入口）、`TelegramActivity`（生命周期转发、系统栏颜色、日夜切换动画） |
 
@@ -196,7 +214,7 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 - 不能播放 Telegram 贴纸 / TGS 文件的网络加载（没有 `ImageReceiver` / `FileLoader`）；本地文件可以用 `new RLottieDrawable(File, w, h, cacheOptions, limitFps)`
 - 字符串只带了库内实际用到的 49 条英文，加上游自带的部分翻译（ar / de / es / it / ko / nl / pt-BR）；其它语言需要宿主覆盖资源
 - demo 在 Android 9 真机（Huawei MHA-AL00）上完整验证过；Android 16（OnePlus，targetSdk 36 强制边到边）上验证过聊天背景、气泡、Telegram 表情和 `ChatActivityEnterView` 的显示，表情面板（打开、日夜切换、键盘↔面板切换、返回键收起）两台都验证过；这台 OnePlus 的手势导航条高度为 0，所以没能在非零导航栏高度下验证面板位置；输入栏的录音交互还没在 Android 15+ 真机上逐项验证；平板布局没验证
-- 对话列表：隐藏归档没有 Stories 联动（上游下拉时会先展开 Stories 栏）、没有“已隐藏归档”撤销条和归档长按菜单；`archiveHidden` 只存在内存里，由宿主持久化；翻页手势与上游一样只在“滑动切换文件夹”设置下生效（demo 的 Swipe action 菜单第一项），此时普通行不能左滑，归档行仍可左滑；锁定文件夹（Premium 上限）的抖动提示未移植；搜索只有对话页（没有媒体 / 链接 / 文件等标签页、搜索筛选、长按删除单条最近记录），宿主负责最近记录的持久化；没有 Stories、论坛话题、消息缩略图、撤销条（`UndoView`）、平板右侧对话预览；多账号只保留了抽屉里的箭头（`setAccountsArrowVisible`），没有账号列表
+- 对话列表：隐藏归档没有 Stories 联动（上游下拉时会先展开 Stories 栏）、没有“已隐藏归档”撤销条和归档长按菜单；`archiveHidden` 只存在内存里，由宿主持久化；翻页手势与上游一样只在“滑动切换文件夹”设置下生效（demo 的 Swipe action 菜单第一项），此时普通行不能左滑，归档行仍可左滑；锁定文件夹（Premium 上限）的抖动提示未移植；搜索只有对话页（没有媒体 / 链接 / 文件等标签页、搜索筛选、长按删除单条最近记录），宿主负责最近记录的持久化；没有 Stories、论坛话题、消息缩略图、平板右侧对话预览；多账号只保留了抽屉里的箭头（`setAccountsArrowVisible`），没有账号列表
 - 个人资料页：只有一张头像（没有相册翻页和指示条）、没有共享媒体分页、没有从聊天页头像飞入的打开动画；只做了用户资料（没有群组 / 频道）；横屏和平板不能下拉展开头像（与上游一致）
 - `Theme` 里仍留着个人资料相关的 paint/drawable 字段，没用到但可以安全忽略；后续可以继续瘦身
 
@@ -208,7 +226,7 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 4. **阶段 B3**：表情搜索、动态 / 自定义表情页、贴纸 / GIF 页（与下面 C、D 合并推进）
 5. **阶段 C：动态表情 / 自定义表情**——`AnimatedEmojiDrawable` / `AnimatedEmojiSpan` 的真实渲染（rlottie 已就绪），文字里的自定义表情实体
 6. **阶段 D：贴纸和 GIF**——`EmojiView` 的贴纸 / GIF 页、`StickersAlert`、`TrendingStickersLayout`，数据由宿主提供（不接 Telegram 服务器）
-7. **对话列表（已完成）**：`DialogCell`、滑动动作、多选、列表动画、文件夹标签、抽屉、写消息按钮；下拉显示隐藏归档（`PullForegroundDrawable`）、文件夹左右翻页（`DialogsViewPager`）也已完成；对话搜索（`DialogsSearchController`）也已完成；后续：撤销条
+7. **对话列表（已完成）**：`DialogCell`、滑动动作、多选、列表动画、文件夹标签、抽屉、写消息按钮；下拉显示隐藏归档（`PullForegroundDrawable`）、文件夹左右翻页（`DialogsViewPager`）也已完成；对话搜索（`DialogsSearchController`）也已完成；`UndoView` 归档/删除撤销已提供，隐藏归档等其它提示尚未移植
 8. **消息菜单与多选（已完成静态版）**：`MessageContextMenu`（单击：遮罩、浮起气泡、弹出菜单、静态表情反应条），长按多选（复选框、ActionMode、底部回复 / 转发栏、拖动连选）；气泡里的反应胶囊（`ReactionsLayoutInBubble`，静态表情 + 计数动画）已完成；后续：动态反应（上游 lottie 选中 / 飞入动画、反应者头像、展开全部反应、自定义表情反应），依赖阶段 C
 9. **媒体气泡（已完成第一批）**：语音、图片、文件；回复引用、链接、日期分隔条、气泡里的反应已完成；后续：视频 / 圆形视频 / 相册
 10. 之后可选：`SuggestEmojiView`、提及列表、`MessageSendPreview`（长按发送的消息预览与特效）、机器人键盘

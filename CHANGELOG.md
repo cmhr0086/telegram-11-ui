@@ -5,6 +5,9 @@
 ## Unreleased
 
 ### 新增
+- `UndoView`：从上游 11.4.2 归档/删除分支裁剪，保留单项/批量、5 秒期限、归档 Lottie、删除数字圆环及原布局/动画；删除账号、消息控制器和无关业务分支，操作提交及撤销由宿主回调。
+- 对话列表 demo 支持归档/删除后的原位撤销（单项、批量及文件夹过滤页），外部宿主样例增加长按归档/撤销。
+- 无第三方测试依赖的 `RoadmapInstrumentation`，覆盖 UndoView 的超时、替换、点击、回调重入、窗口移除及窄屏长文本。
 - `MediaViewer`：简易全屏图片 / 视频查看器（`org.telegram.ui.MediaViewer`，不是 `PhotoViewer` 移植，只借用上游外观和手势数值）——从气泡图片位置放大打开、缩回关闭，下拉关闭且背景渐隐，双指 / 双击缩放到 3 倍和拖动，左右翻页，顶栏（返回、发送者、日期、序号）和说明文字，视频用 `MediaPlayer` + `TextureView`（播放 / 暂停、进度条、时间）；数据是纯模型 `MediaViewer.Item`，位置和隐藏源图走 `MediaViewer.Provider`。
 - `TextBubbleMessage.videoUri` 和 `TextBubbleMessage.video(...)`：图片气泡当视频显示（中间播放按钮、左上角上游的时长小胶囊）。
 - `PhotoBubbleCell.getPhotoRect` / `getPhotoRectOnScreen` / `getPhotoRadii` / `setPhotoVisible`，供查看器做打开 / 关闭动画。

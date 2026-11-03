@@ -168,3 +168,7 @@ release 里的大头：`assets/emoji` 5.2 MB（PNG，不再压缩，资源压缩
 - **`MessageContextMenu` 首次打开后按返回键不关**：只复现过一次，未定位。
 - **没测的场景**：不用 `TelegramActivity`（AppCompat + Navigation）、不用 `Theme.TMessages` / 忘调 `TelegramUI.init`、Android 11+ 设备、`isShrinkResources` 的运行时行为、Material 组件和 fork 同屏使用。
 
+
+## 2026-11-03：UndoView 消费验证
+
+ChatListFragment 增加长按归档/撤销示例，直接使用发布的 AAR 中的 UndoView，并保存条目的原位置。页面离开时结算待处理操作，原有单击进入聊天和左滑静音仍保留。构建/运行结果见仓库 docs/PROGRESS.md；这里的新增示例不改写上面的历史设备测试记录。
