@@ -71,6 +71,18 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         add("👍", true, TextBubbleMessage.STATE_READ);
         add("Type something below and send it.", false, TextBubbleMessage.STATE_NONE);
         add(localEmoji(), false, TextBubbleMessage.STATE_NONE);
+        ArrayList<TextBubbleMessage> photos = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            android.graphics.drawable.GradientDrawable image = new android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{0xff5a9bd5 + i * 0x00080000, 0xffa8d6bd});
+            TextBubbleMessage item = TextBubbleMessage.photo(nextId++, false, "12:34", TextBubbleMessage.STATE_NONE, image, null);
+            item.photoWidth = i == 0 ? 320 : 480;
+            item.photoHeight = i == 0 ? 600 : 320;
+            photos.add(item);
+        }
+        messages.add(TextBubbleMessage.album(nextId++, false, "12:34", TextBubbleMessage.STATE_NONE,
+                photos, org.telegram.messenger.ApplicationLoader.applicationContext.getString(com.example.tguihost.R.string.local_album_sample)));
         return super.onFragmentCreate();
     }
 
@@ -356,7 +368,16 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         @NonNull
         @Override
         public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            TextBubbleCell cell = new TextBubbleCell(context, getResourceProvider());
+            TextBubbleCell cell = viewType == TextBubbleMessage.TYPE_ALBUM
+                    ? new org.telegram.ui.Cells.AlbumBubbleCell(context, getResourceProvider())
+                    : new TextBubbleCell(context, getResourceProvider());
+            cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+                @Override public void onMediaPressed(TextBubbleCell source, TextBubbleMessage item) { }
+                @Override public void onAlbumMediaPressed(org.telegram.ui.Cells.AlbumBubbleCell source,
+                        TextBubbleMessage album, TextBubbleMessage item, int index) {
+                    Toast.makeText(context, context.getString(com.example.tguihost.R.string.album_item, index + 1), Toast.LENGTH_SHORT).show();
+                }
+            });
             cell.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             return new RecyclerListView.Holder(cell);
         }
@@ -375,6 +396,11 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         @Override
         public int getItemCount() {
             return messages.size();
+        }
+
+        @Override
+        public int getItemViewType(int position) {
+            return messages.get(position).type;
         }
     }
 }

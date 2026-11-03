@@ -368,6 +368,11 @@ public class TextBubbleCell extends View {
         /** The play / download / open button (or the photo, or the file row) was tapped. */
         void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message);
 
+        /** Individual album tile; group selection, caption and time belong to the album row. */
+        default void onAlbumMediaPressed(AlbumBubbleCell cell, TextBubbleMessage album, TextBubbleMessage item, int index) {
+            onMediaPressed(cell, item);
+        }
+
         /**
          * The menu dots on a file bubble were tapped (upstream didPressOther): show the message options
          * here, as a tap elsewhere on a text bubble does. Coordinates are relative to the cell.

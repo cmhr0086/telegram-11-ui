@@ -2,4 +2,6 @@
 <resources>
     <string name="local_emoji_sample">Local JSON / TGS</string>
     <string name="local_emoji_insert">Insert local animated emoji</string>
+    <string name="album_caption">Album · %1$d photos</string>
+    <string name="album_ten">Send a 10-photo album</string>
 </resources>

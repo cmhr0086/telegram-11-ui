@@ -44,6 +44,7 @@ import org.telegram.ui.Cells.TextBubbleMessage;
 import org.telegram.ui.Cells.ChatActionCell;
 import org.telegram.ui.Cells.DocumentBubbleCell;
 import org.telegram.ui.Cells.PhotoBubbleCell;
+import org.telegram.ui.Cells.AlbumBubbleCell;
 import org.telegram.ui.Cells.VoiceBubbleCell;
 import org.telegram.ui.Components.ChatActivityEnterView;
 import org.telegram.ui.Components.ChatBubbleItemAnimator;
@@ -82,6 +83,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_NIGHT = 1;
     private static final int MENU_RECORD_BUTTON = 2;
     private static final int MENU_LOCAL_EMOJI = 3;
+    private static final int MENU_ALBUM_TEN = 4;
     // action mode (ChatActivity.createActionMode ids)
     private static final int ACTION_EDIT = 10;
     private static final int ACTION_COPY = 11;
@@ -193,6 +195,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         } catch (java.io.IOException error) {
             org.telegram.messenger.FileLog.e(error);
         }
+        addSample(sampleAlbum(2, false, false));
+        addSample(sampleAlbum(3, true, true));
+        addSample(sampleAlbum(4, false, true));
+        addSample(sampleAlbum(5, true, false));
         rebuildRows();
         return super.onFragmentCreate();
     }
@@ -357,6 +363,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 } else if (id == MENU_LOCAL_EMOJI) {
                     enterView.setFieldText(LocalEmojiSamples.text(getParentActivity().getString(org.telegram.uidemo.R.string.local_emoji_sample)));
                     enterView.getEditField().updateAnimatedEmoji(true);
+                } else if (id == MENU_ALBUM_TEN) {
+                    sendOutgoing(sampleAlbum(10, true, true));
                 }
             }
         });
@@ -367,6 +375,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         recordButtonItem = otherItem.addSubItem(MENU_RECORD_BUTTON, R.drawable.input_mic, "Voice / video button", true);
         recordButtonItem.setChecked(true);
         otherItem.addSubItem(MENU_LOCAL_EMOJI, R.drawable.msg_emoji_smiles, context.getString(org.telegram.uidemo.R.string.local_emoji_insert));
+        otherItem.addSubItem(MENU_ALBUM_TEN, R.drawable.msg_photos, context.getString(org.telegram.uidemo.R.string.album_ten));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -1130,9 +1139,14 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private void openMediaViewer(TextBubbleMessage message) {
         ArrayList<MediaViewer.Item> items = new ArrayList<>();
         ArrayList<TextBubbleMessage> sources = new ArrayList<>();
-        int index = 0;
+        int index = -1;
         SimpleDateFormat format = new SimpleDateFormat("d MMM yyyy 'at' HH:mm", Locale.US);
-        for (TextBubbleMessage m : messages) {
+        ArrayList<TextBubbleMessage> flattened = new ArrayList<>();
+        for (TextBubbleMessage parent : messages) {
+            if (parent.type == TextBubbleMessage.TYPE_ALBUM) flattened.addAll(parent.albumMedia);
+            else flattened.add(parent);
+        }
+        for (TextBubbleMessage m : flattened) {
             if (m.type != TextBubbleMessage.TYPE_PHOTO || m.mediaState != TextBubbleMessage.MEDIA_READY || m.photo == null && m.videoUri == null) {
                 continue;
             }
@@ -1141,23 +1155,30 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             }
             CharSequence sender = m.isOut ? "You" : "Alice Johnson";
             CharSequence date = m.date != 0 ? format.format(new Date(m.date * 1000)) : m.time;
+            // Repeat the shared group caption on its pages when a member has no own caption.
+            TextBubbleMessage owner = albumOwner(m);
+            CharSequence caption = android.text.TextUtils.isEmpty(m.text) && owner != m ? owner.text : m.text;
             MediaViewer.Item item = m.videoUri != null
-                    ? MediaViewer.Item.video(m.videoUri, m.photo, sender, date, m.text)
-                    : MediaViewer.Item.photo(m.photo, sender, date, m.text);
+                    ? MediaViewer.Item.video(m.videoUri, m.photo, sender, date, caption)
+                    : MediaViewer.Item.photo(m.photo, sender, date, caption);
             item.width = m.photoWidth;
             item.height = m.photoHeight;
             item.tag = m;
             items.add(item);
             sources.add(m);
         }
-        if (items.isEmpty()) {
+        if (items.isEmpty() || index < 0) {
             return;
         }
         MediaViewer.open(getParentActivity(), items, index, new MediaViewer.Provider() {
             @Override
             public boolean getSourceRect(int i, android.graphics.RectF outRect, float[] outRadii) {
                 PhotoBubbleCell cell = findPhotoCell(sources.get(i));
-                if (cell == null || !cell.getPhotoRectOnScreen(outRect)) {
+                int tile = cell instanceof AlbumBubbleCell ? cell.getMessage().albumMedia.indexOf(sources.get(i)) : -1;
+                boolean found = cell instanceof AlbumBubbleCell
+                        ? ((AlbumBubbleCell) cell).getTileRectOnScreen(tile, outRect)
+                        : cell != null && cell.getPhotoRectOnScreen(outRect);
+                if (!found) {
                     return false;
                 }
                 // keep the part under the action bar / input out of the animation's start rect
@@ -1166,7 +1187,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 if (outRect.bottom < location[1] + listView.getPaddingTop() || outRect.top > location[1] + listView.getHeight() - listView.getPaddingBottom()) {
                     return false;
                 }
-                System.arraycopy(cell.getPhotoRadii(), 0, outRadii, 0, 8);
+                System.arraycopy(tile >= 0 ? ((AlbumBubbleCell) cell).getTileRadii(tile) : cell.getPhotoRadii(), 0, outRadii, 0, 8);
                 return true;
             }
 
@@ -1175,14 +1196,16 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 viewerHiddenMessage = visible ? null : sources.get(i);
                 PhotoBubbleCell cell = findPhotoCell(sources.get(i));
                 if (cell != null) {
-                    cell.setPhotoVisible(visible);
+                    if (cell instanceof AlbumBubbleCell) {
+                        ((AlbumBubbleCell) cell).setTileVisible(cell.getMessage().albumMedia.indexOf(sources.get(i)), visible);
+                    } else cell.setPhotoVisible(visible);
                 }
             }
 
             @Override
             public void onPageSelected(int i) {
                 // ChatActivity scrolls the chat along so closing lands on the right bubble
-                int position = rows.indexOf(sources.get(i));
+                int position = rows.indexOf(albumOwner(sources.get(i)));
                 if (position >= 0 && findPhotoCell(sources.get(i)) == null) {
                     layoutManager.scrollToPositionWithOffset(position, listView.getMeasuredHeight() / 3, false);
                 }
@@ -1195,6 +1218,11 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     View child = listView.getChildAt(c);
                     if (child instanceof PhotoBubbleCell) {
                         ((PhotoBubbleCell) child).setPhotoVisible(true);
+                        if (child instanceof AlbumBubbleCell) {
+                            for (int tile = 0; tile < ((AlbumBubbleCell) child).getMessage().albumMedia.size(); tile++) {
+                                ((AlbumBubbleCell) child).setTileVisible(tile, true);
+                            }
+                        }
                     }
                 }
             }
@@ -1207,11 +1235,34 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private PhotoBubbleCell findPhotoCell(TextBubbleMessage message) {
         for (int i = 0; i < listView.getChildCount(); i++) {
             View child = listView.getChildAt(i);
-            if (child instanceof PhotoBubbleCell && ((PhotoBubbleCell) child).getMessage() == message) {
+            if (child instanceof PhotoBubbleCell && ((PhotoBubbleCell) child).getMessage() == albumOwner(message)) {
                 return (PhotoBubbleCell) child;
             }
         }
         return null;
+    }
+
+    private TextBubbleMessage albumOwner(TextBubbleMessage item) {
+        for (TextBubbleMessage message : messages) {
+            if (message.type == TextBubbleMessage.TYPE_ALBUM && message.albumMedia.contains(item)) return message;
+        }
+        return item;
+    }
+
+    private TextBubbleMessage sampleAlbum(int count, boolean out, boolean caption) {
+        ArrayList<TextBubbleMessage> items = new ArrayList<>();
+        int[][] sizes = {{280, 440}, {480, 270}, {320, 320}, {240, 400}, {480, 320}};
+        for (int i = 0; i < count; i++) {
+            int[] size = sizes[i % sizes.length];
+            TextBubbleMessage item = TextBubbleMessage.photo(nextId++, out, "10:14", out ? TextBubbleMessage.STATE_READ : TextBubbleMessage.STATE_NONE,
+                    samplePhoto(size[0], size[1], i % 3), null);
+            item.photoWidth = size[0];
+            item.photoHeight = size[1];
+            item.date = sampleDate(0, "10:14");
+            items.add(item);
+        }
+        return TextBubbleMessage.album(nextId++, out, "10:14", out ? TextBubbleMessage.STATE_READ : TextBubbleMessage.STATE_NONE,
+                items, caption ? ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.album_caption, count) : null);
     }
 
     /** A generated landscape (sky gradient, sun, two hills) standing in for a decoded photo. */
@@ -1274,7 +1325,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         }
         for (int i = 0; i < listView.getChildCount(); i++) {
             View child = listView.getChildAt(i);
-            if (child instanceof TextBubbleCell && ((TextBubbleCell) child).getMessage() == message) {
+            if (child instanceof TextBubbleCell && ((TextBubbleCell) child).getMessage() == albumOwner(message)) {
                 if (child instanceof PhotoBubbleCell) {
                     ((PhotoBubbleCell) child).updateButtonState(true);
                 } else if (child instanceof DocumentBubbleCell) {
@@ -1404,6 +1455,11 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
 
     private final TextBubbleCell.MediaDelegate mediaDelegate = new TextBubbleCell.MediaDelegate() {
+        @Override
+        public void onAlbumMediaPressed(AlbumBubbleCell cell, TextBubbleMessage album, TextBubbleMessage item, int index) {
+            if (actionBar.isActionModeShowed()) processRowSelect(album);
+            else onMediaPressed(cell, item);
+        }
         @Override
         public void onMenuPressed(TextBubbleCell cell, TextBubbleMessage message, float x, float y) {
             if (!actionBar.isActionModeShowed()) {
@@ -1583,6 +1639,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 cell = new VoiceBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_PHOTO) {
                 cell = new PhotoBubbleCell(context, getResourceProvider());
+            } else if (viewType == TextBubbleMessage.TYPE_ALBUM) {
+                cell = new AlbumBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_DOCUMENT) {
                 cell = new DocumentBubbleCell(context, getResourceProvider());
             } else {
@@ -1610,7 +1668,12 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             cell.setCheckBoxVisible(actionBar.isActionModeShowed(), false);
             cell.setChecked(selectedMessages.contains(message), false);
             if (cell instanceof PhotoBubbleCell) {
-                ((PhotoBubbleCell) cell).setPhotoVisible(message != viewerHiddenMessage);
+                if (cell instanceof AlbumBubbleCell) {
+                    ((PhotoBubbleCell) cell).setPhotoVisible(true);
+                    for (int tile = 0; tile < message.albumMedia.size(); tile++) {
+                        ((AlbumBubbleCell) cell).setTileVisible(tile, message.albumMedia.get(tile) != viewerHiddenMessage);
+                    }
+                } else ((PhotoBubbleCell) cell).setPhotoVisible(message != viewerHiddenMessage);
             }
             if (highlightMessageId != 0 && message.id == highlightMessageId) {
                 highlightMessageId = 0;

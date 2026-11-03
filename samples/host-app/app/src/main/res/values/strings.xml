@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="local_emoji_insert">Insert local animated emoji</string>
+    <string name="local_album_sample">Local album from the AAR</string>
+    <string name="album_item">Photo %1$d: host opens its viewer here</string>
 </resources>

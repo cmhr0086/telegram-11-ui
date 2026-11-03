@@ -163,10 +163,33 @@ demo 的 Chat 页末尾有本地 JSON / TGS 混排；更多菜单的 “Insert l
 
 范围：本地 rlottie 静态图层/矢量动画，不含服务器下载、视频/WebM、外置图片资源、自定义表情包选择页及动态反应。当前兼容的 `drawAnimatedEmojis` 叠加入口不二次绘制，独立 overlay 的 alpha/filter/spoiler 参数尚未支持；行内绘制跟随 text paint 和 Canvas 的透明度、裁剪及坐标。媒体说明文字和回复预览尚未接入动画生命周期。
 
+### 相册分组
+
+```java
+TextBubbleMessage album = TextBubbleMessage.album(id, isOut, "12:34", state,
+    photos, caption); // 2..10 个 photo(...) / video(...)，顺序由宿主提供
+AlbumBubbleCell cell = new AlbumBubbleCell(context, resourcesProvider);
+cell.setMessage(album, pinnedTop, pinnedBottom);
+cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+    public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage item) { }
+    public void onAlbumMediaPressed(AlbumBubbleCell cell, TextBubbleMessage group,
+                                   TextBubbleMessage item, int index) {
+        openHostViewer(item, index);
+    }
+});
+```
+
+`GroupedMediaLayout` 直接抽取上游 `MessageObject.GroupedMessages` 的 2/3/4 张特殊布局及多图行枚举/评分，保留 800/1000 span、814 高度基准、比例裁剪和边缘标志。照片尺寸来自 `photoWidth/photoHeight` 或 Drawable intrinsic，未知时按正方形处理。`AlbumBubbleCell` 复用 `PhotoBubbleCell` 的中心裁剪、背景、说明、回复、反应、时间和长按；每格支持原下载/取消/播放图标及视频时长，点击回调给出原 item，整组只显示一次时间/状态。修改成员、尺寸或组说明后重新 `setMessage`。
+
+此处以一个 RecyclerView 行呈现整组，按行将上游逻辑宽归一化、相邻格留 2dp，保留外边圆角和 4dp 内角；没有复制上游多 ChatMessageCell + GridLayoutManager 的不对称 inset 和父层延后绘制，因此不宣称所有像素都与客户端相同。当前是照片/视频缩略图相册，不含文件组、各格独立消息多选/删除、captionAbove、头像让位或组布局变化动画。宿主负责下载、解码、数据持久化和播放。
+
+查看器可通过 `getTileRectOnScreen(index, rect)` / `getTileRadii(index)` 获取来源，`setTileVisible(index, visible)` 隐藏单格。demo 将相册成员与现有媒体展平成查看器序列，翻页/返回对应格；成员无单独说明时每页显示共享说明。同组成员必须是各自独立的消息对象，复用照片可另建模型。Chat 页有 2/3/4/5 张样例，更多菜单可发送 10 张，长按选择整组。AAR 消费示例也有三图相册。
+
 ## 包含的组件
 
 | 类别 | 类 |
 | --- | --- |
+| 相册 | `GroupedMediaLayout`、`AlbumBubbleCell`、`TextBubbleMessage.album(...)`：上游比例分组算法，2–10 张本地照片/视频缩略图、共享说明和单个时间、每格状态及回调 |
 | 导航 | `BaseFragment`、`ActionBarLayout` / `INavigationLayout`、`DrawerLayoutContainer`、`AdjustPanLayoutHelper`、`EmptyBaseFragment` |
 | ActionBar | `ActionBar`、`ActionBarMenu`、`ActionBarMenuItem`（含搜索框）、`ActionBarMenuSubItem`、`ActionBarPopupWindow`、`ActionBarMenuSlider`、`BackDrawable`、`MenuDrawable`、`SimpleTextView`、`FloatingToolbar` / `FloatingActionMode` |
 | 弹窗 | `AlertDialog`（`AlertDialogDecor`、`DarkAlertDialog`）、`BottomSheet` |
@@ -223,7 +246,7 @@ demo 的 Chat 页末尾有本地 JSON / TGS 混排；更多菜单的 “Insert l
 
 ## 已知限制
 
-- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件四种；没有头像、名字、转发、GIF / 圆形视频 / 音乐 / 贴纸 / 位置等其它媒体、相册（多图分组）、带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
+- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件四种；没有头像、名字、转发、GIF / 圆形视频 / 音乐 / 贴纸 / 位置等其它媒体、带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 查看器 `MediaViewer`：只是简易版——没有缩略图条、分享 / 保存 / 转发 / 删除菜单、图片编辑、画中画、倍速、静音、视频缩略图预览、横屏全屏按钮、多图相册分组；视频用系统 `MediaPlayer`（格式取决于设备解码器，没有缓冲进度、不循环），播放中不能连续翻页预加载；图片直接画宿主给的 `Drawable`（大图要宿主自己先缩放）；打开 / 关闭动画不处理被 ActionBar 或输入栏遮住的那部分（上游会裁剪），起点用整张图片的位置；平板没有专门布局
 - 输入栏：附件按钮只回调宿主（没有 `ChatAttachAlert`）；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；没有机器人键盘、命令菜单和 WebView 按钮；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 
@@ -247,7 +270,7 @@ demo 的 Chat 页末尾有本地 JSON / TGS 混排；更多菜单的 “Insert l
 6. **阶段 D：贴纸和 GIF**——`EmojiView` 的贴纸 / GIF 页、`StickersAlert`、`TrendingStickersLayout`，数据由宿主提供（不接 Telegram 服务器）
 7. **对话列表（已完成）**：`DialogCell`、滑动动作、多选、列表动画、文件夹标签、抽屉、写消息按钮；下拉显示隐藏归档（`PullForegroundDrawable`）、文件夹左右翻页（`DialogsViewPager`）也已完成；对话搜索（`DialogsSearchController`）也已完成；`UndoView` 归档/删除撤销已提供，隐藏归档等其它提示尚未移植
 8. **消息菜单与多选（已完成静态版）**：`MessageContextMenu`（单击：遮罩、浮起气泡、弹出菜单、静态表情反应条），长按多选（复选框、ActionMode、底部回复 / 转发栏、拖动连选）；气泡里的反应胶囊（`ReactionsLayoutInBubble`，静态表情 + 计数动画）已完成；后续：动态反应（上游 lottie 选中 / 飞入动画、反应者头像、展开全部反应、自定义表情反应），依赖阶段 C
-9. **媒体气泡（已完成第一批）**：语音、图片、文件；回复引用、链接、日期分隔条、气泡里的反应已完成；后续：视频 / 圆形视频 / 相册
+9. **媒体气泡（已完成第一批）**：语音、图片、文件；回复引用、链接、日期分隔条、气泡里的反应已完成；视频缩略图 / 简易查看器与照片视频相册已提供；后续：圆形视频
 10. 之后可选：`SuggestEmojiView`、提及列表、`MessageSendPreview`（长按发送的消息预览与特效）、机器人键盘
 
 ## 抽取工具（`tools/`）
