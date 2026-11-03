@@ -26,45 +26,54 @@ public class NoClipCanvas extends Canvas {
 
     public Canvas canvas;
     public boolean disableReject;
+    /** Bypass Editor's cached text display lists while keeping normal clipping. */
+    public boolean preserveClipping;
 
     @Override
     public boolean clipRect(float left, float top, float right, float bottom) {
+        if (preserveClipping) return canvas.clipRect(left, top, right, bottom);
         // nop
         return false;
     }
 
     @Override
     public boolean clipRect(@NonNull RectF rect) {
+        if (preserveClipping) return canvas.clipRect(rect);
         // nop
         return false;
     }
 
     @Override
     public boolean clipRect(@NonNull Rect rect) {
+        if (preserveClipping) return canvas.clipRect(rect);
         // nop
         return false;
     }
 
     @Override
     public boolean clipRect(int left, int top, int right, int bottom) {
+        if (preserveClipping) return canvas.clipRect(left, top, right, bottom);
         // nop
         return false;
     }
 
     @Override
     public boolean clipRect(@NonNull Rect rect, @NonNull Region.Op op) {
+        if (preserveClipping) return canvas.clipRect(rect, op);
         // nop
         return false;
     }
 
     @Override
     public boolean clipRect(@NonNull RectF rect, @NonNull Region.Op op) {
+        if (preserveClipping) return canvas.clipRect(rect, op);
         // nop
         return false;
     }
 
     @Override
     public boolean clipRect(float left, float top, float right, float bottom, @NonNull Region.Op op) {
+        if (preserveClipping) return canvas.clipRect(left, top, right, bottom, op);
         // nop
         return false;
     }

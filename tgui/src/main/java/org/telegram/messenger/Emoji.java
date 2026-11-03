@@ -576,11 +576,15 @@ public class Emoji {
         if (!createNew && cs instanceof Spannable) {
             s = (Spannable) cs;
         } else {
-            s = Spannable.Factory.getInstance().newSpannable(cs.toString());
+            // Preserve custom emoji ids and formatting when regular and custom emoji are mixed.
+            s = Spannable.Factory.getInstance().newSpannable(cs);
         }
         ArrayList<EmojiSpanRange> emojis = parseEmojis(s, emojiOnly);
         if (emojis.isEmpty()) {
             return cs;
+        }
+        for (EmojiSpan old : s.getSpans(0, s.length(), EmojiSpan.class)) {
+            s.removeSpan(old);
         }
 
         AnimatedEmojiSpan[] animatedEmojiSpans = s.getSpans(0, s.length(), AnimatedEmojiSpan.class);

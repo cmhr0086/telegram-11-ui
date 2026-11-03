@@ -202,4 +202,9 @@
     <string name="ClearSearchAlertTitle">Clear search history</string>
     <string name="ClearSearchAlert">Are you sure you want to clear your search history?</string>
     <string name="AccDescrOpenMenu">Open navigation menu</string>
+    <string name="Undo">Undo</string>
+    <string name="ChatArchived">Chat archived.</string>
+    <string name="ChatsArchived">Chats archived.</string>
+    <string name="ChatDeletedUndo">Chat deleted</string>
+    <string name="ChatsDeletedUndo">Chats deleted.</string>
 </resources>

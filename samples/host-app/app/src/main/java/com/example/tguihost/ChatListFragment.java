@@ -21,6 +21,7 @@ import org.telegram.ui.Components.DialogsSwipeController;
 import org.telegram.ui.Components.FilterTabsView;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
+import org.telegram.ui.Components.UndoView;
 import org.telegram.ui.TelegramUI;
 
 import java.util.ArrayList;
@@ -36,6 +37,7 @@ public class ChatListFragment extends BaseFragment {
     private DialogsListView listView;
     private Adapter adapter;
     private FilterTabsView tabs;
+    private UndoView undoView;
     private int currentTab;
 
     @Override
@@ -47,6 +49,7 @@ public class ChatListFragment extends BaseFragment {
 
     @Override
     public View createView(Context context) {
+        if (undoView != null) undoView.hide(true, 0);
         actionBar.setTitle("tgui host");
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
@@ -84,8 +87,31 @@ public class ChatListFragment extends BaseFragment {
                 cell.setDialog(d, true);
             }
         });
+        listView.setOnItemLongClickListener((view, position) -> {
+            if (!(view instanceof DialogCell)) return false;
+            undoView.hide(true, 0);
+            DialogItem item = ((DialogCell) view).getDialog();
+            int originalPosition = all.indexOf(item);
+            if (originalPosition < 0) return false;
+            all.remove(item);
+            applyFilter();
+            undoView.updateColors();
+            undoView.showWithAction(UndoView.ACTION_ARCHIVE, null, null, () -> {
+                all.add(Math.min(originalPosition, all.size()), item);
+                applyFilter();
+            });
+            return true;
+        });
         frame.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        undoView = new UndoView(context);
+        frame.addView(undoView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM, 8, 0, 8, 8));
         return fragmentView;
+    }
+
+    @Override
+    public void onPause() {
+        if (undoView != null) undoView.hide(true, 0);
+        super.onPause();
     }
 
     private void createTabs(Context context) {

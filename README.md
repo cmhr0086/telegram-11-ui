@@ -127,10 +127,92 @@ TelegramUI.toggleDayNight(anchorView);                  // 上游抽屉里太阳
 TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 ```
 
+### 归档与删除撤销条
+
+`UndoView` 从上游归档/删除分支裁剪而来，保留 5 秒期限、归档 Lottie、删除数字圆环、10dp 圆角和原进出场动画。先把它加到页面底部（左右/底部各 8dp），宿主立即更新列表的视觉状态，再显示：
+
+```java
+UndoView undo = new UndoView(context, getResourceProvider());
+container.addView(undo, LayoutHelper.createFrame(-1, -2, Gravity.BOTTOM, 8, 0, 8, 8));
+undo.showWithAction(UndoView.ACTION_DELETE, null,
+    () -> commitDeletion(),     // 5 秒到期或被下一条替换时执行一次
+    () -> restoreOriginalRows() // 点击 Undo 时执行一次
+);
+```
+
+支持 `ACTION_ARCHIVE` / `ACTION_ARCHIVE_FEW` / `ACTION_DELETE` / `ACTION_DELETE_FEW`。文案传 null 使用上游字符串，也可以传宿主文本。归档显示动画图标，删除显示数字倒计时。操作、原位置快照和持久化均由宿主负责，库不调用账号或消息控制器；重入时被更晚提示抢占的请求会立即执行 apply。离开页面可调用 `hide(true, 0)` 结算；从窗口移除也会结算待处理操作。主题变化时调用 `updateColors()`，如 demo 在 `getThemeDescriptions()` 中登记 undo 三个颜色键。进度仅在内存中，不承担进程重启后的业务恢复。
+
+示例：原 demo 的 Chat list 页，长按进入多选后归档/删除，或在 Swipe action 菜单选择 Archive/Delete；外部宿主 `samples/host-app` 长按条目可归档并撤销。原位恢复及文件夹过滤由示例代码维护。
+
+### 本地动态表情
+
+```java
+// 在 TelegramUI.init 后设置；宿主管理文件及 documentId 的映射。
+AnimatedEmojiDrawable.setSourceProvider(id -> localFiles.get(id));
+SpannableStringBuilder text = new SpannableStringBuilder("Hello 🐥");
+text.setSpan(new AnimatedEmojiSpan(90001L, edit.getPaint().getFontMetricsInt()),
+    6, 8, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+enterView.setFieldText(text);
+```
+
+`SourceProvider` 在 UI 线程查询，返回已准备好的本地文件；支持普通 Lottie JSON 与 gzip TGS，解压上限 4 MiB，不访问网络。读取、解压和首次创建 rlottie 是同步的，宿主应提前准备小型表情素材。更换映射或文件内容后再次调用 `setSourceProvider`，已有视图下一帧重载。无来源或损坏文件回退为 span 内原文字，库只处理缓存副本，不删除宿主文件。
+
+现有 `ChatActivityEnterView` / `EditTextEffects` 与 `TextBubbleCell` 自动管理布局和 attach/detach；自绘 StaticLayout 的宿主需保存 `AnimatedEmojiSpan.update(cacheType, view, group, layouts)` 的返回值，释放时调用 `release(view, group)`，布局正常 `draw` 即可。独立 drawable 需成对 `addView` / `removeView`，最后解绑回收，重绑可重新加载。发送/存储使用 `MediaDataController.getEntities`，恢复样式后另调 `addAnimatedEmojiSpans`；不要用 `toString()` 丢弃实体。各视图间可用 `cloneSpans` 隔离字体尺寸。
+
+demo 的 Chat 页末尾有本地 JSON / TGS 混排；更多菜单的 “Insert local animated emoji” 可插入原输入栏并发送。素材复用上游已打包的 Utya 动画，压缩成 TGS 仅用于演示本地文件入口。`samples/host-app` 也提供 AAR 消费示例。
+
+范围：本地 rlottie 静态图层/矢量动画，不含服务器下载、视频/WebM、外置图片资源、自定义表情包选择页及动态反应。当前兼容的 `drawAnimatedEmojis` 叠加入口不二次绘制，独立 overlay 的 alpha/filter/spoiler 参数尚未支持；行内绘制跟随 text paint 和 Canvas 的透明度、裁剪及坐标。媒体说明文字和回复预览尚未接入动画生命周期。
+
+### 相册分组
+
+```java
+TextBubbleMessage album = TextBubbleMessage.album(id, isOut, "12:34", state,
+    photos, caption); // 2..10 个 photo(...) / video(...)，顺序由宿主提供
+AlbumBubbleCell cell = new AlbumBubbleCell(context, resourcesProvider);
+cell.setMessage(album, pinnedTop, pinnedBottom);
+cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+    public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage item) { }
+    public void onAlbumMediaPressed(AlbumBubbleCell cell, TextBubbleMessage group,
+                                   TextBubbleMessage item, int index) {
+        openHostViewer(item, index);
+    }
+});
+```
+
+`GroupedMediaLayout` 直接抽取上游 `MessageObject.GroupedMessages` 的 2/3/4 张特殊布局及多图行枚举/评分，保留 800/1000 span、814 高度基准、比例裁剪和边缘标志。照片尺寸来自 `photoWidth/photoHeight` 或 Drawable intrinsic，未知时按正方形处理。`AlbumBubbleCell` 复用 `PhotoBubbleCell` 的中心裁剪、背景、说明、回复、反应、时间和长按；每格支持原下载/取消/播放图标及视频时长，点击回调给出原 item，整组只显示一次时间/状态。修改成员、尺寸或组说明后重新 `setMessage`。
+
+此处以一个 RecyclerView 行呈现整组，按行将上游逻辑宽归一化、相邻格留 2dp，保留外边圆角和 4dp 内角；没有复制上游多 ChatMessageCell + GridLayoutManager 的不对称 inset 和父层延后绘制，因此不宣称所有像素都与客户端相同。当前是照片/视频缩略图相册，不含文件组、各格独立消息多选/删除、captionAbove、头像让位或组布局变化动画。宿主负责下载、解码、数据持久化和播放。
+
+查看器可通过 `getTileRectOnScreen(index, rect)` / `getTileRadii(index)` 获取来源，`setTileVisible(index, visible)` 隐藏单格。demo 将相册成员与现有媒体展平成查看器序列，翻页/返回对应格；成员无单独说明时每页显示共享说明。同组成员必须是各自独立的消息对象，复用照片可另建模型。Chat 页有 2/3/4/5 张样例，更多菜单可发送 10 张，长按选择整组。AAR 消费示例也有三图相册。
+
+### 圆形视频消息
+
+```java
+TextBubbleMessage video = TextBubbleMessage.roundVideo(id, isOut, "12:34", state,
+    thumbnail, localUri, durationSeconds);
+RoundVideoBubbleCell cell = new RoundVideoBubbleCell(context, resourcesProvider);
+cell.setMessage(video, pinnedTop, pinnedBottom);
+cell.setMediaDelegate((source, item) -> hostPlayer.toggle(item));
+// 宿主播放/暂停/进度事件：暂停表示 playing=false、videoPaused=true；停止时两者 false。
+video.playing = isPlaying;
+video.videoPaused = isPaused;
+video.audioProgress = fraction;
+video.audioProgressSec = elapsedSeconds;
+cell.updatePlayingMessageProgress();
+```
+
+`RoundVideoBubbleCell` 按上游普通圆视频分支裁剪：最小侧 0.6 倍直径、圆形中心裁剪、原 `RoundVideoShadow`、17dp 高/6dp 圆角/50% 服务底的时长与未读点、3dp 圆头白色进度环、单个时间和发送状态。圆内点击回调媒体操作，圆外不触发播放；长按可由既有选择回调处理。`mediaState/mediaProgress` 同样走下载/取消/进度 UI。
+
+视频解码和声音由宿主负责。`getVideoRectOnScreen(rect)` 给出上次绘制的圆框；可在透明列表后面放圆形 Surface/TextureView，首帧准备好后 `setVideoVisible(false)` 隐藏缩略图，气泡仍在视频上方画时间、状态和环，并继续接收点击。离屏、暂停页面或解绑时宿主必须停止/释放自己的播放器，恢复缩略图。demo 的 `LocalRoundVideoPlayer` 展示 MediaPlayer + TextureView：居中裁剪、本地六秒素材、暂停/恢复、切换播放、音频焦点丢失暂停、离屏/退出释放。消费端提供纯 UI/回调示例。
+
+当前普通圆视频不支持播放扩大/过渡动画、拖环定位、转写、阅后即焚、画中画及圆消息自身的回复块/反应布局；其它既有气泡的回复和反应保持支持。可引用圆视频到普通文字消息。播放器不是库内媒体服务，不处理录制、下载、后台播放和进程恢复；MediaPlayer 格式兼容性由设备决定。窄圆的两个信息条重叠时，时长条向上避让。
+
 ## 包含的组件
 
 | 类别 | 类 |
 | --- | --- |
+| 圆形视频 | `RoundVideoBubbleCell`、`TextBubbleMessage.roundVideo(...)`、上游 `RoundVideoShadow`：圆形预览、时长、未读/下载状态、播放环及宿主回调 |
+| 相册 | `GroupedMediaLayout`、`AlbumBubbleCell`、`TextBubbleMessage.album(...)`：上游比例分组算法，2–10 张本地照片/视频缩略图、共享说明和单个时间、每格状态及回调 |
 | 导航 | `BaseFragment`、`ActionBarLayout` / `INavigationLayout`、`DrawerLayoutContainer`、`AdjustPanLayoutHelper`、`EmptyBaseFragment` |
 | ActionBar | `ActionBar`、`ActionBarMenu`、`ActionBarMenuItem`（含搜索框）、`ActionBarMenuSubItem`、`ActionBarPopupWindow`、`ActionBarMenuSlider`、`BackDrawable`、`MenuDrawable`、`SimpleTextView`、`FloatingToolbar` / `FloatingActionMode` |
 | 弹窗 | `AlertDialog`（`AlertDialogDecor`、`DarkAlertDialog`）、`BottomSheet` |
@@ -144,6 +226,7 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 | 个人资料 | `ProfileFragment`（上游 `ProfileActivity` 的用户资料页：可折叠头部——头像 / 名字 / 状态随滚动缩放并收进 ActionBar，下拉把头像展开成全宽正方形、名字和状态落在渐变上，松手吸附；写消息浮动按钮的显示 / 隐藏动画；信息行用 `TextDetailCell`、`NotificationsCheckCell`、`TextCell`、红色操作行、`ShadowSectionCell`；⋮ 菜单项和点击回调由宿主提供；滑动返回和日夜切换与其它页面一致） |
 | 媒体查看器 | `MediaViewer`（简易全屏图片 / 视频查看器，不是 `PhotoViewer` 移植，只借用上游的外观和手势数值：从气泡图片位置放大打开、缩回关闭（200ms DecelerateInterpolator），下拉 30dp 后跟手、超过 1/6 屏高关闭、背景按 `max(127, 255 × (1 − |dy| / (宽/4)))` 变淡；双指缩放和双击放大到 3 倍（以手指为中心）、放大后拖动带边界回弹；左右翻页（超过 1/3 屏宽或 650dp/s，页间 15dp，250ms DecelerateInterpolator(1.5)）；0x7f000000 顶栏（返回、发送者、日期和“n of m”）和底部说明文字，单击显示 / 隐藏；视频用系统 `MediaPlayer` + `TextureView`，64dp 播放按钮、播放 / 暂停、可拖动进度条和“当前 / 总时长”；Android 9 到 16 边到边，按系统栏和刘海留出顶栏 / 底栏） |
 | 消息菜单与多选 | `MessageContextMenu`：上游 `ChatActivity.createMenu()` 的消息菜单按原数值移植到纯模型——全屏 0.2 黑色遮罩（`dimBehindView`，EASE_OUT_QUINT 320ms），被长按的气泡画在遮罩之上（裁到列表顶部以下）；`ActionBarPopupWindow` + `ActionBarMenuSubItem` 行（`popup_fixed_alert` 背景、200dp 最小宽度、220ms 收起），位置按上游算法以触点为锚、左右 / 上下夹在屏幕内；上方是 `ReactionsContainerLayout` 样式的反应条（药丸 + 阴影 + 两个小气泡圆点，250ms `OvershootInterpolator(0.5)` 从右向左展开，菜单随之放大淡入，表情按上游延迟依次弹出），表情是 `Emoji` 绘制的静态 Telegram 表情（默认 👍 👎 ❤ 🔥 🥰 👏）。用法：`new MessageContextMenu(context, resourcesProvider).addItem(icon, text, [destructive,] onClick)…setReactions(…).setDelegate(…).show(cell, touchX, touchY)`；颜色每次打开时按当前主题取，日夜都跟随。`setSelectedReactions(message)`（或传 emoji 集合）把已选的反应在反应条里画成上游的样子（`key_listSelector` 圆底、表情缩到 0.76）。和上游 ChatActivity 一样：**单击**消息打开这个菜单，**长按**进入多选；消息列表要 `setInstantClick(true)` + `setDisableHighlightState(true)`（不显示列表点按水波）。多选的单元格部分在 `TextBubbleCell.setCheckBoxVisible / setChecked`（上游 `ChatMessageCell`：21dp `CheckBoxBase` 从左侧滑入、来信气泡右移 35dp、200ms EASE_OUT / EASE_IN，选中时整行 `chat_selectedBackground` 高亮、气泡换成 Selected 颜色、时间用 `*TimeSelectedText`）；ActionMode 本身由宿主搭（demo 的 `DemoChatFragment` 照搬 `createActionMode` / `createBottomMessagesActionButtons`：数量 `NumberTextView`、编辑（单选自己的消息时）/ 复制 / 转发 / 删除图标及 250ms 纵向弹出、返回键变 ×、输入栏换成底部“回复 / 转发”栏，单击切换选中、长按后拖动连选 `RecyclerListView.startMultiselect`）。demo 菜单：回复、复制、编辑（仅自己的消息）、删除（带列表动画）、点反应条里的表情给消息加 / 换 / 取消反应（`toggleReaction` + `notifyItemChanged`，气泡里的胶囊带动画变化）；气泡里的胶囊单击同样切换，长按弹出计数提示 |
+| 撤销提示 | `UndoView`：归档/删除（单项和批量）、5 秒期限、删除倒计时圆环、归档动画，apply/undo 由宿主回调 |
 | 主题 | `Theme`（内置 Classic / Dark / Arctic / Day / Night，从上游 `.attheme` 资源加载；强调色、自动夜间模式（定时 / 光线 / 跟随系统））、`ThemeDescription`、`ThemeColors`、`OKLCH` |
 | 宿主 | `TelegramUI`（初始化 + 主题切换入口）、`TelegramActivity`（生命周期转发、系统栏颜色、日夜切换动画） |
 
@@ -172,13 +255,13 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 | `TLRPC` / `MediaDataController` | `TLRPC` 只剩消息实体（粗体、链接、自定义表情 id…）的纯数据类；`MediaDataController` 只保留文字实体相关的静态方法（`getEntities`、`addStyleToText`、`addTextStyleRuns`…，原样复制） |
 | `ProfileActivity` | 只移植了用户资料页的头部（`needLayout` / `setAvatarExpandProgress` / `needLayoutText` / `TopView` / `OverlaysView` 的数值和动画）、写消息按钮和信息行的单元格，改写成 `ProfileFragment` + 纯模型；去掉头像相册翻页（`ProfileGalleryView`，展开的就是那张 `Profile.photo`）、`SharedMediaLayout` 共享媒体分页（换成 `TextCell` 计数行）、群组 / 频道资料、成员列表、Stories、表情状态、Premium、个人颜色背景与图案、二维码 / 搜索 / 通话按钮、从聊天头像飞入的打开动画、修改头像、`AboutLinkCell`（简介用多行 `TextDetailCell`）、`UndoView` |
 | `EmojiView` | 只保留表情页；贴纸 / GIF 页、自定义和精选表情包、Premium 检查、表情搜索（需要服务器关键词）和长按预览（`ContentPreviewViewer`）都已剥离，输入栏会调用的对应方法保留为空实现。`EmojiTabsStrip` 去掉了表情包标签和 Premium 锁 |
-| `AnimatedEmojiSpan` | 保留自定义表情 id、占一个表情的宽度，动画渲染见路线图 |
+| `AnimatedEmojiSpan` | 保留上游字体尺寸、缩放和行内位置，直接在 ReplacementSpan 中画本地 rlottie；layout 分组管理父 View 的绑定和释放，实体 ID 可往返 |
 | `AlertsCreator` / `CaptionContainerView` / `VideoEditedInfo` | 分别只保留定时发送日期选择器、阅后即焚图标 `PeriodDrawable`、圆形视频裁剪字段 |
 | `RLottieDrawable` / `RLottieImageView` | 上游原版，native 库换成 `libtguilottie.so`；`addParentView` 改收 `View`（无 `ImageReceiver`），`RLottieImageView` 去掉了按 `TLRPC.Document` 加载贴纸的分支。`BitmapsCache` 缓存目录改为 `cacheDir/acache` |
 | `Emoji` | 上游原版；只把 `replaceWithRestrictedEmoji`（服务器的 RestrictedEmoji 动态贴纸集）换成普通 `replaceEmoji`，`useSystemEmoji` / `allowBigEmoji` 由 `SharedConfig` 的静态字段提供 |
-| `AnimatedEmojiDrawable`、`AnimatedEmojiSpan` | 自定义 emoji 只保留常量和 `SwapAnimatedEmojiDrawable`，当普通 Drawable 容器用 |
+| `AnimatedEmojiDrawable` | 宿主以 documentId 提供本地 JSON / gzip TGS；替换 ImageReceiver、账号和网络加载；解压至私有缓存，最后解绑释放原生动画，保留 Swap API |
 | `BackupImageView` | 改成本地 Drawable/Bitmap 视图，支持圆角，不再依赖 `ImageReceiver` 和网络加载 |
-| `EditTextEffects` | 去掉剧透（spoiler）、引用块和自定义 emoji 渲染 |
+| `EditTextEffects` | 保留裁剪修正，接入本地自定义 emoji；剧透粒子和引用块仍未移植 |
 | `URLSpanReplacement` | 点击后用 `ACTION_VIEW` 打开链接 |
 | `LaunchActivity` | 换成 `TelegramUI.Host` / `TelegramActivity` |
 
@@ -186,7 +269,9 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 
 ## 已知限制
 
-- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件四种；没有头像、名字、转发、GIF / 圆形视频 / 音乐 / 贴纸 / 位置等其它媒体、相册（多图分组）、带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
+主题 `.attheme` 解析同时接受 LF / CRLF，壁纸二进制偏移按原始字节计算；`.gitattributes` 固定新检出的主题资源为 LF。Windows 上此前出现的夜间文字透明/缺失已修复，设备覆盖打包的 night/darkblue 与两种换行格式。
+
+- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件四种；没有头像、名字、转发、GIF / 音乐 / 贴纸 / 位置等其它媒体、带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 查看器 `MediaViewer`：只是简易版——没有缩略图条、分享 / 保存 / 转发 / 删除菜单、图片编辑、画中画、倍速、静音、视频缩略图预览、横屏全屏按钮、多图相册分组；视频用系统 `MediaPlayer`（格式取决于设备解码器，没有缓冲进度、不循环），播放中不能连续翻页预加载；图片直接画宿主给的 `Drawable`（大图要宿主自己先缩放）；打开 / 关闭动画不处理被 ActionBar 或输入栏遮住的那部分（上游会裁剪），起点用整张图片的位置；平板没有专门布局
 - 输入栏：附件按钮只回调宿主（没有 `ChatAttachAlert`）；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；没有机器人键盘、命令菜单和 WebView 按钮；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 
@@ -196,7 +281,7 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 - 不能播放 Telegram 贴纸 / TGS 文件的网络加载（没有 `ImageReceiver` / `FileLoader`）；本地文件可以用 `new RLottieDrawable(File, w, h, cacheOptions, limitFps)`
 - 字符串只带了库内实际用到的 49 条英文，加上游自带的部分翻译（ar / de / es / it / ko / nl / pt-BR）；其它语言需要宿主覆盖资源
 - demo 在 Android 9 真机（Huawei MHA-AL00）上完整验证过；Android 16（OnePlus，targetSdk 36 强制边到边）上验证过聊天背景、气泡、Telegram 表情和 `ChatActivityEnterView` 的显示，表情面板（打开、日夜切换、键盘↔面板切换、返回键收起）两台都验证过；这台 OnePlus 的手势导航条高度为 0，所以没能在非零导航栏高度下验证面板位置；输入栏的录音交互还没在 Android 15+ 真机上逐项验证；平板布局没验证
-- 对话列表：隐藏归档没有 Stories 联动（上游下拉时会先展开 Stories 栏）、没有“已隐藏归档”撤销条和归档长按菜单；`archiveHidden` 只存在内存里，由宿主持久化；翻页手势与上游一样只在“滑动切换文件夹”设置下生效（demo 的 Swipe action 菜单第一项），此时普通行不能左滑，归档行仍可左滑；锁定文件夹（Premium 上限）的抖动提示未移植；搜索只有对话页（没有媒体 / 链接 / 文件等标签页、搜索筛选、长按删除单条最近记录），宿主负责最近记录的持久化；没有 Stories、论坛话题、消息缩略图、撤销条（`UndoView`）、平板右侧对话预览；多账号只保留了抽屉里的箭头（`setAccountsArrowVisible`），没有账号列表
+- 对话列表：隐藏归档没有 Stories 联动（上游下拉时会先展开 Stories 栏）、没有“已隐藏归档”撤销条和归档长按菜单；`archiveHidden` 只存在内存里，由宿主持久化；翻页手势与上游一样只在“滑动切换文件夹”设置下生效（demo 的 Swipe action 菜单第一项），此时普通行不能左滑，归档行仍可左滑；锁定文件夹（Premium 上限）的抖动提示未移植；搜索只有对话页（没有媒体 / 链接 / 文件等标签页、搜索筛选、长按删除单条最近记录），宿主负责最近记录的持久化；没有 Stories、论坛话题、消息缩略图、平板右侧对话预览；多账号只保留了抽屉里的箭头（`setAccountsArrowVisible`），没有账号列表
 - 个人资料页：只有一张头像（没有相册翻页和指示条）、没有共享媒体分页、没有从聊天页头像飞入的打开动画；只做了用户资料（没有群组 / 频道）；横屏和平板不能下拉展开头像（与上游一致）
 - `Theme` 里仍留着个人资料相关的 paint/drawable 字段，没用到但可以安全忽略；后续可以继续瘦身
 
@@ -206,11 +291,11 @@ TelegramUI.applyTheme(Theme.getTheme("Arctic Blue"), anchorView);
 2. **阶段 B1（已完成）：Telegram 表情渲染**——上游 `Emoji` / `EmojiData` / `CompoundEmoji` 和全部 emoji 精灵图，输入栏、气泡（含纯 emoji 大号显示）和设置单元格里显示 Telegram 风格表情；输入栏可隐藏录音按钮
 3. **阶段 B2（已完成）：表情面板**——上游 `EmojiView` 的表情页（分类标签、最近使用、肤色选择、退格），替换占位面板，跟随日夜主题切换
 4. **阶段 B3**：表情搜索、动态 / 自定义表情页、贴纸 / GIF 页（与下面 C、D 合并推进）
-5. **阶段 C：动态表情 / 自定义表情**——`AnimatedEmojiDrawable` / `AnimatedEmojiSpan` 的真实渲染（rlottie 已就绪），文字里的自定义表情实体
+5. **阶段 C（本地渲染已完成）：动态表情 / 自定义表情**——`AnimatedEmojiDrawable` / `AnimatedEmojiSpan` 渲染宿主本地 JSON / TGS，输入栏与文字气泡支持混排及实体往返；自定义表情包面板和动态反应仍待后续
 6. **阶段 D：贴纸和 GIF**——`EmojiView` 的贴纸 / GIF 页、`StickersAlert`、`TrendingStickersLayout`，数据由宿主提供（不接 Telegram 服务器）
-7. **对话列表（已完成）**：`DialogCell`、滑动动作、多选、列表动画、文件夹标签、抽屉、写消息按钮；下拉显示隐藏归档（`PullForegroundDrawable`）、文件夹左右翻页（`DialogsViewPager`）也已完成；对话搜索（`DialogsSearchController`）也已完成；后续：撤销条
+7. **对话列表（已完成）**：`DialogCell`、滑动动作、多选、列表动画、文件夹标签、抽屉、写消息按钮；下拉显示隐藏归档（`PullForegroundDrawable`）、文件夹左右翻页（`DialogsViewPager`）也已完成；对话搜索（`DialogsSearchController`）也已完成；`UndoView` 归档/删除撤销已提供，隐藏归档等其它提示尚未移植
 8. **消息菜单与多选（已完成静态版）**：`MessageContextMenu`（单击：遮罩、浮起气泡、弹出菜单、静态表情反应条），长按多选（复选框、ActionMode、底部回复 / 转发栏、拖动连选）；气泡里的反应胶囊（`ReactionsLayoutInBubble`，静态表情 + 计数动画）已完成；后续：动态反应（上游 lottie 选中 / 飞入动画、反应者头像、展开全部反应、自定义表情反应），依赖阶段 C
-9. **媒体气泡（已完成第一批）**：语音、图片、文件；回复引用、链接、日期分隔条、气泡里的反应已完成；后续：视频 / 圆形视频 / 相册
+9. **媒体气泡（已完成第一批）**：语音、图片、文件；回复引用、链接、日期分隔条、气泡里的反应已完成；视频缩略图 / 简易查看器、照片视频相册及普通圆形视频已提供；更高阶媒体能力见各组件限制
 10. 之后可选：`SuggestEmojiView`、提及列表、`MessageSendPreview`（长按发送的消息预览与特效）、机器人键盘
 
 ## 抽取工具（`tools/`）

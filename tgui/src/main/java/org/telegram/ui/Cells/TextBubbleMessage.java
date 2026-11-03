@@ -20,6 +20,8 @@ public class TextBubbleMessage {
     public static final int TYPE_VOICE = 1;
     public static final int TYPE_PHOTO = 2;
     public static final int TYPE_DOCUMENT = 3;
+    public static final int TYPE_ALBUM = 4;
+    public static final int TYPE_ROUND_VIDEO = 5;
 
     /** Media is available locally: voice shows play / pause, files show their extension icon. */
     public static final int MEDIA_READY = 0;
@@ -53,6 +55,8 @@ public class TextBubbleMessage {
     /** Upstream 5-bit packed waveform (as recorded by MediaController / ChatActivityEnterView), may be null. */
     public byte[] waveform;
     public boolean playing;
+    /** Round video has a prepared but paused session; keeps remaining time/progress visible. */
+    public boolean videoPaused;
     public float audioProgress;
     public int audioProgressSec;
     /** Not listened yet: the small dot after the duration. */
@@ -68,6 +72,9 @@ public class TextBubbleMessage {
      * {@link #duration} pill, and MediaViewer plays this uri.
      */
     public android.net.Uri videoUri;
+
+    /** Ordered local photo/video items, 2..10, for TYPE_ALBUM; the group's text is its caption. */
+    public final ArrayList<TextBubbleMessage> albumMedia = new ArrayList<>();
 
     // --- document
     public String fileName;
@@ -165,6 +172,12 @@ public class TextBubbleMessage {
                     case TYPE_PHOTO:
                         text = message.videoUri != null ? "Video" : "Photo";
                         break;
+                    case TYPE_ALBUM:
+                        text = org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.tgui_album);
+                        break;
+                    case TYPE_ROUND_VIDEO:
+                        text = org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.tgui_round_video);
+                        break;
                     default:
                         text = message.fileName != null ? message.fileName : "File";
                         break;
@@ -174,6 +187,10 @@ public class TextBubbleMessage {
             reply.media = media;
             if (message.type == TYPE_PHOTO) {
                 reply.thumb = message.photo;
+            } else if (message.type == TYPE_ROUND_VIDEO) {
+                reply.thumb = message.photo;
+            } else if (message.type == TYPE_ALBUM && !message.albumMedia.isEmpty()) {
+                reply.thumb = message.albumMedia.get(0).photo;
             }
             return reply;
         }
@@ -215,6 +232,34 @@ public class TextBubbleMessage {
         message.type = TYPE_DOCUMENT;
         message.fileName = fileName;
         message.fileSize = fileSize;
+        return message;
+    }
+
+    /** One group row: member ids remain available to the host's media click callback. */
+    public static TextBubbleMessage album(long id, boolean isOut, String time, int state,
+                                          java.util.List<TextBubbleMessage> items, CharSequence caption) {
+        if (items == null || items.size() < 2 || items.size() > 10) {
+            throw new IllegalArgumentException("An album requires 2..10 photo/video items");
+        }
+        java.util.Set<TextBubbleMessage> unique = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (TextBubbleMessage item : items) {
+            if (item == null || item.type != TYPE_PHOTO) throw new IllegalArgumentException("Album members must be photo/video items");
+            if (!unique.add(item)) throw new IllegalArgumentException("Album members must be distinct message objects");
+        }
+        TextBubbleMessage message = new TextBubbleMessage(id, caption, isOut, time, state);
+        message.type = TYPE_ALBUM;
+        message.albumMedia.addAll(items);
+        return message;
+    }
+
+    /** Local circular video; the host owns decoding, audio focus, playback and progress updates. */
+    public static TextBubbleMessage roundVideo(long id, boolean isOut, String time, int state,
+                                               Drawable thumb, android.net.Uri uri, int duration) {
+        TextBubbleMessage message = new TextBubbleMessage(id, null, isOut, time, state);
+        message.type = TYPE_ROUND_VIDEO;
+        message.photo = thumb;
+        message.videoUri = uri;
+        message.duration = Math.max(0, duration);
         return message;
     }
 }

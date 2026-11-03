@@ -70,6 +70,21 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         add("Looks like Telegram 🙂", true, TextBubbleMessage.STATE_READ);
         add("👍", true, TextBubbleMessage.STATE_READ);
         add("Type something below and send it.", false, TextBubbleMessage.STATE_NONE);
+        add(localEmoji(), false, TextBubbleMessage.STATE_NONE);
+        ArrayList<TextBubbleMessage> photos = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            android.graphics.drawable.GradientDrawable image = new android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{0xff5a9bd5 + i * 0x00080000, 0xffa8d6bd});
+            TextBubbleMessage item = TextBubbleMessage.photo(nextId++, false, "12:34", TextBubbleMessage.STATE_NONE, image, null);
+            item.photoWidth = i == 0 ? 320 : 480;
+            item.photoHeight = i == 0 ? 600 : 320;
+            photos.add(item);
+        }
+        messages.add(TextBubbleMessage.album(nextId++, false, "12:34", TextBubbleMessage.STATE_NONE,
+                photos, org.telegram.messenger.ApplicationLoader.applicationContext.getString(com.example.tguihost.R.string.local_album_sample)));
+        messages.add(TextBubbleMessage.roundVideo(nextId++, true, "12:35", TextBubbleMessage.STATE_READ,
+                photos.get(0).photo, null, 6));
         return super.onFragmentCreate();
     }
 
@@ -103,6 +118,9 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                     }
                 } else if (id == MENU_NIGHT) {
                     TelegramUI.toggleDayNight(actionBar);
+                } else if (id == 2) {
+                    enterView.setFieldText(localEmoji());
+                    enterView.getEditField().updateAnimatedEmoji(true);
                 } else if (id == ACTION_DELETE) {
                     for (TextBubbleMessage m : new ArrayList<>(selected)) {
                         int index = messages.indexOf(m);
@@ -114,6 +132,8 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             }
         });
         actionBar.createMenu().addItem(MENU_NIGHT, R.drawable.msg_theme);
+        actionBar.createMenu().addItem(2, R.drawable.msg_emoji_smiles)
+                .setContentDescription(context.getString(com.example.tguihost.R.string.local_emoji_insert));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -156,7 +176,10 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         enterView.setDelegate(new ChatActivityEnterView.ChatActivityEnterViewDelegate() {
             @Override
             public void onSendText(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate) {
-                send(text);
+                android.text.SpannableStringBuilder styled = new android.text.SpannableStringBuilder(text.toString());
+                org.telegram.messenger.MediaDataController.addTextStyleRuns(entities, text, styled);
+                org.telegram.messenger.MediaDataController.addAnimatedEmojiSpans(entities, styled, Theme.chat_msgTextPaint.getFontMetricsInt());
+                send(styled);
             }
         });
         enterView.setRecordButtonVisible(false);
@@ -169,7 +192,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
     }
 
     private void send(CharSequence text) {
-        TextBubbleMessage m = new TextBubbleMessage(nextId++, text.toString(), true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENT);
+        TextBubbleMessage m = new TextBubbleMessage(nextId++, text, true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENT);
         messages.add(m);
         int position = messages.size() - 1;
         listView.getAdapter().notifyItemInserted(position);
@@ -180,6 +203,13 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         if (contentView.getBackgroundImage() instanceof MotionBackgroundDrawable) {
             ((MotionBackgroundDrawable) contentView.getBackgroundImage()).switchToNextPosition();
         }
+    }
+
+    private static CharSequence localEmoji() {
+        android.text.SpannableStringBuilder text = new android.text.SpannableStringBuilder("🐥");
+        text.setSpan(new org.telegram.ui.Components.AnimatedEmojiSpan(90001, Theme.chat_msgTextPaint.getFontMetricsInt()),
+                0, text.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return text;
     }
 
     private void showMenu(View cell, TextBubbleMessage message, float x, float y) {
@@ -340,7 +370,21 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         @NonNull
         @Override
         public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            TextBubbleCell cell = new TextBubbleCell(context, getResourceProvider());
+            TextBubbleCell cell;
+            if (viewType == TextBubbleMessage.TYPE_ALBUM) cell = new org.telegram.ui.Cells.AlbumBubbleCell(context, getResourceProvider());
+            else if (viewType == TextBubbleMessage.TYPE_ROUND_VIDEO) cell = new org.telegram.ui.Cells.RoundVideoBubbleCell(context, getResourceProvider());
+            else cell = new TextBubbleCell(context, getResourceProvider());
+            cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+                @Override public void onMediaPressed(TextBubbleCell source, TextBubbleMessage item) {
+                    if (item.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
+                        Toast.makeText(context, com.example.tguihost.R.string.round_video_host, Toast.LENGTH_SHORT).show();
+                    }
+                }
+                @Override public void onAlbumMediaPressed(org.telegram.ui.Cells.AlbumBubbleCell source,
+                        TextBubbleMessage album, TextBubbleMessage item, int index) {
+                    Toast.makeText(context, context.getString(com.example.tguihost.R.string.album_item, index + 1), Toast.LENGTH_SHORT).show();
+                }
+            });
             cell.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             return new RecyclerListView.Holder(cell);
         }
@@ -359,6 +403,11 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         @Override
         public int getItemCount() {
             return messages.size();
+        }
+
+        @Override
+        public int getItemViewType(int position) {
+            return messages.get(position).type;
         }
     }
 }

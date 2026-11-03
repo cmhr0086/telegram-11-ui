@@ -5,12 +5,23 @@
 ## Unreleased
 
 ### 新增
+- `RoundVideoBubbleCell`：从上游普通圆视频分支裁剪圆形预览、0.6 直径、阴影、时长/未读点、播放进度环和媒体回调；`TextBubbleMessage.roundVideo` / `videoPaused` 表达宿主数据。demo 以本地 MediaPlayer + 圆形 TextureView 实播，支持暂停恢复、切换、离屏/页面退出释放；消费端有纯 UI 示例，设备检查覆盖几何/手势与真实播放器生命周期。
+- 相册分组：从上游 `MessageObject.GroupedMessages` 抽取 `GroupedMediaLayout`，`AlbumBubbleCell` 复用原照片气泡展示 2–10 张本地照片/视频缩略图、说明、回复、反应和单个时间；每格下载状态/播放图标、点击及查看器来源 API，长按选择整组。demo 含 2/3/4/5 张及菜单 10 张样例，消费端含三图相册。单行组合的内部边距与上游多 cell 存在已记录差异。
+- 阶段 C 本地动态表情：`AnimatedEmojiDrawable.SourceProvider` 将 documentId 映射至宿主 JSON / gzip TGS 文件，经私有缓存副本交给既有 rlottie；最后解绑回收，支持重新绑定和来源切换。无账号、下载或 Telegram 服务器依赖。
+- `AnimatedEmojiSpan` 从占位恢复真实行内绘制、上游尺寸/位置、布局分组生命周期、深克隆；原输入栏和文字气泡可混排普通/自定义 emoji，demo 可插入和发送，外部 AAR 样例也接入。
+- `AnimatedEmojiDeviceChecks`：设备上检查 JSON/TGS 原生帧与实际绘制变化、span/实体往返、来源缺失和损坏回退、原文件保留、共享绑定和重新 attach。
+- `UndoView`：从上游 11.4.2 归档/删除分支裁剪，保留单项/批量、5 秒期限、归档 Lottie、删除数字圆环及原布局/动画；删除账号、消息控制器和无关业务分支，操作提交及撤销由宿主回调。
+- 对话列表 demo 支持归档/删除后的原位撤销（单项、批量及文件夹过滤页），外部宿主样例增加长按归档/撤销。
+- 无第三方测试依赖的 `RoadmapInstrumentation`，覆盖 UndoView 的超时、替换、点击、回调重入、窗口移除及窄屏长文本。
 - `MediaViewer`：简易全屏图片 / 视频查看器（`org.telegram.ui.MediaViewer`，不是 `PhotoViewer` 移植，只借用上游外观和手势数值）——从气泡图片位置放大打开、缩回关闭，下拉关闭且背景渐隐，双指 / 双击缩放到 3 倍和拖动，左右翻页，顶栏（返回、发送者、日期、序号）和说明文字，视频用 `MediaPlayer` + `TextureView`（播放 / 暂停、进度条、时间）；数据是纯模型 `MediaViewer.Item`，位置和隐藏源图走 `MediaViewer.Provider`。
 - `TextBubbleMessage.videoUri` 和 `TextBubbleMessage.video(...)`：图片气泡当视频显示（中间播放按钮、左上角上游的时长小胶囊）。
 - `PhotoBubbleCell.getPhotoRect` / `getPhotoRectOnScreen` / `getPhotoRadii` / `setPhotoVisible`，供查看器做打开 / 关闭动画。
 - demo：点图片 / 视频打开查看器，可在聊天里所有已下载的图片和视频之间翻页；加了一条 6 秒的示例视频消息（`demo/res/raw/sample_video.mp4`，80 KB）。
 
 ### 修复
+- 本地 TGS 解压流在成功和异常路径都显式关闭，避免反复加载依赖 GC 释放 inflater；设备用例补充截断 gzip 与超过 4 MiB 解压上限的回退及宿主原件保留。
+- 主题解析忽略 CRLF 的行尾 CR，避免 Windows 检出后数字颜色被读为 0、夜间文字透明；保持 WPS 二进制壁纸偏移，增加 LF/CRLF/打包暗色主题设备检查，并固定 attheme 检出换行。
+- `Emoji.replaceEmoji(createNew=true)` 保留已有样式和自定义表情 span，重建普通 EmojiSpan 时移除旧实例，避免混排丢失 ID 或重复 span；实体回填忽略负起点。
 - 点 `PhotoBubbleCell` 的图片会弹出消息菜单：现在图片区域的单击按上游 `didPressImage` 回调 `MediaDelegate.onMediaPressed`（任何下载状态），说明文字条和气泡其它位置仍然单击出菜单；长按图片照常进入多选、没有按下效果，手指移动超过阈值把手势还给列表滚动。
 
 ## 11.4.2-ui4

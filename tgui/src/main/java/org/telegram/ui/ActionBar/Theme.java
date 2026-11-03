@@ -5486,6 +5486,11 @@ public class Theme {
                     if (bytes[a] == '\n') {
                         int len = a - start + 1;
                         String line = new String(bytes, start, len - 1);
+                        // Windows checkouts can use CRLF. Keep byte offsets unchanged for WPS,
+                        // but do not pass the trailing CR into strict numeric/color parsing.
+                        if (line.endsWith("\r")) {
+                            line = line.substring(0, line.length() - 1);
+                        }
                         if (line.startsWith("WLS=")) {
                             if (wallpaperLink != null && wallpaperLink.length > 0) {
                                 wallpaperLink[0] = line.substring(4);
@@ -6036,6 +6041,7 @@ public class Theme {
             chat_actionBackgroundGradientDarkenPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             chat_actionBackgroundGradientDarkenPaint.setColor(0x15000000);
             chat_timeBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            chat_roundVideoShadow = new RoundVideoShadow();
             chat_contextResult_titleTextPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
             chat_contextResult_titleTextPaint.setTypeface(AndroidUtilities.bold());
             chat_contextResult_descriptionTextPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
