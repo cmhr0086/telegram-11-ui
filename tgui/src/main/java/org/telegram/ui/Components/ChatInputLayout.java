@@ -315,7 +315,7 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
         }
         int keyboardSize = measureKeyboardHeight();
         if (keyboardSize <= AndroidUtilities.dp(20)) {
-            emojiViewPadding = enterView.isPopupShowing() ? enterView.getEmojiPadding() : 0;
+            emojiViewPadding = enterView.isPopupShowing() || enterView.panelAnimationInProgress() ? enterView.getEmojiPadding() : 0;
         } else {
             emojiViewPadding = 0;
         }

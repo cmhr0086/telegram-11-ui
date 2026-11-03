@@ -40,6 +40,7 @@ import org.telegram.ui.Components.StickersAlert;
 import org.telegram.ui.Components.Gif;
 import org.telegram.ui.Components.Attachment;
 import org.telegram.ui.Components.ChatAttachAlert;
+import org.telegram.ui.bots.ReplyKeyboard;
 import org.telegram.ui.TelegramUI;
 
 import java.text.SimpleDateFormat;
@@ -281,6 +282,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
 
         enterView = new ChatActivityEnterView(getParentActivity(), contentView, this, true, getResourceProvider());
         enterView.setDelegate(new ChatActivityEnterView.ChatActivityEnterViewDelegate() {
+            @Override public void onReplyKeyboardButtonPressed(ReplyKeyboard keyboard, ReplyKeyboard.Button button) { onReplyKeyboardButton(keyboard, button); }
             @Override
             public void onSendText(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate) {
                 android.text.SpannableStringBuilder styled = new android.text.SpannableStringBuilder(text.toString());
@@ -302,15 +304,48 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         enterView.setRecordButtonVisible(false);
         contentView.addView(enterView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
         contentView.setEnterView(enterView);
+        enterView.setReplyKeyboard(sampleReplyKeyboard(context, true, false), false);
 
         contentView.addView(actionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
         contentView.setActionBar(actionBar);
         return fragmentView;
     }
 
-    private void showAttachments() {
+    private static ReplyKeyboard sampleReplyKeyboard(Context context, boolean resize, boolean singleUse) {
+        ReplyKeyboard.Button greeting = new ReplyKeyboard.Button("greeting", context.getString(com.example.tguihost.R.string.reply_keyboard_greeting), ReplyKeyboard.Button.Type.TEXT);
+        List<List<ReplyKeyboard.Button>> rows = singleUse ? java.util.Collections.singletonList(java.util.Collections.singletonList(greeting)) : java.util.Arrays.asList(
+                java.util.Arrays.asList(greeting, new ReplyKeyboard.Button("thanks", context.getString(com.example.tguihost.R.string.reply_keyboard_thanks), ReplyKeyboard.Button.Type.TEXT)),
+                java.util.Arrays.asList(new ReplyKeyboard.Button("contact", context.getString(com.example.tguihost.R.string.reply_keyboard_contact), ReplyKeyboard.Button.Type.REQUEST_CONTACT),
+                        new ReplyKeyboard.Button("location", context.getString(com.example.tguihost.R.string.reply_keyboard_location), ReplyKeyboard.Button.Type.REQUEST_LOCATION)),
+                java.util.Arrays.asList(new ReplyKeyboard.Button("poll", context.getString(com.example.tguihost.R.string.reply_keyboard_poll), ReplyKeyboard.Button.Type.POLL),
+                        new ReplyKeyboard.Button("app", context.getString(com.example.tguihost.R.string.reply_keyboard_app), ReplyKeyboard.Button.Type.WEB_VIEW)));
+        return new ReplyKeyboard("sample-reply", rows, resize, singleUse, context.getString(com.example.tguihost.R.string.reply_keyboard_placeholder));
+    }
+
+    private void onReplyKeyboardButton(ReplyKeyboard keyboard, ReplyKeyboard.Button button) {
         if (getParentActivity() == null) return;
-        new ChatAttachAlert(getParentActivity(), new ChatAttachAlert.Delegate() {
+        if (button.type == ReplyKeyboard.Button.Type.TEXT) {
+            send(button.text);
+        } else if (button.type == ReplyKeyboard.Button.Type.REQUEST_CONTACT) {
+            new org.telegram.ui.ActionBar.AlertDialog.Builder(getParentActivity(), getResourceProvider())
+                    .setTitle(getParentActivity().getString(com.example.tguihost.R.string.reply_keyboard_contact))
+                    .setMessage(getParentActivity().getString(com.example.tguihost.R.string.reply_keyboard_contact_confirm))
+                    .setPositiveButton(getParentActivity().getString(org.telegram.tgui.R.string.Send), (dialog, which) -> {
+                        append(TextBubbleMessage.contact(nextId++, true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENT, new TextBubbleMessage.Contact(99, getParentActivity().getString(com.example.tguihost.R.string.reply_keyboard_sample_contact), "+1 202 555 0199", null)));
+                    }).setNegativeButton(getParentActivity().getString(org.telegram.tgui.R.string.Cancel), null).show();
+        } else if (button.type == ReplyKeyboard.Button.Type.REQUEST_LOCATION || button.type == ReplyKeyboard.Button.Type.POLL) {
+            enterView.hidePopup(false);
+            showAttachments(button.type == ReplyKeyboard.Button.Type.POLL ? ChatAttachAlert.TAB_POLL : ChatAttachAlert.TAB_LOCATION);
+        } else {
+            Toast.makeText(getParentActivity(), getParentActivity().getString(com.example.tguihost.R.string.reply_keyboard_action, button.id), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void showAttachments() { showAttachments(ChatAttachAlert.TAB_GALLERY); }
+
+    private void showAttachments(int initialTab) {
+        if (getParentActivity() == null) return;
+        ChatAttachAlert sheet = new ChatAttachAlert(getParentActivity(), new ChatAttachAlert.Delegate() {
             @Override public List<Attachment.Contact> getContacts() {
                 ArrayList<Attachment.Contact> contacts = new ArrayList<>();
                 contacts.add(new Attachment.Contact(1, getParentActivity().getString(com.example.tguihost.R.string.attach_sample_contact_one), "+1 202 555 0101", null));
@@ -363,7 +398,9 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 }
                 if (!android.text.TextUtils.isEmpty(caption)) append(new TextBubbleMessage(nextId++, caption, true, time, TextBubbleMessage.STATE_SENT));
             }
-        }, getResourceProvider()).show();
+        }, getResourceProvider());
+        sheet.selectTab(initialTab);
+        sheet.show();
     }
 
     private static TextBubbleMessage.Poll samplePoll(Context context, boolean multiple, boolean closed) {

@@ -10,18 +10,25 @@
 | --- | --- | --- |
 | A 贴纸与 GIF | 已完成，限制见下 | PR #2，库/消费端/仪器及 MuMu 真操作通过；WEBM 首帧降级 |
 | B 附件菜单 | 已实现并推送 PR #3 | 主体/五页/权限/选择/确认与宿主回调；简化交互和人工补验见下 |
-| C 更多消息 | 进行中 | 未读/服务/群聊/转发/联系人/音乐/位置/投票/文件缩略图/内联按钮已完成；回复键盘待实现 |
+| C 更多消息 | 已完成，限制见下 | PR #4；11项功能已实现，库/消费端/完整设备回归通过，人工补验见各项记录 |
 | D 输入增强 | 未开始 | 提及、表情联想、命令、发送预览 |
 | E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
 
-roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；不能将 C–F 计为完成。
+roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；阶段 C 现已完成本任务的11项功能；D–F仍未开始。
 
 ### 阶段 C 当前交接
 
+- 回复键盘完成，随本次独立提交推送：直接搬运 `ui/bots/BotKeyboardView`，保留原GPL、42dp最小行高/16dp文字/15dp外距/10dp行列距和原颜色；`ReplyKeyboard` 不可变快照替换TL标记。原输入栏恢复48dp入口、紧凑/全高/单次/移除、占位提示、表情互斥及宿主动作回调；demo/sample接入，无新增权限、网络或运行依赖。
+- 回复键盘审查：旧按钮重绑/清空后不派发；单次回调重入替换模型不关闭新面板；编辑/录音/销毁阻止打开；切换前清理贴纸展开与搜索。修复关闭动画中IME出现的旧动画竞态；ChatInputLayout在退场期间保留面板padding，避免输入栏先跳到底部再位移。原上游按钮再次点击为收起，不擅自改成强制开启IME。
+- 回复键盘验证：最终库release/demo/debugAndroidTest/publish（TEMP/phase-c-reply-verified-build.log）及独立host debug/R8（phase-c-reply-final-host.log）通过。component=reply_keyboard（phase-c-reply-final-device.log）和完整MuMu Android15回归（phase-c-reply-full-device.log）通过，含旧TGS末段/循环后续播、GIF重绑续播/收藏尺寸。专项涵盖快照/重复ID、42dp/等宽/全高、主题provider、旧按钮失效、面板切换/单次/回调重入/提示恢复、编辑录音门禁、销毁后重建及关闭动画→IME竞态。
+- 回复键盘真操作：紧凑/全高/单次/移除、发送文字、虚构联系人确认并发送、夜间主题与表情切换、单次发送后关闭及重新展开，位置/投票按钮打开正确附件页。截图TEMP/reply-{entry,compact,text,contact-confirm,night,emoji,full,once,once-sent,removed,location,poll}.png；无AndroidRuntime崩溃输出。sample仅构建，未单独安装实操。
+- 回复键盘限制：未移植Telegram answered/closed持久化、persistent常驻、Web App容器、请求用户/群选择器；业务由宿主负责。MuMu仅有搜狗IME，临时开启show_ime_with_hard_keyboard后系统报告IME显示，但没有可见软键盘/非零高度过渡，因此不声称真实IME动画已验；设置已恢复原0。实际软键盘过渡、其它Android版本/平板/大字体需人工补验。README/CHANGELOG已更新，无旧API不兼容变更。
+- 阶段 C 的11项功能已完成；PR #4随本次收尾更新并转为可审查，不自行合并。下一阶段 D 从阶段 C 分支继续。
+
 - 文件缩略图独立提交7d082f4已推送，PR #4已更新。inline keyboard现已实现并完成下述验证，随本次独立提交推送。
 
-- 已提交并推送未读 f4d10cd、服务 7db39c1、群聊 4441ce7、转发864201e；[PR #4](https://github.com/cmhr0086/telegram-11-ui/pull/4) 为 draft，目标 dev/ui-lib，汇总 A–F 状态和未验证部分。C 尚有后续功能，保持 draft；不合并，不改 main。联系人cc8d05a已提交推送。音乐00140ca已提交推送。位置气泡已实现并通过最终构建和设备验收，随本次独立提交推送。
+- 已提交并推送未读 f4d10cd、服务 7db39c1、群聊 4441ce7、转发864201e；[PR #4](https://github.com/cmhr0086/telegram-11-ui/pull/4) 为 draft，目标 dev/ui-lib，汇总 A–F 状态和未验证部分。此为当时状态；C现已完成，收尾将转为可审查；不合并，不改 main。联系人cc8d05a已提交推送。音乐00140ca已提交推送。位置气泡已实现并通过最终构建和设备验收，随本次独立提交推送。
 - ChatUnreadCell 经 tools/pull 搬运，保留原尺寸/密度资源/GPL；增加主题刷新、demo 锚点跳转和宿主预览。库release/demo/仪器构建及host debug/R8通过（TEMP/phase-c-unread-build.log、phase-c-unread-demo.log、phase-c-unread-host.log）；设备component=unread通过，实测聊天菜单跳转及夜→日刷新，截图TEMP/unread-night.png、unread-day.png。
 - 服务消息已完成：复用 ChatActionCell 原文字胶囊，移植 MessageObject 文字分支为纯 ServiceMessage（普通群返回/大型群加入、邀请、改名、各媒体类型置顶、自定义），用户/置顶目标通过回调交宿主。demo 菜单定位和点击置顶跳原文、日夜显示通过；host 信息按钮预览。库release/demo/test/publish及host debug/R8通过（TEMP/phase-c-service-build.log、phase-c-service-test-build.log、phase-c-service-host.log）；component=service通过（phase-c-service-device.log）。覆盖模板占位、emoji span、同文字换ID、取消点击、两类群加入、20字符预览、清空layout和日期复用。初次测试把span插入顺序误认为文字顺序，已按真实文本位置排序并依实际layout坐标触摸，生产回调断言保留。截图service-day.png、service-night.png、service-pin.png。未迁移服务卡片/礼物、按压高亮、逐链接无障碍导航。
 - 群聊已完成：Sender/原ID姓名配色、组首姓名、42dp头像/48dp列、300秒同发送者合并，复用既有各类气泡；贴纸/圆视频/纯emoji按无背景分支绘制旁侧名字，列表ChatAvatarDecoration复用上游可视组吸底逻辑。demo菜单可切换，sample使用群聊模型；旧API仍可默认行内绘制。头像padding/透明度、API21比较器和贴纸姓名8dp偏移已修；贴纸/圆视频保持原尺寸上限而非再扣头像列缩小。
@@ -60,7 +67,7 @@ roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功�
 - 内联验证：首轮root构建通过（TEMP/phase-c-inline-build.log）；修正后库release/demo/debugAndroidTest/publish（phase-c-inline-final-build.log）与独立host debug/R8（phase-c-inline-host.log）通过。component=inline（phase-c-inline-device.log）及完整MuMu Android15回归（phase-c-inline-full-device.log）通过，后者含旧TGS完整周期/GIF重绑续播/收藏尺寸。专项覆盖12种气泡×收发×240/400dp、原44dp/边界/占高、URL/loading对象身份、取消重绑选择/父拦截/真实长按、群聊forward+reply+反应的背景时间头像保持、纯emoji与detach/reattach；主题provider路径有覆盖，真实日夜由实操核验。
 - 内联真操作：夜间文字按钮Confirm本地loading→恢复、Website回调、Search here填入输入框、Copy code复制并粘贴出TGUI-1142、URL长按身份；切日间正确刷新。发出图片下按钮loading、长按图片选中1条、退出选择后图片打开正确第4/18张查看器并返回通过，无AndroidRuntime错误。截图TEMP/inline-{night,loading,url-final,query,copy,long,day,paste,photo,photo-loading,selected,viewer}.png。inline-url.png仍显示上一条排队Toast，正确URL回调证据为inline-url-final.png。
 - 内联限制：支付/收据/星币、Web App登录、Telegram邀请识别、服务端callback查询/布局形变过渡未移植；按钮逐项无障碍虚拟节点、多点触控取消未实现。URL样例仅Toast，不访问网络；Confirm为1200ms本地状态模拟。其它Android版本/平板/复杂RTL长按钮/大字体需人工检查；README/CHANGELOG/demo/sample已更新。
-- 下一项：reply keyboard。阶段 C 仍未完成，D–F 未开始；不得把已完成项当作整个目标完成。
+- 下一项：阶段 D 的 MentionsContainerView / SuggestEmojiView / 机器人命令 / MessageSendPreview；D–F 未完成，不得将阶段 C 完成视为整个目标完成。
 
 ### 阶段 B 当前交接
 

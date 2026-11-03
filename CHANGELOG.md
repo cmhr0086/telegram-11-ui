@@ -5,6 +5,7 @@
 ## Unreleased
 
 ### 新增
+- 阶段 C：直接搬运 `org.telegram.ui.bots.BotKeyboardView`，用不可变 `ReplyKeyboard` 代替 TL 标记；原输入栏恢复回复键盘入口、表情/IME切换、单次使用和占位提示，所有按钮动作回调宿主。demo/sample 接入，无新权限、网络层或运行依赖。
 - 阶段 C：从上游 ChatMessageCell 搬运内联按钮布局/绘制/触摸，既有气泡共用 `InlineButton` 行模型、宿主点击/长按与 loading 快照；保留原尺寸、service 颜色和按压/加载动画，demo/sample 接入，无网络层或新依赖。
 - 阶段 C：扩展既有 `DocumentBubbleCell` 的上游文件缩略图分支，新增宿主 `documentThumbnail` 和带缩略图/说明的 `document(...)` 重载；保留原无图 API，支持原86dp预览、下载状态与宿主打开/菜单回调，demo/sample 均接入。
 - 阶段 C：`PollBubbleCell` 从上游投票分支裁剪单选、多选、票数/结果条形及过渡；`TextBubbleMessage.Poll` / `PollOption` 为宿主快照，提交和结果通过回调交宿主。demo/sample 支持附件创建后发送可投票气泡，无新增运行依赖或网络层。

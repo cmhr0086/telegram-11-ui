@@ -61,4 +61,19 @@
     <string name="inline_long_action">Host long-press callback: %1$s</string>
     <string name="inline_query">@sample search</string>
     <string name="inline_copy_value">TGUI-1142</string>
+    <string name="reply_keyboard_menu">Reply keyboard</string>
+    <string name="reply_keyboard_compact">Compact keyboard</string>
+    <string name="reply_keyboard_full">Full-height keyboard</string>
+    <string name="reply_keyboard_once">Single-use keyboard</string>
+    <string name="reply_keyboard_remove">Remove keyboard</string>
+    <string name="reply_keyboard_greeting">Hello 👋</string>
+    <string name="reply_keyboard_thanks">Thanks!</string>
+    <string name="reply_keyboard_contact">Share sample contact</string>
+    <string name="reply_keyboard_location">Choose location</string>
+    <string name="reply_keyboard_poll">Create poll</string>
+    <string name="reply_keyboard_app">Open app</string>
+    <string name="reply_keyboard_placeholder">Choose a reply or type a message</string>
+    <string name="reply_keyboard_contact_confirm">Send the fictional contact from this demo?</string>
+    <string name="reply_keyboard_sample_contact">Demo user</string>
+    <string name="reply_keyboard_action">Host keyboard action: %1$s</string>
 </resources>

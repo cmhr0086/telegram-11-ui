@@ -238,6 +238,9 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     }
 
     public interface ChatActivityEnterViewDelegate {
+        /** All reply-keyboard actions are owned by the host. */
+        default void onReplyKeyboardButtonPressed(org.telegram.ui.bots.ReplyKeyboard keyboard, org.telegram.ui.bots.ReplyKeyboard.Button button) { }
+
 
         default void onEditTextScroll() {};
         
@@ -663,6 +666,11 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     private ImageView expandStickersButton;
     private boolean emojiViewFrozen;
     private EmojiView emojiView;
+    private org.telegram.ui.bots.BotKeyboardView botKeyboardView;
+    private org.telegram.ui.bots.ReplyKeyboard replyKeyboard;
+    private ImageView botButton;
+    private ReplaceableIconDrawable botButtonDrawable;
+    private boolean botKeyboardViewVisible;
     private AnimatorSet panelAnimation;
     private boolean emojiViewVisible;
     private TimerView recordTimerView;
@@ -4797,6 +4805,14 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         if (emojiView != null) {
             emojiView.onDestroy();
         }
+        cancelReplyPanelAnimation();
+        if (botKeyboardView != null) {
+            botKeyboardView.setDelegate(null); botKeyboardView.setButtons(null);
+            if (botKeyboardView.getParent() instanceof android.view.ViewGroup) ((android.view.ViewGroup) botKeyboardView.getParent()).removeView(botKeyboardView);
+            botKeyboardView = null;
+        }
+        botKeyboardViewVisible = false; replyKeyboard = null; emojiPadding = 0;
+        if (botButton != null) botButton.setVisibility(GONE);
         if (updateSlowModeRunnable != null) {
             AndroidUtilities.cancelRunOnUIThread(updateSlowModeRunnable);
             updateSlowModeRunnable = null;
@@ -5072,6 +5088,8 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             messageEditText.setHintText(editingCaption ? getString("Caption", R.string.Caption) : getString("TypeMessage", R.string.TypeMessage));
         } else if (replyingMessageObject != null && replyHint != null) {
             messageEditText.setHintText(replyHint, animated);
+        } else if (botKeyboardViewVisible && replyKeyboard != null && !TextUtils.isEmpty(replyKeyboard.placeholder)) {
+            messageEditText.setHintText(replyKeyboard.placeholder, animated);
         } else if (isChannel()) {
             if (silent) {
                 messageEditText.setHintText(getString("ChannelSilentBroadcast", R.string.ChannelSilentBroadcast), animated);
@@ -6324,6 +6342,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 layoutParams.rightMargin = dp(2);
             }
         }
+        if ((attachVisible != 0 || !isChat) && botButton != null && botButton.getVisibility() == VISIBLE) layoutParams.rightMargin += dp(48);
         if (oldRightMargin != layoutParams.rightMargin) {
             messageEditText.setLayoutParams(layoutParams);
         }
@@ -6354,6 +6373,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             recordCircle.voiceEnterTransitionInProgress = false;
         }
         if (recordingAudioVideo) {
+            if (botKeyboardViewVisible) showPopup(0, 1, false);
             if (recordInterfaceState == 1) {
                 lastRecordState = recordState;
                 return;
@@ -7211,6 +7231,8 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         boolean hadEditingMessage = editingMessageObject != null;
         editingMessageObject = messageObject;
         editingCaption = caption;
+        if (messageObject != null && botKeyboardViewVisible) showPopup(0, 1, false);
+        updateReplyKeyboardButton();
         CharSequence textToSetWithKeyboard;
         if (editingMessageObject != null) {
             if (doneButtonAnimation != null) {
@@ -7499,6 +7521,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 Theme.key_chat_messagePanelCancelInlineBot, Theme.key_chat_recordTime, Theme.key_chat_recordVoiceCancel, Theme.key_chat_recordedVoiceBackground,
                 Theme.key_chat_recordedVoiceDot, Theme.key_chat_recordedVoicePlayPause, Theme.key_chat_recordedVoiceProgress, Theme.key_chat_recordedVoiceProgressInner,
                 Theme.key_chat_emojiPanelBackground, Theme.key_chat_emojiPanelNewTrending, Theme.key_chat_messageLinkOut, Theme.key_chat_TextSelectionCursor,
+                Theme.key_chat_botKeyboardButtonText, Theme.key_chat_botKeyboardButtonBackground, Theme.key_chat_botKeyboardButtonBackgroundPressed,
                 Theme.key_chat_inTextSelectionHighlight, Theme.key_listSelector, Theme.key_windowBackgroundWhiteGrayText,
                 // upstream ChatActivity.getThemeDescriptions(): the emoji panel
                 Theme.key_chat_emojiPanelShadowLine, Theme.key_chat_emojiPanelEmptyText, Theme.key_chat_emojiPanelIcon, Theme.key_chat_emojiPanelIconSelected,
@@ -7583,7 +7606,8 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             emojiButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector)));
         }
-
+        if (botButtonDrawable != null) botButtonDrawable.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_chat_messagePanelIcons), PorterDuff.Mode.MULTIPLY));
+        if (botKeyboardView != null) botKeyboardView.updateColors();
     }
 
     private void updateRecordedDeleteIconColors() {
@@ -7854,11 +7878,11 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     }
 
     public boolean isPopupView(View view) {
-        return view == emojiView;
+        return view == emojiView || view == botKeyboardView;
     }
 
     public int getPopupViewHeight(View view) {
-        return -1;
+        return view == botKeyboardView && botKeyboardView != null ? botKeyboardView.getKeyboardHeight() : -1;
     }
 
     public boolean isRecordCircle(View view) {
@@ -8140,6 +8164,89 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         }
     }
 
+    /** Sets a host-owned reply keyboard and opens it when the field is empty. */
+    public void setReplyKeyboard(org.telegram.ui.bots.ReplyKeyboard keyboard) { setReplyKeyboard(keyboard, true); }
+
+    /** @param openIfEmpty open when the field is empty and no other panel is visible */
+    public void setReplyKeyboard(org.telegram.ui.bots.ReplyKeyboard keyboard, boolean openIfEmpty) {
+        if (destroyed) return;
+        replyKeyboard = keyboard;
+        boolean usable = keyboard != null && !keyboard.rows.isEmpty();
+        if (!usable) {
+            if (botKeyboardViewVisible) showPopup(0, 1, false);
+            if (botKeyboardView != null) botKeyboardView.setButtons(null);
+        } else {
+            ensureReplyKeyboardView();
+            int height = AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y ? keyboardHeightLand : keyboardHeight;
+            botKeyboardView.setPanelHeight(height > 0 ? height : defaultKeyboardHeight());
+            botKeyboardView.setButtons(keyboard);
+            if (botKeyboardViewVisible) showPopup(1, 1, false);
+            else if (openIfEmpty && (messageEditText == null || TextUtils.isEmpty(messageEditText.getText())) && !isPopupShowing() && !keyboardVisible) showReplyKeyboard();
+        }
+        updateReplyKeyboardButton(); updateFieldHint(false);
+    }
+    public void showReplyKeyboard() {
+        if (replyKeyboard == null || replyKeyboard.rows.isEmpty() || editingMessageObject != null || recordingAudioVideo || recordInterfaceState != 0 || audioToSend != null || videoToSendMessageObject != null || destroyed) return;
+        if (searchingType != 0) {
+            setSearchingTypeInternal(0, false);
+            if (emojiView != null) emojiView.closeSearch(false);
+        }
+        if (stickersExpanded) setStickersExpanded(false, false, false);
+        ensureReplyKeyboardView(); showPopup(1, 1);
+    }
+    public org.telegram.ui.bots.BotKeyboardView getReplyKeyboardView() { return botKeyboardView; }
+    public boolean isReplyKeyboardShowing() { return botKeyboardViewVisible; }
+    public View getReplyKeyboardButton() { return botButton; }
+
+    private void ensureReplyKeyboardView() {
+        if (botKeyboardView != null) return;
+        botKeyboardView = new org.telegram.ui.bots.BotKeyboardView(getContext(), resourcesProvider) {
+            @Override public void setTranslationY(float value) {
+                super.setTranslationY(value);
+                if (panelAnimation != null && animatingContentType == 1) dispatchBottomPanelTranslation(value);
+            }
+        };
+        botKeyboardView.setVisibility(GONE);
+        botKeyboardView.setDelegate(button -> {
+            org.telegram.ui.bots.ReplyKeyboard selected = replyKeyboard;
+            if (selected == null || destroyed) return;
+            if (delegate != null) delegate.onReplyKeyboardButtonPressed(selected, button);
+            if (selected == replyKeyboard && selected.singleUse && botKeyboardViewVisible) showPopup(0, 1);
+        });
+    }
+    private void attachReplyKeyboardView() {
+        if (botKeyboardView.getParent() == null && sizeNotifierLayout != null) {
+            int index = sizeNotifierLayout.indexOfChild(this);
+            index = index >= 0 ? index + 1 : sizeNotifierLayout.getChildCount();
+            if (!shouldDrawBackground) index = sizeNotifierLayout.getChildCount();
+            sizeNotifierLayout.addView(botKeyboardView, index, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.BOTTOM));
+        }
+    }
+    private void updateReplyKeyboardButton() {
+        boolean show = replyKeyboard != null && !replyKeyboard.rows.isEmpty() && editingMessageObject == null && !destroyed;
+        if (show && botButton == null && messageEditTextContainer != null) {
+            botButton = new ImageView(getContext()); botButtonDrawable = new ReplaceableIconDrawable(getContext());
+            botButtonDrawable.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_chat_messagePanelIcons), PorterDuff.Mode.MULTIPLY));
+            botButtonDrawable.setIcon(R.drawable.input_bot2, false); botButton.setImageDrawable(botButtonDrawable);
+            botButton.setScaleType(ImageView.ScaleType.CENTER); botButton.setContentDescription(getContext().getString(R.string.AccDescrBotKeyboard));
+            if (Build.VERSION.SDK_INT >= 21) botButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector)));
+            if (attachLayout != null) attachLayout.addView(botButton, 0, LayoutHelper.createLinear(48, 48));
+            else messageEditTextContainer.addView(botButton, LayoutHelper.createFrame(48, 48, Gravity.BOTTOM | Gravity.RIGHT));
+            botButton.setOnClickListener(v -> { if (botKeyboardViewVisible) showPopup(0, 1); else showReplyKeyboard(); });
+        }
+        if (botButton != null) botButton.setVisibility(show ? VISIBLE : GONE);
+        if (messageEditText != null && editingMessageObject == null) updateFieldRight(attachLayout != null && attachLayout.getVisibility() == VISIBLE ? 1 : 0);
+        if (attachLayout != null) attachLayout.setPivotX(dp(show || notifyButton != null && notifyButton.getVisibility() == VISIBLE ? 96 : 48));
+    }
+    private void cancelReplyPanelAnimation() {
+        AndroidUtilities.cancelRunOnUIThread(runEmojiPanelAnimation);
+        if (panelAnimation != null) {
+            panelAnimation.removeAllListeners(); panelAnimation.cancel(); panelAnimation = null; notificationsLocker.unlock();
+            dispatchBottomPanelTranslation(0);
+        }
+        animationEndRunnable = null;
+    }
+
     public void showEmojiView() {
         showPopup(1, 0);
     }
@@ -8152,6 +8259,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         if (show == 2) {
             return;
         }
+        cancelReplyPanelAnimation();
         if (show == 1) {
             if (contentType == 0) {
                 if (parentActivity == null && emojiView == null) {
@@ -8166,13 +8274,28 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             int previousHeight = 0;
             if (contentType == 0) {
                 attachEmojiView();
+                if (botKeyboardView != null && botKeyboardView.getVisibility() == VISIBLE) {
+                    previousHeight = botKeyboardView.getMeasuredHeight();
+                    botKeyboardView.setTranslationY(0); botKeyboardView.setVisibility(GONE); botKeyboardViewVisible = false;
+                    anotherPanelWasVisible = true;
+                }
                 samePannelWasVisible = emojiViewVisible && emojiView.getVisibility() == View.VISIBLE;
-                emojiView.setVisibility(VISIBLE);
+                emojiView.setTranslationY(0); emojiView.setVisibility(VISIBLE);
                 emojiViewVisible = true;
                 emojiView.setShowing(true);
                 currentView = emojiView;
                 animatingContentType = 0;
+            } else if (contentType == 1 && botKeyboardView != null && replyKeyboard != null) {
+                attachReplyKeyboardView();
+                samePannelWasVisible = botKeyboardViewVisible && botKeyboardView.getVisibility() == VISIBLE;
+                if (emojiView != null && emojiView.getVisibility() == VISIBLE) {
+                    previousHeight = emojiView.getMeasuredHeight(); emojiView.setShowing(false); emojiView.setTranslationY(0);
+                    emojiView.setVisibility(GONE); sizeNotifierLayout.removeView(emojiView); emojiViewVisible = false; anotherPanelWasVisible = true;
+                }
+                botKeyboardView.setTranslationY(0); botKeyboardView.setVisibility(VISIBLE); botKeyboardViewVisible = true;
+                currentView = botKeyboardView; animatingContentType = 1;
             }
+            if (currentView == null) return;
             currentPopupContentType = contentType;
 
             if (keyboardHeight <= 0) {
@@ -8184,6 +8307,10 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             int currentHeight = AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y ? keyboardHeightLand : keyboardHeight;
             if (parentFragment != null && parentFragment.getParentLayout() != null) {
                 currentHeight -= parentFragment.getParentLayout().getBottomTabsHeight(false);
+            }
+            if (contentType == 1 && botKeyboardView != null) {
+                botKeyboardView.setPanelHeight(currentHeight);
+                if (!botKeyboardView.isFullSize()) currentHeight = Math.min(currentHeight, botKeyboardView.getKeyboardHeight());
             }
             /*if (!samePannelWasVisible && !anotherPanelWasVisible) {
                 currentHeight = 0;
@@ -8203,9 +8330,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 onWindowSizeChanged();
                 if (smoothKeyboard && !keyboardVisible && currentHeight != previousHeight && allowAnimation) {
                     Runnable onAnimationEndRunnuble = () -> {
-                        if (delegate != null) {
-                            dispatchBottomPanelTranslation(0);
-                        }
+                        dispatchBottomPanelTranslation(0);
                         requestLayout();
                     };
                     if (overrideKeyboardAnimation) {
@@ -8235,10 +8360,10 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 setEmojiButtonImage(false, true);
             }
             currentPopupContentType = -1;
-            if (emojiView != null) {
+            if (emojiView != null && (emojiViewVisible || emojiView.getVisibility() == VISIBLE)) {
                 if (show != 2 || AndroidUtilities.usingHardwareInput || AndroidUtilities.isInMultiwindow) {
-                    if (smoothKeyboard && !keyboardVisible && !stickersExpanded) {
-                        if (emojiViewVisible = true) {
+                    if (smoothKeyboard && !keyboardVisible && !stickersExpanded && allowAnimation) {
+                        if (emojiViewVisible) {
                             animatingContentType = 0;
                         }
                         emojiView.setShowing(false);
@@ -8297,6 +8422,27 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                     emojiView = null;
                 }
                 emojiViewVisible = false;
+            }
+            if (botKeyboardView != null && (botKeyboardViewVisible || botKeyboardView.getVisibility() == VISIBLE)) {
+                botKeyboardViewVisible = false;
+                final org.telegram.ui.bots.BotKeyboardView closingView = botKeyboardView;
+                if (smoothKeyboard && !keyboardVisible && allowAnimation) {
+                    animatingContentType = 1;
+                    panelAnimation = new AnimatorSet();
+                    panelAnimation.playTogether(ObjectAnimator.ofFloat(closingView, View.TRANSLATION_Y, closingView.getMeasuredHeight()));
+                    panelAnimation.setInterpolator(AdjustPanLayoutHelper.keyboardInterpolator);
+                    panelAnimation.setDuration(AdjustPanLayoutHelper.keyboardDuration);
+                    panelAnimation.addListener(new AnimatorListenerAdapter() {
+                        @Override public void onAnimationEnd(Animator animation) {
+                            panelAnimation = null; closingView.setTranslationY(0); closingView.setVisibility(GONE);
+                            emojiPadding = 0; notificationsLocker.unlock(); dispatchBottomPanelTranslation(0); requestLayout();
+                        }
+                    });
+                    notificationsLocker.lock(); AndroidUtilities.runOnUIThread(runEmojiPanelAnimation, 50); requestLayout();
+                } else {
+                    closingView.setTranslationY(0); closingView.setVisibility(GONE); emojiPadding = 0;
+                    dispatchBottomPanelTranslation(0); if (sizeNotifierLayout != null) sizeNotifierLayout.requestLayout();
+                }
             }
         }
 
@@ -8505,7 +8651,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     }
 
     public boolean isPopupShowing() {
-        return emojiViewVisible;
+        return emojiViewVisible || botKeyboardViewVisible;
     }
 
     public boolean closeCreationLinkDialog() {
@@ -8570,6 +8716,10 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             View currentView = null;
             if (currentPopupContentType == 0) {
                 currentView = emojiView;
+            } else if (currentPopupContentType == 1 && botKeyboardView != null) {
+                botKeyboardView.setPanelHeight(newHeight);
+                if (!botKeyboardView.isFullSize()) newHeight = Math.min(newHeight, botKeyboardView.getKeyboardHeight());
+                currentView = botKeyboardView;
             }
 
             if (currentView != null) {
@@ -8584,6 +8734,8 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                         sizeNotifierLayout.requestLayout();
                         onWindowSizeChanged();
                         if (smoothKeyboard && !keyboardVisible && oldHeight != emojiPadding && pannelAnimationEnabled()) {
+                            cancelReplyPanelAnimation();
+                            animatingContentType = currentPopupContentType;
                             panelAnimation = new AnimatorSet();
                             panelAnimation.playTogether(ObjectAnimator.ofFloat(currentView, View.TRANSLATION_Y, emojiPadding - oldHeight, 0));
                             panelAnimation.setInterpolator(AdjustPanLayoutHelper.keyboardInterpolator);
@@ -8617,6 +8769,16 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
         boolean oldValue = keyboardVisible;
         keyboardVisible = height > 0;
+        // A reply panel can be logically closed while its slide-out is still running.
+        // Once the IME appears, stop that animation so ChatInputLayout can follow the IME.
+        if (keyboardVisible && !isPopupShowing() && panelAnimation != null && animatingContentType == 1
+                && botKeyboardView != null && botKeyboardView.getVisibility() == VISIBLE) {
+            cancelReplyPanelAnimation();
+            botKeyboardView.setTranslationY(0); botKeyboardView.setVisibility(GONE);
+            emojiPadding = 0;
+            if (sizeNotifierLayout != null) sizeNotifierLayout.requestLayout();
+            dispatchBottomPanelTranslation(0);
+        }
         if (keyboardVisible && isPopupShowing() && stickersExpansionAnim == null) {
             showPopup(0, currentPopupContentType);
         }
@@ -8637,7 +8799,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     }
 
     public int getVisibleEmojiPadding() {
-        return emojiViewVisible ? emojiPadding : 0;
+        return isPopupShowing() ? emojiPadding : 0;
     }
 
     /** tgui: upstream thread / topic id (comments, forum topics); passed to the emoji panel only. */

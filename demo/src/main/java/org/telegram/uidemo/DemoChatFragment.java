@@ -58,6 +58,7 @@ import org.telegram.ui.Components.EmojiView;
 import org.telegram.ui.Components.StickersAlert;
 import org.telegram.ui.Components.Attachment;
 import org.telegram.ui.Components.ChatAttachAlert;
+import org.telegram.ui.bots.ReplyKeyboard;
 import org.telegram.ui.Cells.VoiceBubbleCell;
 import org.telegram.ui.Components.ChatActivityEnterView;
 import org.telegram.ui.Components.ChatBubbleItemAnimator;
@@ -108,6 +109,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_POLL = 22;
     private static final int MENU_DOCUMENT_THUMB = 23;
     private static final int MENU_INLINE = 24;
+    private static final int MENU_REPLY_KEYBOARD = 25;
     private long firstInlineId;
     private final ArrayList<Runnable> inlineCompletions = new ArrayList<>();
     private long firstDocumentThumbnailId;
@@ -571,6 +573,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     scrollToMessage(firstLocationId);
                 } else if (id == MENU_POLL) {
                     scrollToMessage(firstPollId);
+                } else if (id == MENU_REPLY_KEYBOARD) {
+                    showReplyKeyboardOptions();
                 } else if (id == MENU_INLINE) {
                     scrollToMessage(firstInlineId);
                 } else if (id == MENU_DOCUMENT_THUMB) {
@@ -597,6 +601,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.addSubItem(MENU_POLL, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.poll_messages));
         otherItem.addSubItem(MENU_DOCUMENT_THUMB, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.document_thumbnail_messages));
         otherItem.addSubItem(MENU_INLINE, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.inline_messages));
+        otherItem.addSubItem(MENU_REPLY_KEYBOARD, R.drawable.input_bot2, context.getString(org.telegram.uidemo.R.string.reply_keyboard_menu));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -677,6 +682,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         enterView.setRoundVideoEnabled(true);
         contentView.addView(enterView, contentView.getChildCount(), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
         contentView.setEnterView(enterView);
+        enterView.setReplyKeyboard(sampleReplyKeyboard(context, true, false), false);
 
         topPanel = new ChatInputTopPanel(context, enterView, getResourceProvider());
         topPanel.setListener(new ChatInputTopPanel.Listener() {
@@ -1046,6 +1052,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
 
     private class EnterViewDelegate implements ChatActivityEnterView.ChatActivityEnterViewDelegate {
+        @Override public void onReplyKeyboardButtonPressed(ReplyKeyboard keyboard, ReplyKeyboard.Button button) { onReplyKeyboardButton(keyboard, button); }
 
         @Override public void onEmojiPanelCreated(EmojiView panel) { mediaPanel = panel; refreshMediaPanel(); }
         @Override public void onSendSticker(Sticker sticker) { sendSticker(sticker); }
@@ -1204,9 +1211,66 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         }, getResourceProvider()));
     }
 
-    private void showAttachments() {
+    private void showReplyKeyboardOptions() {
         if (getParentActivity() == null) return;
-        new ChatAttachAlert(getParentActivity(), new ChatAttachAlert.Delegate() {
+        Context context = getParentActivity();
+        new org.telegram.ui.ActionBar.AlertDialog.Builder(context, getResourceProvider())
+                .setTitle(context.getString(org.telegram.uidemo.R.string.reply_keyboard_menu))
+                .setItems(new CharSequence[]{context.getString(org.telegram.uidemo.R.string.reply_keyboard_compact),
+                        context.getString(org.telegram.uidemo.R.string.reply_keyboard_full),
+                        context.getString(org.telegram.uidemo.R.string.reply_keyboard_once),
+                        context.getString(org.telegram.uidemo.R.string.reply_keyboard_remove)}, (dialog, which) -> {
+                    if (which == 3) enterView.setReplyKeyboard(null);
+                    else {
+                        enterView.setReplyKeyboard(sampleReplyKeyboard(context, which != 1, which == 2), false);
+                        enterView.showReplyKeyboard();
+                    }
+                }).show();
+    }
+
+    private static ReplyKeyboard sampleReplyKeyboard(Context context, boolean resize, boolean singleUse) {
+        ReplyKeyboard.Button greeting = new ReplyKeyboard.Button("greeting", context.getString(org.telegram.uidemo.R.string.reply_keyboard_greeting), ReplyKeyboard.Button.Type.TEXT);
+        List<List<ReplyKeyboard.Button>> rows = singleUse ? java.util.Collections.singletonList(java.util.Collections.singletonList(greeting)) : java.util.Arrays.asList(
+                java.util.Arrays.asList(greeting, new ReplyKeyboard.Button("thanks", context.getString(org.telegram.uidemo.R.string.reply_keyboard_thanks), ReplyKeyboard.Button.Type.TEXT)),
+                java.util.Arrays.asList(new ReplyKeyboard.Button("contact", context.getString(org.telegram.uidemo.R.string.reply_keyboard_contact), ReplyKeyboard.Button.Type.REQUEST_CONTACT),
+                        new ReplyKeyboard.Button("location", context.getString(org.telegram.uidemo.R.string.reply_keyboard_location), ReplyKeyboard.Button.Type.REQUEST_LOCATION)),
+                java.util.Arrays.asList(new ReplyKeyboard.Button("poll", context.getString(org.telegram.uidemo.R.string.reply_keyboard_poll), ReplyKeyboard.Button.Type.POLL),
+                        new ReplyKeyboard.Button("app", context.getString(org.telegram.uidemo.R.string.reply_keyboard_app), ReplyKeyboard.Button.Type.WEB_VIEW)));
+        return new ReplyKeyboard("sample-reply", rows, resize, singleUse, context.getString(org.telegram.uidemo.R.string.reply_keyboard_placeholder));
+    }
+
+    private void clearReplyAfterKeyboardSend() {
+        if (topPanel != null && topPanel.getMode() == ChatInputTopPanel.MODE_REPLY) topPanel.hide(true);
+        replyingTo = null;
+        enterView.setReplyingMessageObject(null);
+    }
+
+    private void onReplyKeyboardButton(ReplyKeyboard keyboard, ReplyKeyboard.Button button) {
+        if (getParentActivity() == null) return;
+        if (button.type == ReplyKeyboard.Button.Type.TEXT) {
+            sendOutgoing(button.text);
+            clearReplyAfterKeyboardSend();
+        } else if (button.type == ReplyKeyboard.Button.Type.REQUEST_CONTACT) {
+            new org.telegram.ui.ActionBar.AlertDialog.Builder(getParentActivity(), getResourceProvider())
+                    .setTitle(getParentActivity().getString(org.telegram.uidemo.R.string.reply_keyboard_contact))
+                    .setMessage(getParentActivity().getString(org.telegram.uidemo.R.string.reply_keyboard_contact_confirm))
+                    .setPositiveButton(getParentActivity().getString(org.telegram.tgui.R.string.Send), (dialog, which) -> {
+                        sendOutgoing(TextBubbleMessage.contact(nextId++, true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENT, new TextBubbleMessage.Contact(99, getParentActivity().getString(org.telegram.uidemo.R.string.reply_keyboard_sample_contact), "+1 202 555 0199", null)));
+                        clearReplyAfterKeyboardSend();
+                    }).setNegativeButton(getParentActivity().getString(org.telegram.tgui.R.string.Cancel), null).show();
+        } else if (button.type == ReplyKeyboard.Button.Type.REQUEST_LOCATION || button.type == ReplyKeyboard.Button.Type.POLL) {
+            enterView.hidePopup(false);
+            showAttachments(button.type == ReplyKeyboard.Button.Type.POLL ? ChatAttachAlert.TAB_POLL : ChatAttachAlert.TAB_LOCATION);
+        } else {
+            Toast.makeText(getParentActivity(), getParentActivity().getString(org.telegram.uidemo.R.string.reply_keyboard_action, button.id), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void showAttachments() { showAttachments(ChatAttachAlert.TAB_GALLERY); }
+
+    private void showAttachments(int initialTab) {
+        if (getParentActivity() == null) return;
+        ChatAttachAlert sheet = new ChatAttachAlert(getParentActivity(), new ChatAttachAlert.Delegate() {
             @Override public List<Attachment.Contact> getContacts() {
                 ArrayList<Attachment.Contact> result = new ArrayList<>();
                 result.add(new Attachment.Contact(1, getParentActivity().getString(org.telegram.uidemo.R.string.attach_sample_contact_one), "+1 202 555 0101", null));
@@ -1260,7 +1324,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 }
                 if (!android.text.TextUtils.isEmpty(caption)) appendMessage(new TextBubbleMessage(nextId++, caption, true, time, TextBubbleMessage.STATE_SENT));
             }
-        }, getResourceProvider()).show();
+        }, getResourceProvider());
+        sheet.selectTab(initialTab);
+        sheet.show();
     }
 
     private static TextBubbleMessage.Poll samplePoll(Context context, boolean multiple, boolean closed) {
