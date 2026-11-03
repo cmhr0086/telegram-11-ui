@@ -856,7 +856,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         @Override public void onStickerSetRequested(StickerSet set) { openStickerSet(set); }
         @Override public void onStickerFavoriteChanged(Sticker sticker, boolean favorite) { changeFavorite(sticker, favorite); }
         @Override public void onGifRemoved(Gif gif) {
-            if (stickerSamples != null) { stickerSamples.gifs.removeIf(item -> item.id == gif.id); refreshMediaPanel(); }
+            if (stickerSamples != null) {
+                for (int i = stickerSamples.gifs.size() - 1; i >= 0; i--) if (stickerSamples.gifs.get(i).id == gif.id) stickerSamples.gifs.remove(i);
+                refreshMediaPanel();
+            }
         }
 
         @Override
@@ -979,7 +982,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
     private void sendSticker(Sticker sticker) {
         if (stickerSamples != null) {
-            stickerSamples.recent.removeIf(item -> item.id == sticker.id);
+            for (int i = stickerSamples.recent.size() - 1; i >= 0; i--) if (stickerSamples.recent.get(i).id == sticker.id) stickerSamples.recent.remove(i);
             stickerSamples.recent.add(0, sticker);
             refreshMediaPanel();
         }
@@ -987,7 +990,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
     private void changeFavorite(Sticker sticker, boolean favorite) {
         if (stickerSamples == null) return;
-        stickerSamples.favorites.removeIf(item -> item.id == sticker.id);
+        for (int i = stickerSamples.favorites.size() - 1; i >= 0; i--) if (stickerSamples.favorites.get(i).id == sticker.id) stickerSamples.favorites.remove(i);
         if (favorite) stickerSamples.favorites.add(sticker);
         refreshMediaPanel();
     }
