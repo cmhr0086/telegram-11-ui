@@ -43,6 +43,9 @@ import org.telegram.ui.Components.ChatAttachAlert;
 import org.telegram.ui.bots.ReplyKeyboard;
 import org.telegram.ui.Components.Mention;
 import org.telegram.ui.Components.MentionsController;
+import org.telegram.ui.Components.EmojiSuggestion;
+import org.telegram.ui.Components.EmojiSuggestionQuery;
+import org.telegram.ui.Components.EmojiSuggestionsController;
 import org.telegram.ui.TelegramUI;
 
 import java.text.SimpleDateFormat;
@@ -322,6 +325,20 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             }
             results.onResult(matches);
         }, getResourceProvider());
+        EmojiSuggestionsController emojiSuggestions = new EmojiSuggestionsController(enterView, contentView, (query, results) -> {
+            java.util.ArrayList<EmojiSuggestion> matches = new java.util.ArrayList<>();
+            if (query.type == EmojiSuggestionQuery.Type.EMOJI || context.getString(com.example.tguihost.R.string.suggest_emoji_keyword).startsWith(query.query.toLowerCase(java.util.Locale.ROOT))) {
+                matches.add(new EmojiSuggestion("duck-animated", "🐥", 90001));
+                String[] codes = {"😀", "😃", "😄", "😁", "😆", "😅", "😂", "😊", "🥰", "😍", "🙂", "🐥"};
+                for (int i = 0; i < codes.length; i++) matches.add(new EmojiSuggestion("unicode-" + i, codes[i], 0));
+            }
+            results.onResult(matches);
+        }, getResourceProvider());
+        emojiSuggestions.setDelegate(new EmojiSuggestionsController.Delegate() {
+            @Override public void onLongPressed(EmojiSuggestion suggestion) {
+                android.widget.Toast.makeText(context, context.getString(com.example.tguihost.R.string.suggest_emoji_host_action, suggestion.emoji), android.widget.Toast.LENGTH_SHORT).show();
+            }
+        });
 
         contentView.addView(actionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
         contentView.setActionBar(actionBar);

@@ -11,7 +11,7 @@
 | A 贴纸与 GIF | 已完成，限制见下 | PR #2，库/消费端/仪器及 MuMu 真操作通过；WEBM 首帧降级 |
 | B 附件菜单 | 已实现并推送 PR #3 | 主体/五页/权限/选择/确认与宿主回调；简化交互和人工补验见下 |
 | C 更多消息 | 已完成，限制见下 | PR #4；11项功能已实现，库/消费端/完整设备回归通过，人工补验见各项记录 |
-| D 输入增强 | 进行中 | @提及已完成；表情联想、命令、发送预览未开始 |
+| D 输入增强 | 进行中 | @提及与表情联想已完成；命令、发送预览未开始 |
 | E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
 
@@ -19,13 +19,20 @@ roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功�
 
 ### 阶段 D 当前交接
 
+- 表情联想本轮实现：从固定上游搬运SuggestEmojiView并裁剪业务；EmojiSuggestion/EmojiSuggestionQuery/EmojiSuggestionsController接入宿主异步候选、普通/动态emoji替换与长按回调。ChatInputLayout单独挂载箭头浮层，与mentions共存且@查询优先；demo菜单“Emoji suggestions”，sample输入smile或普通emoji可操作。无新增依赖/TL/网络/权限，无旧API不兼容变更。
+- 保留44×52dp候选、66.66dp浮层、9dp圆角、8.66×6.66dp箭头、原hint panel颜色，以及350/600ms展开、200ms箭头、300ms渐隐、350ms Overshoot(5)按压参数。首次无候选600ms延迟，关键词是长度小于52的完整前缀，emoji为光标前完整span；点击向左替换连续相同emoji，保留右侧后缀，动态span逐个创建且不跨越已有动态span。
+- 审查/实测修复：恢复emojiLoaded通知并使硬件缓存中的候选子View失效，解决普通emoji首次加载始终为灰占位；实际绘制的EmojiSpan.lastDrawX/Y用于软换行/双向文字箭头锚点，Layout fallback约束同一行。加强测试曾误点退场动画旧holder，被生产的对象身份校验正确拒绝；测试改为等当前adapter holder真实绑定并核对对象身份，保留原替换断言后通过，没有关闭动画。
+- 最终库release/demo/publish、debugAndroidTest及独立host debug/R8通过（TEMP/phase-d-suggest-verified-build.log、phase-d-suggest-verified-test-build.log、phase-d-suggest-verified-host.log）。专项phase-d-suggest-verified-device.log、完整MuMu Android15回归phase-d-suggest-full-device.log均通过；后者包含用户反馈的TGS末段/循环后续播、GIF临时重绑及收藏尺寸。新增专项覆盖冷图集通知/后续draw/彩色像素，关键词与UTF16边界，连续emoji替换及保留后缀/已有动态span，焦点/迟到/后台/销毁响应，mentions优先，多行和实际draw软换行行尾锚点、候选尺寸及本地TGS加载。
+- MuMu Android15真操作已验：smile→普通emoji→发送，长按正确宿主回调，日→夜切换、横向滚动，两个相邻普通emoji一起替换为本地TGS动态span并发送；截图TEMP/suggest-{keyword-selected,long,night-scroll,animated-selected,animated-sent}.png，无AndroidRuntime错误。sample尚未单独安装；真实软件IME过渡仍受既有MuMu环境限制，不能据此声称已验。
+- 限制：宿主负责多语言搜索/排序/长按预览，未移植关键词网络下载、Premium策略或状态选择器；其它Android版本、平板、复杂RTL/大字体仍需人工检查。表情联想随本轮独立提交推送并更新目标dev/ui-lib的draft PR #5，不合并；下一项机器人命令菜单，之后MessageSendPreview；D–F尚未完成。
+
 - 从阶段C的1bbf01f拉出codex/phase-d；PR #4已ready，不合并。第一项@提及：上游MentionsContainerView/MentionCell先搬运再裁剪，候选由Mention模型/Provider提供；MentionsController处理文本/光标、异步失效和原替换/ID span。ChatInputLayout新增上浮候选面板定位，demo/sample已接入。
 - @提及保留普通分支36dp行、28dp头像/14dp圆角、15dp文字、6dp面板圆角、3.5行/屏幕22%上限、stiffness550无弹性spring。来源：固定上游MentionCell 34–121、MentionsContainerView 81–87/327–388/420–550、MentionsAdapter1097–1116，以及ChatActivity的上浮2dp定位。业务候选搜索/排序由宿主；无新增依赖/TL/网络/权限。
 - 审查修复：宿主Drawable绘制恢复bounds；离屏行重新绑定刷新主题；username规范前导@/空姓名回退；失焦隐藏/拒绝迟到响应。有效新query期间保留旧面板但禁止旧候选插入，新结果原位替换。加强专项曾因setFieldText临时把光标置0触发hide失败，已将自动文本/光标刷新合并到事件尾部，保持原断言后通过；公开refresh立即执行。保留上游只替换[@,光标)规则，不吞右侧后缀；无username复用URLSpanUserMention与原实体导出。
 - 最终库release/demo/debugAndroidTest/publish通过（TEMP/phase-d-mentions-verified-build.log），独立host debug/R8通过（phase-d-mentions-final-host.log）；专项phase-d-mentions-final-device.log通过，完整MuMu回归phase-d-mentions-final-full-device.log通过，包含旧TGS完整周期/循环续播、GIF临时重绑和收藏尺寸。覆盖邮箱/空格/换行/非折叠/UTF16光标边界、异步代次/同query不同全文/迟到与销毁、后台回调切主线程、焦点失效、旧候选点击隔离、光标中间保留后缀、ID span、@规范化、36dp/2dp定位及Drawable bounds。
 - MuMu Android15真操作：菜单填入@、输入a过滤Alice、真实点击发送@alice、日夜刷新、滚动到后续候选、无username的Carol插入蓝色ID span并发送，表情面板展开时提及面板随输入上移。截图TEMP/mentions-{menu,night,filter,sent,day,scroll,id-span,emoji}.png；无AndroidRuntime错误。实际软键盘过渡仍受前述MuMu搜狗IME环境限制；未单独安装sample实操。
 - 限制：仅普通用户提及，无inline bot网格/网络搜索、反向布局、模糊背景/动态头像/群成员权限策略；宿主提供静态Drawable和候选数据。多语言搜索排序由宿主实现；其它Android版本、平板/复杂RTL/大字体仍需人工检查。README/CHANGELOG和demo/sample已更新，无旧API不兼容变更。
-- @提及随本次独立提交推送，阶段D创建目标dev/ui-lib的draft PR记录已完成与限制；不自行合并。下一项：SuggestEmojiView，之后机器人命令菜单和MessageSendPreview。D–F仍未完成。
+- @提及2812549已推送，阶段D创建目标dev/ui-lib的draft PR #5记录已完成与限制；不自行合并。SuggestEmojiView现已完成，下一项机器人命令菜单和MessageSendPreview。D–F仍未完成。
 
 ### 阶段 C 当前交接
 

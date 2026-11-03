@@ -52,6 +52,8 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
     private ChatActivityEnterView enterView;
     private View contentView;
     private View inputSuggestionsView;
+    private View emojiSuggestionsView;
+    private float emojiSuggestionsAnchorOffset;
     private ActionBar actionBar;
     private int emojiViewPadding;
 
@@ -196,7 +198,36 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
 
     public View getInputSuggestionsView() { return inputSuggestionsView; }
 
+    /** The small arrow popup uses its own overlay so mention and emoji bindings can coexist. */
+    public void setEmojiSuggestionsView(View view) {
+        if (emojiSuggestionsView == view) return;
+        if (view != null && view.getParent() != null && view.getParent() != this) throw new IllegalArgumentException("suggestions view already has a parent");
+        if (emojiSuggestionsView != null) removeView(emojiSuggestionsView);
+        emojiSuggestionsView = view;
+        if (view != null && view.getParent() == null) {
+            int index = actionBar == null ? getChildCount() : indexOfChild(actionBar);
+            addView(view, index < 0 ? getChildCount() : index, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
+        }
+        requestLayout();
+    }
+    public View getEmojiSuggestionsView() { return emojiSuggestionsView; }
+    /** Offset relative to input bottom, using upstream SuggestEmojiView's text-line formula. */
+    public void setEmojiSuggestionsAnchorOffset(float offset) {
+        if (emojiSuggestionsAnchorOffset == offset) return;
+        emojiSuggestionsAnchorOffset = offset;
+        positionEmojiSuggestions();
+    }
+    private void positionEmojiSuggestions() {
+        if (emojiSuggestionsView == null || enterView == null || emojiSuggestionsView.getVisibility() == GONE) return;
+        int bottom = Math.round(enterView.getBottom() + emojiSuggestionsAnchorOffset);
+        emojiSuggestionsView.layout(0, bottom - emojiSuggestionsView.getMeasuredHeight(), emojiSuggestionsView.getMeasuredWidth(), bottom);
+        updateSuggestionsTranslation();
+    }
+
     private void updateSuggestionsTranslation() {
+        if (emojiSuggestionsView != null && enterView != null) {
+            emojiSuggestionsView.setTranslationY(enterView.getTranslationY() + enterView.getTopViewTranslation());
+        }
         if (inputSuggestionsView != null && enterView != null) {
             inputSuggestionsView.setTranslationY(enterView.getTranslationY() + enterView.getTopViewTranslation());
         }
@@ -364,6 +395,9 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
                 int padding = extraTop > 0 ? extraTop : emojiViewPadding;
                 int h = Math.max(AndroidUtilities.dp(10), heightSize - inputFieldHeight - padding + extraTop + AndroidUtilities.dp(2));
                 child.measure(MeasureSpec.makeMeasureSpec(widthSize, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY));
+            } else if (child == emojiSuggestionsView) {
+                child.measure(MeasureSpec.makeMeasureSpec(widthSize, MeasureSpec.EXACTLY),
+                        MeasureSpec.makeMeasureSpec(Math.max(0, heightSize - emojiViewPadding), MeasureSpec.AT_MOST));
             } else if (child == inputSuggestionsView) {
                 int top = getPaddingTop() + (actionBar == null ? 0 : actionBar.getMeasuredHeight());
                 int available = Math.max(0, heightSize - inputFieldHeight - emojiViewPadding - top + AndroidUtilities.dp(2));
@@ -455,6 +489,7 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
                     inputSuggestionsView.getMeasuredWidth(), bottom);
             updateSuggestionsTranslation();
         }
+        positionEmojiSuggestions();
         // keyboard opened or closed: keep the input where it is on screen and ease it into place
         int newInputBottom = enterView.getBottom();
         if (imeAnimating) {

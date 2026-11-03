@@ -451,6 +451,27 @@ Mention user = new Mention(42, getString(R.string.member_name), "alice", avatar)
 
 原36dp行高、28dp头像、15dp文字、6dp面板圆角和stiffness=550无弹性spring保留，最多显示3.5行/屏幕22%，列表可滚动。头像由宿主提供静态Drawable，绘制后恢复bounds；动态头像需宿主刷新。demo菜单“Mention a member”填入@并展示候选；sample输入@同样可用。没有inline bot网格/网络搜索、反向布局、模糊背景或群成员权限逻辑；仅普通用户提及。
 
+### 表情联想
+
+`SuggestEmojiView` 从上游同名组件搬运，保留箭头浮层、横向列表、渐隐边缘与展开/按压动画。`EmojiSuggestionsController` 接入现有输入栏，关键词与普通 emoji 的候选来源由宿主决定：
+
+```java
+EmojiSuggestionsController suggestions = new EmojiSuggestionsController(
+        enterView, chatInputLayout, (query, results) -> {
+            // query.type is KEYWORD or EMOJI; start/end are UTF-16 offsets.
+            results.onResult(hostFindEmoji(query.type, query.query)); // async allowed
+        }, resourcesProvider);
+EmojiSuggestion unicode = new EmojiSuggestion("smile", "😀", 0);
+// Nonzero documentId resolves through the existing AnimatedEmojiDrawable.SourceProvider.
+EmojiSuggestion animated = new EmojiSuggestion("duck", "🐥", localDocumentId);
+```
+
+候选使用唯一稳定字符串 ID、Unicode 文字和可选本地 documentId；动态内容复用现有本地 SourceProvider，不访问 Telegram。首次无候选时沿用600ms查询延迟，文本/光标通知合并到16ms后；有候选时新查询直接交给宿主。关键词取光标前完整前缀（长度小于52），不是最后一个单词；emoji 查询取光标前完整 EmojiSpan。异步结果核对全文、光标及请求代次，后台回调自动切主线程；旧候选在新结果到达前不可插入。绑定提及 controller 时，@查询优先。
+
+点击关键词候选替换光标前前缀；点击 emoji 候选沿用上游向左替换连续相同 emoji 的规则，保留右侧文字，并为每个动态表情建立独立 span，遇到既有动态 span 停止替换。`setDelegate` 的 `onSelected` / `onLongPressed` 可供宿主统计或打开预览，长按本身不替换文字。输入栏销毁会自动释放 controller，也可调用 `destroy()`；同一输入重新绑定会释放旧 controller。候选面板跟随输入框和 emoji 所在行，失焦、录音或展开贴纸时隐藏；`refresh()` 可主动刷新宿主数据。
+
+保留原44×52dp候选、66.66dp浮层、9dp圆角及hint panel颜色 key，普通 emoji 图集冷加载会自动刷新。demo ⋮ “Emoji suggestions” 可填入 `smile` 或两个普通 emoji，sample 输入同样内容可体验本地候选。宿主负责多语言搜索、排序和长按预览；未迁移 Telegram 关键词下载、Premium 策略或状态选择器。其它Android版本、平板、复杂RTL/大字体及真实软键盘过渡仍需人工补验。
+
 ### 回复键盘（reply keyboard）
 
 `org.telegram.ui.bots.BotKeyboardView` 从同名上游类搬运，`ReplyKeyboard` 替代 TL 标记。集成在原 `ChatActivityEnterView` 内，不需要宿主另建底部容器：
@@ -534,6 +555,7 @@ cell.setMessage(file, pinnedTop, pinnedBottom);
 | 群聊消息 | `TextBubbleMessage.Sender` / `MessageGrouping` / `ChatAvatarDecoration`：原配色姓名、头像列、连续消息及滚动吸底头像 |
 | 转发来源 | `TextBubbleMessage.ForwardedFrom` / `ForwardBackground`：普通与无背景媒体来源头、头像、原按压动画、宿主来源回调；贴纸/圆视频旁侧回复 |
 | @提及 | 原 MentionsContainerView / MentionCell 普通用户分支，宿主候选查询、异步隔离、光标插入及ID span |
+| 表情联想 | 原 SuggestEmojiView 浮层与横向候选，宿主关键词/emoji查询、Unicode及本地动态表情替换 |
 | 回复键盘 | 原 `ui.bots.BotKeyboardView`，宿主不可变行快照、紧凑/全高/单次模式；原输入栏切换与按钮回调 |
 | 内联按钮 | 上游44dp按钮行、类型图标/按压/加载反馈；宿主行模型与短按/长按回调，所有既有气泡共用 |
 | 文件缩略图 | 既有 `DocumentBubbleCell`：宿主86dp缩略图、下载状态、说明文字及文件/菜单回调；旧无图布局保留 |
@@ -606,7 +628,7 @@ cell.setMessage(file, pinnedTop, pinnedBottom);
 
 - 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸、GIF、联系人、音乐、位置和投票；已有群聊头像、名字和转发来源；文件已支持宿主缩略图和说明；尚缺文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 查看器 `MediaViewer`：只是简易版——没有缩略图条、分享 / 保存 / 转发 / 删除菜单、图片编辑、画中画、倍速、静音、视频缩略图预览、横屏全屏按钮、多图相册分组；视频用系统 `MediaPlayer`（格式取决于设备解码器，没有缓冲进度、不循环），播放中不能连续翻页预加载；图片直接画宿主给的 `Drawable`（大图要宿主自己先缩放）；打开 / 关闭动画不处理被 ActionBar 或输入栏遮住的那部分（上游会裁剪），起点用整张图片的位置；平板没有专门布局
-- 输入栏：附件按钮由宿主回调打开 `ChatAttachAlert`；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；已有宿主驱动的 @提及列表；没有话题 / 表情联想列表（`SuggestEmojiView`）；回复键盘已有宿主模型/回调；没有命令菜单和 WebView 容器；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
+- 输入栏：附件按钮由宿主回调打开 `ChatAttachAlert`；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；已有宿主驱动的 @提及和表情联想列表；没有话题；回复键盘已有宿主模型/回调；没有命令菜单和 WebView 容器；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 
 - 只支持主题自带的颜色/渐变壁纸和默认图案壁纸，不支持壁纸文件和视差（motion）效果；各强调色原本的不同图案都显示成同一个 `default_pattern`
 - Lottie 只带了库内引用到的 `R.raw` JSON（对话列表的归档 / 滑动动作图标、骰子 / 飞镖等），外加上游 APK 自带的 46 个大幅插画：11 只 Utya 小鸭子 `R.raw.utyan_*`、两步验证猴子 `tsv_setup_monkey_*` / `tsv_monkey_close`、设置和邮箱引导（`tsv_setup_*`、`email_*`）、钱包 `wallet_*`、`qr_login`、`filter_new` 等，以及一批白色线条图标（`passcode_lock`、`stats`、`fragment*`、`boosts` 等，上游画在彩色圆形上，可配合 `AlertDialog.Builder.setTopAnimationIsNew(true)` 使用），demo 的 "Lottie illustrations" 页分组展示全部动画。客户端里另一些鸭子（搜索无结果等空状态）和动态表情、贴纸是运行时从服务器贴纸包下载的，不在 APK 里；其它动画 JSON 由宿主放进自己的 `res/raw`，再 `setTopAnimation(R.raw.xxx, …)` / `new RLottieDrawable(R.raw.xxx, …)` 使用
@@ -629,7 +651,7 @@ cell.setMessage(file, pinnedTop, pinnedBottom);
 7. **对话列表（已完成）**：`DialogCell`、滑动动作、多选、列表动画、文件夹标签、抽屉、写消息按钮；下拉显示隐藏归档（`PullForegroundDrawable`）、文件夹左右翻页（`DialogsViewPager`）也已完成；对话搜索（`DialogsSearchController`）也已完成；`UndoView` 归档/删除撤销已提供，隐藏归档等其它提示尚未移植
 8. **消息菜单与多选（已完成静态版）**：`MessageContextMenu`（单击：遮罩、浮起气泡、弹出菜单、静态表情反应条），长按多选（复选框、ActionMode、底部回复 / 转发栏、拖动连选）；气泡里的反应胶囊（`ReactionsLayoutInBubble`，静态表情 + 计数动画）已完成；后续：动态反应（上游 lottie 选中 / 飞入动画、反应者头像、展开全部反应、自定义表情反应），依赖阶段 C
 9. **媒体气泡（已完成第一批）**：语音、图片、文件；回复引用、链接、日期分隔条、气泡里的反应已完成；视频缩略图 / 简易查看器、照片视频相册及普通圆形视频已提供；更高阶媒体能力见各组件限制
-10. 之后可选：`SuggestEmojiView`、提及列表、`MessageSendPreview`（长按发送的消息预览与特效）、机器人键盘
+10. 输入增强：`SuggestEmojiView`、提及列表、机器人回复键盘已接入；下一项命令菜单和 `MessageSendPreview`（长按发送的消息预览与特效）
 
 ## 抽取工具（`tools/`）
 

@@ -61,6 +61,9 @@ import org.telegram.ui.Components.ChatAttachAlert;
 import org.telegram.ui.bots.ReplyKeyboard;
 import org.telegram.ui.Components.Mention;
 import org.telegram.ui.Components.MentionsController;
+import org.telegram.ui.Components.EmojiSuggestion;
+import org.telegram.ui.Components.EmojiSuggestionQuery;
+import org.telegram.ui.Components.EmojiSuggestionsController;
 import org.telegram.ui.Cells.VoiceBubbleCell;
 import org.telegram.ui.Components.ChatActivityEnterView;
 import org.telegram.ui.Components.ChatBubbleItemAnimator;
@@ -113,6 +116,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_INLINE = 24;
     private static final int MENU_REPLY_KEYBOARD = 25;
     private static final int MENU_MENTIONS = 26;
+    private static final int MENU_SUGGEST_EMOJI = 27;
     private long firstInlineId;
     private final ArrayList<Runnable> inlineCompletions = new ArrayList<>();
     private long firstDocumentThumbnailId;
@@ -576,6 +580,15 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     scrollToMessage(firstLocationId);
                 } else if (id == MENU_POLL) {
                     scrollToMessage(firstPollId);
+                } else if (id == MENU_SUGGEST_EMOJI) {
+                    new org.telegram.ui.ActionBar.AlertDialog.Builder(getParentActivity(), getResourceProvider())
+                            .setTitle(getParentActivity().getString(org.telegram.uidemo.R.string.suggest_emoji_menu))
+                            .setItems(new CharSequence[]{getParentActivity().getString(org.telegram.uidemo.R.string.suggest_emoji_keyword_example),
+                                    getParentActivity().getString(org.telegram.uidemo.R.string.suggest_emoji_animated_example)}, (dialog, which) -> {
+                                enterView.getEditField().requestFocus();
+                                CharSequence text = which == 0 ? getParentActivity().getString(org.telegram.uidemo.R.string.suggest_emoji_keyword) : "🐥🐥";
+                                enterView.setFieldText(org.telegram.messenger.Emoji.replaceEmoji(text, enterView.getEditField().getPaint().getFontMetricsInt(), true));
+                            }).show();
                 } else if (id == MENU_MENTIONS) {
                     enterView.getEditField().requestFocus();
                     enterView.setFieldText("@");
@@ -609,6 +622,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.addSubItem(MENU_INLINE, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.inline_messages));
         otherItem.addSubItem(MENU_REPLY_KEYBOARD, R.drawable.input_bot2, context.getString(org.telegram.uidemo.R.string.reply_keyboard_menu));
         otherItem.addSubItem(MENU_MENTIONS, R.drawable.msg_addcontact, context.getString(org.telegram.uidemo.R.string.mention_menu));
+        otherItem.addSubItem(MENU_SUGGEST_EMOJI, R.drawable.msg_emoji_smiles, context.getString(org.telegram.uidemo.R.string.suggest_emoji_menu));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -705,6 +719,20 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             }
             results.onResult(matches);
         }, getResourceProvider());
+        EmojiSuggestionsController emojiSuggestions = new EmojiSuggestionsController(enterView, contentView, (query, results) -> {
+            java.util.ArrayList<EmojiSuggestion> matches = new java.util.ArrayList<>();
+            if (query.type == EmojiSuggestionQuery.Type.EMOJI || context.getString(org.telegram.uidemo.R.string.suggest_emoji_keyword).startsWith(query.query.toLowerCase(java.util.Locale.ROOT))) {
+                matches.add(new EmojiSuggestion("duck-animated", "🐥", 90001));
+                String[] codes = {"😀", "😃", "😄", "😁", "😆", "😅", "😂", "😊", "🥰", "😍", "🙂", "🐥"};
+                for (int i = 0; i < codes.length; i++) matches.add(new EmojiSuggestion("unicode-" + i, codes[i], 0));
+            }
+            results.onResult(matches);
+        }, getResourceProvider());
+        emojiSuggestions.setDelegate(new EmojiSuggestionsController.Delegate() {
+            @Override public void onLongPressed(EmojiSuggestion suggestion) {
+                android.widget.Toast.makeText(context, context.getString(org.telegram.uidemo.R.string.suggest_emoji_host_action, suggestion.emoji), android.widget.Toast.LENGTH_SHORT).show();
+            }
+        });
 
         topPanel = new ChatInputTopPanel(context, enterView, getResourceProvider());
         topPanel.setListener(new ChatInputTopPanel.Listener() {

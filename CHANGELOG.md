@@ -5,6 +5,7 @@
 ## Unreleased
 
 ### 新增
+- 阶段 D：搬运 `SuggestEmojiView` 原箭头浮层与横向候选，新增宿主 `EmojiSuggestion` / `EmojiSuggestionQuery` / `EmojiSuggestionsController`；支持异步关键词/emoji查询、Unicode/本地动态表情替换、连续相同emoji替换及长按回调。demo/sample接入，无新增运行依赖或网络层。
 - 阶段 D：从上游普通用户分支搬运 `MentionsContainerView` / `MentionCell`；宿主 `Mention` / `MentionQuery` / `MentionsController` 支持异步候选、失效查询隔离、光标处插入和无用户名ID提及。`ChatInputLayout` 增加输入上方候选面板挂载，demo/sample接入，无新依赖或网络层。
 - 阶段 C：直接搬运 `org.telegram.ui.bots.BotKeyboardView`，用不可变 `ReplyKeyboard` 代替 TL 标记；原输入栏恢复回复键盘入口、表情/IME切换、单次使用和占位提示，所有按钮动作回调宿主。demo/sample 接入，无新权限、网络层或运行依赖。
 - 阶段 C：从上游 ChatMessageCell 搬运内联按钮布局/绘制/触摸，既有气泡共用 `InlineButton` 行模型、宿主点击/长按与 loading 快照；保留原尺寸、service 颜色和按压/加载动画，demo/sample 接入，无网络层或新依赖。

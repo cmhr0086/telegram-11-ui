@@ -82,4 +82,9 @@
     <string name="mention_carol">Carol (no username)</string>
     <string name="mention_david">David</string>
     <string name="mention_eve">Eve</string>
+    <string name="suggest_emoji_menu">Emoji suggestions</string>
+    <string name="suggest_emoji_keyword">smile</string>
+    <string name="suggest_emoji_keyword_example">Keyword suggestions</string>
+    <string name="suggest_emoji_animated_example">Animated alternatives</string>
+    <string name="suggest_emoji_host_action">Host preview callback: %1$s</string>
 </resources>
