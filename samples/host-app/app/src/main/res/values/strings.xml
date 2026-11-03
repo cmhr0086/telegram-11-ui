@@ -6,4 +6,12 @@
     <string name="round_video_host">Host supplies the video surface and playback here</string>
     <string name="local_sticker_pack">Local duck stickers</string>
     <string name="local_gif_caption">Local animated GIF from the AAR</string>
+    <string name="attach_sample_contact_one">Sample contact Alice</string>
+    <string name="attach_sample_contact_two">Sample contact Bob</string>
+    <string name="attach_sample_map">Example map — tap to select (0, 0)</string>
+    <string name="attach_sample_location">Example location, not a real map</string>
+    <string name="attach_media_result">Selected local media: %1$s\n%2$s</string>
+    <string name="attach_contact_result">Contact: %1$s · %2$s</string>
+    <string name="attach_location_result">Location: %1$s (%2$.3f, %3$.3f)</string>
+    <string name="attach_poll_result">Poll: %1$s\n%2$s</string>
 </resources>

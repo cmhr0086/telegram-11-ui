@@ -53,6 +53,8 @@ import org.telegram.ui.Components.StickerSet;
 import org.telegram.ui.Components.Gif;
 import org.telegram.ui.Components.EmojiView;
 import org.telegram.ui.Components.StickersAlert;
+import org.telegram.ui.Components.Attachment;
+import org.telegram.ui.Components.ChatAttachAlert;
 import org.telegram.ui.Cells.VoiceBubbleCell;
 import org.telegram.ui.Components.ChatActivityEnterView;
 import org.telegram.ui.Components.ChatBubbleItemAnimator;
@@ -72,6 +74,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Locale;
+import java.util.List;
 
 /**
  * Chat background (theme wallpaper, motion gradient), text bubbles and the upstream message input
@@ -916,7 +919,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
         @Override
         public void didPressAttachButton() {
-            Toast.makeText(getParentActivity(), "Attach: the host opens its own picker here", Toast.LENGTH_SHORT).show();
+            showAttachments();
         }
 
         @Override
@@ -1003,6 +1006,62 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             }
             @Override public void onFavoriteChanged(Sticker sticker, boolean favorite) { changeFavorite(sticker, favorite); }
         }, getResourceProvider()));
+    }
+
+    private void showAttachments() {
+        if (getParentActivity() == null) return;
+        new ChatAttachAlert(getParentActivity(), new ChatAttachAlert.Delegate() {
+            @Override public List<Attachment.Contact> getContacts() {
+                ArrayList<Attachment.Contact> result = new ArrayList<>();
+                result.add(new Attachment.Contact(1, getParentActivity().getString(org.telegram.uidemo.R.string.attach_sample_contact_one), "+1 202 555 0101", null));
+                result.add(new Attachment.Contact(2, getParentActivity().getString(org.telegram.uidemo.R.string.attach_sample_contact_two), "+1 202 555 0102", null));
+                return result;
+            }
+            @Override public View createLocationView(Context context, ChatAttachAlert.LocationCallback callback) {
+                TextView map = new TextView(context);
+                map.setGravity(Gravity.CENTER); map.setTextSize(18); map.setTextColor(android.graphics.Color.WHITE);
+                map.setShadowLayer(3, 1, 1, android.graphics.Color.BLACK);
+                map.setText(org.telegram.uidemo.R.string.attach_sample_map);
+                map.setBackground(sampleAttachmentMap(context));
+                map.setOnClickListener(v -> callback.onLocationSelected(new Attachment.Location(0, 0,
+                        context.getString(org.telegram.uidemo.R.string.attach_sample_location), null)));
+                return map;
+            }
+            @Override public void onSend(List<Attachment> selection, CharSequence caption) {
+                String time = timeFormat.format(new Date());
+                for (Attachment item : selection) {
+                    if (item.type == Attachment.Type.FILE) {
+                        appendMessage(TextBubbleMessage.document(nextId++, true, time, TextBubbleMessage.STATE_SENT, item.name, item.size));
+                    } else {
+                        String description;
+                        switch (item.type) {
+                            case PHOTO: case VIDEO:
+                                description = getParentActivity().getString(org.telegram.uidemo.R.string.attach_media_result, item.name, item.uri); break;
+                            case CONTACT:
+                                description = getParentActivity().getString(org.telegram.uidemo.R.string.attach_contact_result, item.contact.name, item.contact.phone); break;
+                            case LOCATION:
+                                description = getParentActivity().getString(org.telegram.uidemo.R.string.attach_location_result, item.location.title, item.location.latitude, item.location.longitude); break;
+                            case POLL:
+                                description = getParentActivity().getString(org.telegram.uidemo.R.string.attach_poll_result, item.poll.question, android.text.TextUtils.join(" / ", item.poll.options)); break;
+                            default: continue;
+                        }
+                        appendMessage(new TextBubbleMessage(nextId++, description, true, time, TextBubbleMessage.STATE_SENT));
+                    }
+                }
+                if (!android.text.TextUtils.isEmpty(caption)) appendMessage(new TextBubbleMessage(nextId++, caption, true, time, TextBubbleMessage.STATE_SENT));
+            }
+        }, getResourceProvider()).show();
+    }
+
+    private static Drawable sampleAttachmentMap(Context context) {
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(480, 240, android.graphics.Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap); canvas.drawColor(0xffa9c7b3);
+        android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(0xffe7e3cf); paint.setStrokeWidth(18);
+        canvas.drawLine(0, 70, 480, 155, paint); canvas.drawLine(105, 0, 195, 240, paint);
+        canvas.drawLine(330, 0, 270, 240, paint);
+        paint.setColor(0xffc65050); canvas.drawCircle(240, 120, 14, paint);
+        return new android.graphics.drawable.BitmapDrawable(context.getResources(), bitmap);
     }
 
     private void sendOutgoing(CharSequence text) {
