@@ -106,6 +106,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_MUSIC = 20;
     private static final int MENU_LOCATION = 21;
     private static final int MENU_POLL = 22;
+    private static final int MENU_DOCUMENT_THUMB = 23;
+    private long firstDocumentThumbnailId;
     private long firstPollId;
     private final ArrayList<Runnable> pollCompletions = new ArrayList<>();
     private long firstLocationId;
@@ -291,6 +293,22 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 samplePoll(sampleContext, true, false)));
         addSample(TextBubbleMessage.poll(nextId++, false, "10:12", TextBubbleMessage.STATE_NONE,
                 samplePoll(sampleContext, false, true)));
+        TextBubbleMessage thumbFile = TextBubbleMessage.document(nextId++, false, "10:12", TextBubbleMessage.STATE_NONE,
+                "Landscape_reference.jpg", 2_457_600, samplePhoto(480, 320, 0),
+                sampleContext.getString(org.telegram.uidemo.R.string.document_thumbnail_caption));
+        thumbFile.forwardedFrom = source;
+        thumbFile.replyTo = TextBubbleMessage.ReplyTo.of(looksLike, "You");
+        react(thumbFile, "👍", 2, false);
+        firstDocumentThumbnailId = thumbFile.id;
+        addSample(thumbFile);
+        TextBubbleMessage downloadFile = TextBubbleMessage.document(nextId++, true, "10:12", TextBubbleMessage.STATE_READ,
+                "A_long_file_name_for_the_portrait_preview_and_download_state.jpg", 8_388_608,
+                samplePhoto(320, 480, 1), null);
+        downloadFile.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
+        addSample(downloadFile);
+        addSample(TextBubbleMessage.document(nextId++, false, "10:12", TextBubbleMessage.STATE_NONE,
+                "Caption_without_a_thumbnail.txt", 12_288, null,
+                sampleContext.getString(org.telegram.uidemo.R.string.document_plain_caption)));
         try {
             LocalEmojiSamples.install(ApplicationLoader.applicationContext);
             addSample(LocalEmojiSamples.text(ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.local_emoji_sample)), false, "10:13", TextBubbleMessage.STATE_NONE);
@@ -538,6 +556,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     scrollToMessage(firstLocationId);
                 } else if (id == MENU_POLL) {
                     scrollToMessage(firstPollId);
+                } else if (id == MENU_DOCUMENT_THUMB) {
+                    scrollToMessage(firstDocumentThumbnailId);
                 }
             }
         });
@@ -558,6 +578,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.addSubItem(MENU_MUSIC, R.drawable.bot_music, context.getString(org.telegram.uidemo.R.string.music_messages));
         otherItem.addSubItem(MENU_LOCATION, R.drawable.msg_location, context.getString(org.telegram.uidemo.R.string.location_messages));
         otherItem.addSubItem(MENU_POLL, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.poll_messages));
+        otherItem.addSubItem(MENU_DOCUMENT_THUMB, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.document_thumbnail_messages));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -1648,7 +1669,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private void toggleFakeDownload(TextBubbleMessage message) {
         if (message.mediaState == TextBubbleMessage.MEDIA_READY) {
             if (message.type == TextBubbleMessage.TYPE_DOCUMENT) {
-                Toast.makeText(getParentActivity(), "Open " + message.fileName + ": the host opens the file here", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getParentActivity(), getParentActivity().getString(org.telegram.uidemo.R.string.document_open_action, message.fileName), Toast.LENGTH_SHORT).show();
             }
             return;
         }

@@ -123,6 +123,14 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                         app.getString(com.example.tguihost.R.string.location_sample_address), sampleAttachmentMap(app))));
         messages.add(TextBubbleMessage.location(nextId++, true, "12:40", TextBubbleMessage.STATE_READ,
                 new TextBubbleMessage.Location(0, 0, null, null, sampleAttachmentMap(app))));
+        messages.add(TextBubbleMessage.document(nextId++, false, "12:42", TextBubbleMessage.STATE_NONE,
+                "Host_map_preview.png", 786_432, sampleAttachmentMap(app), app.getString(com.example.tguihost.R.string.document_thumbnail_caption)));
+        TextBubbleMessage hostDownload = TextBubbleMessage.document(nextId++, true, "12:42", TextBubbleMessage.STATE_READ,
+                "A_long_file_name_for_a_host_thumbnail.jpg", 2_457_600, photos.get(0).photo, null);
+        hostDownload.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
+        messages.add(hostDownload);
+        messages.add(TextBubbleMessage.document(nextId++, false, "12:42", TextBubbleMessage.STATE_NONE,
+                "No_thumbnail.txt", 12_288, null, app.getString(com.example.tguihost.R.string.document_plain_caption)));
         for (TextBubbleMessage message : messages) bindGroupSender(message);
         TextBubbleMessage.ForwardedFrom source = new TextBubbleMessage.ForwardedFrom(-100,
                 app.getString(com.example.tguihost.R.string.forward_source_name));
@@ -638,7 +646,16 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                             context.getString(label), contact.name, contact.id), Toast.LENGTH_SHORT).show();
                 }
                 @Override public void onMediaPressed(TextBubbleCell source, TextBubbleMessage item) {
-                    if (item.type == TextBubbleMessage.TYPE_MUSIC) {
+                    if (item.type == TextBubbleMessage.TYPE_DOCUMENT) {
+                        if (actionBar.isActionModeShowed()) { toggle(item); return; }
+                        if (item.mediaState == TextBubbleMessage.MEDIA_READY) {
+                            Toast.makeText(context, context.getString(com.example.tguihost.R.string.document_open_action, item.fileName), Toast.LENGTH_SHORT).show();
+                        } else {
+                            item.mediaState = item.mediaState == TextBubbleMessage.MEDIA_DOWNLOAD ? TextBubbleMessage.MEDIA_LOADING : TextBubbleMessage.MEDIA_DOWNLOAD;
+                            item.mediaProgress = item.mediaState == TextBubbleMessage.MEDIA_LOADING ? .45f : 0;
+                            ((org.telegram.ui.Cells.DocumentBubbleCell) source).updateButtonState(true);
+                        }
+                    } else if (item.type == TextBubbleMessage.TYPE_MUSIC) {
                         Toast.makeText(context, com.example.tguihost.R.string.music_host, Toast.LENGTH_SHORT).show();
                     } else if (item.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
                         Toast.makeText(context, com.example.tguihost.R.string.round_video_host, Toast.LENGTH_SHORT).show();

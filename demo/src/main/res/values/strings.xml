@@ -46,4 +46,8 @@
     <string name="poll_option_coffee">Meet friends for coffee</string>
     <string name="poll_option_read">Read a book</string>
     <string name="poll_result_line">%1$s: %2$d votes (local example)</string>
+    <string name="document_thumbnail_messages">File thumbnails</string>
+    <string name="document_thumbnail_caption">A host-provided file preview. Tap to open; long-press to select.</string>
+    <string name="document_plain_caption">The original file layout also supports a caption.</string>
+    <string name="document_open_action">Host open-file callback: %1$s</string>
 </resources>

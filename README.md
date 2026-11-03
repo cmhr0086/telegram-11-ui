@@ -107,7 +107,7 @@ Manifest 里给 Activity 加上
 
 数据模型都是公开字段：
 - `DialogItem`：`id`（稳定 id，决定头像配色）、`title`、`message`、`senderName`、`mediaPreview`、`draft`、`typing` / `typingType`、`time`、`unreadCount`、`markUnread`、`mention`、`muted`、`pinned`、`verified`、`secret`、`online`、`sentState`（`SENT_*`）、`avatar` / `avatarBitmap` / `avatarType`、`isFolder`（归档行）；搜索用：`status`（`ProfileSearchCell` 第二行）、`statusOnline`、`highlightedWords`（标题和消息里高亮的词）。
-- `TextBubbleMessage`：`id`、`type`（`TYPE_TEXT` / `TYPE_VOICE` / `TYPE_PHOTO` / `TYPE_DOCUMENT`，宿主按它选单元格）、`text`（媒体消息是说明文字）、`isOut`、`time`、`state`（`STATE_*` 发送状态）、`reactions`（`TextBubbleMessage.Reaction` 列表：`emoji`、`count`、`chosen`，按列表顺序显示；`toggleReaction(emoji)` 按上游非 Premium 规则切换“我的”反应：再点取消，换一个则替换原来的）；媒体：`mediaState`（`MEDIA_READY` / `MEDIA_DOWNLOAD` / `MEDIA_LOADING`）+ `mediaProgress`，语音 `duration`（秒）/ `waveform`（上游 5-bit 打包，录音器给的就是这个格式）/ `playing` / `audioProgress` / `audioProgressSec` / `contentUnread`，图片 `photo`（Drawable）/ `photoWidth` / `photoHeight`，文件 `fileName` / `fileSize`。用 `TextBubbleMessage.voice(...)` / `photo(...)` / `document(...)` 创建。
+- `TextBubbleMessage`：`id`、`type`（`TYPE_TEXT` / `TYPE_VOICE` / `TYPE_PHOTO` / `TYPE_DOCUMENT`，宿主按它选单元格）、`text`（媒体消息是说明文字）、`isOut`、`time`、`state`（`STATE_*` 发送状态）、`reactions`（`TextBubbleMessage.Reaction` 列表：`emoji`、`count`、`chosen`，按列表顺序显示；`toggleReaction(emoji)` 按上游非 Premium 规则切换“我的”反应：再点取消，换一个则替换原来的）；媒体：`mediaState`（`MEDIA_READY` / `MEDIA_DOWNLOAD` / `MEDIA_LOADING`）+ `mediaProgress`，语音 `duration`（秒）/ `waveform`（上游 5-bit 打包，录音器给的就是这个格式）/ `playing` / `audioProgress` / `audioProgressSec` / `contentUnread`，图片 `photo`（Drawable）/ `photoWidth` / `photoHeight`，文件 `fileName` / `fileSize` / `documentThumbnail`。用 `TextBubbleMessage.voice(...)` / `photo(...)` / `document(...)` 创建。
 
 库里的图标、字符串等资源都通过 `org.telegram.tgui.R` 引用（AGP 8+ 默认 `nonTransitiveRClass=true`，宿主自己的 `R` 不包含库资源）：
 
@@ -431,6 +431,30 @@ cell.setMessage(message, pinnedTop, pinnedBottom);
 
 demo ⋮ “Poll messages” 提供单选、多选公开投票和关闭结果；本地回调延迟650ms展示 pending，然后更新内存票数。sample 同样展示宿主更新模型；附件创建投票→确认发送后直接成为可投票气泡。这些数据只用于本地演示，不连接服务器。暂不含 quiz/答题解释/定时关闭倒计时、最近投票者头像和库内投票者列表；实际参与者、撤票或关闭操作由宿主处理。极窄宽度下的长票数/自定义长时间、大字体和更多语言仍需人工检查；当前内置文案为英文，宿主可覆盖 Android 资源。
 
+### 带缩略图的文件消息
+
+```java
+TextBubbleMessage file = TextBubbleMessage.document(id, outgoing, time, state,
+        fileName, fileSize, thumbnail, caption);
+// Equivalent when updating an existing message:
+file.documentThumbnail = thumbnail; // host-provided Drawable, null retains the original file icon
+file.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
+DocumentBubbleCell cell = new DocumentBubbleCell(context, resourcesProvider);
+cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+    @Override public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) {
+        // Host opens the file, starts a download, or cancels it according to mediaState.
+    }
+    @Override public void onMenuPressed(TextBubbleCell cell, TextBubbleMessage message, float x, float y) {
+        // Host opens its file/message actions.
+    }
+});
+cell.setMessage(file, pinnedTop, pinnedBottom);
+```
+
+在已有 `DocumentBubbleCell` 内扩展上游 `DOCUMENT_ATTACH_TYPE_DOCUMENT` 的有图分支，没有新建替代组件。缩略图为86dp正方形，居中的状态圆按钮为48dp；无图时保留原44dp按钮。宿主提供 `documentThumbnail` 和下载状态/进度；文件名、大小、后缀、菜单、说明文字、群聊/转发/回复与反应沿用消息布局。旧六参 `document(...)` 可继续使用，新增重载末尾为 `Drawable thumbnail, CharSequence caption`。
+
+宿主负责解码和异步加载，收到缩略图后替换字段并重绑；下载进度可调用 `updateButtonState(animated)`。库不读取文件 URI、不生成 PDF 封面、不下载或打开文件；`getThumbnailRect(RectF)` / `getButtonRect(RectF)` 返回最近布局的缩略图/状态控件区域，宿主 Drawable 的原 bounds 在绘制后恢复。demo 的 ⋮ “File thumbnails” 包含带说明的预览、长文件名下载/取消，以及无图说明；sample 演示同一 AAR API。demo 下载为本地进度模拟，打开动作用回调提示展示；sample 下载按钮切换示例状态。说明文字显示样式和表情，但暂不支持独立的说明链接点击；不包含文件相册分组、剧透预览或缩略图模糊/加载渐变。
+
 ## 包含的组件
 
 | 类别 | 类 |
@@ -439,6 +463,7 @@ demo ⋮ “Poll messages” 提供单选、多选公开投票和关闭结果；
 | 服务消息 | `ChatActionCell` / `ServiceMessage`：加入、邀请、改名、置顶，用户与消息回调 |
 | 群聊消息 | `TextBubbleMessage.Sender` / `MessageGrouping` / `ChatAvatarDecoration`：原配色姓名、头像列、连续消息及滚动吸底头像 |
 | 转发来源 | `TextBubbleMessage.ForwardedFrom` / `ForwardBackground`：普通与无背景媒体来源头、头像、原按压动画、宿主来源回调；贴纸/圆视频旁侧回复 |
+| 文件缩略图 | 既有 `DocumentBubbleCell`：宿主86dp缩略图、下载状态、说明文字及文件/菜单回调；旧无图布局保留 |
 | 投票消息 | `PollBubbleCell` / `TextBubbleMessage.Poll`：单选/多选、结果条形与百分比、宿主提交和结果回调 |
 | 位置消息 | `LocationBubbleCell` / `TextBubbleMessage.Location`：宿主地图、纯坐标/地点布局、原图钉与位置回调 |
 | 音乐消息 | `MusicBubbleCell` / `TextBubbleMessage.music(...)`：播放/暂停、拖动、下载状态、说明与宿主回调 |
@@ -506,7 +531,7 @@ demo ⋮ “Poll messages” 提供单选、多选公开投票和关闭结果；
 
 主题 `.attheme` 解析同时接受 LF / CRLF，壁纸二进制偏移按原始字节计算；`.gitattributes` 固定新检出的主题资源为 LF。Windows 上此前出现的夜间文字透明/缺失已修复，设备覆盖打包的 night/darkblue 与两种换行格式。
 
-- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸、GIF、联系人、音乐、位置和投票；已有群聊头像、名字和转发来源；尚缺带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
+- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸、GIF、联系人、音乐、位置和投票；已有群聊头像、名字和转发来源；文件已支持宿主缩略图和说明；尚缺文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 查看器 `MediaViewer`：只是简易版——没有缩略图条、分享 / 保存 / 转发 / 删除菜单、图片编辑、画中画、倍速、静音、视频缩略图预览、横屏全屏按钮、多图相册分组；视频用系统 `MediaPlayer`（格式取决于设备解码器，没有缓冲进度、不循环），播放中不能连续翻页预加载；图片直接画宿主给的 `Drawable`（大图要宿主自己先缩放）；打开 / 关闭动画不处理被 ActionBar 或输入栏遮住的那部分（上游会裁剪），起点用整张图片的位置；平板没有专门布局
 - 输入栏：附件按钮由宿主回调打开 `ChatAttachAlert`；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；没有机器人键盘、命令菜单和 WebView 按钮；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 

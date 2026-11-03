@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | A 贴纸与 GIF | 已完成，限制见下 | PR #2，库/消费端/仪器及 MuMu 真操作通过；WEBM 首帧降级 |
 | B 附件菜单 | 已实现并推送 PR #3 | 主体/五页/权限/选择/确认与宿主回调；简化交互和人工补验见下 |
-| C 更多消息 | 进行中 | 未读/服务/群聊/转发/联系人/音乐/位置/投票已完成；文件缩略图和键盘待实现 |
+| C 更多消息 | 进行中 | 未读/服务/群聊/转发/联系人/音乐/位置/投票/文件缩略图已完成；内联按钮和回复键盘待实现 |
 | D 输入增强 | 未开始 | 提及、表情联想、命令、发送预览 |
 | E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
@@ -48,7 +48,12 @@ roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功�
 - 投票构建/专项：首次demo编译漏AlertDialog类引用，改为现有类全名后通过；库release/demo/debugAndroidTest/publishToMavenLocal（TEMP/phase-c-poll-build2.log）、host debug/R8 release（phase-c-poll-host.log）通过。MuMu component=poll（phase-c-poll-device.log）通过：240/400dp收发/主题provider/群聊转发回复反应、单多选回调身份、发送中禁投、重复提交、pending失败重试、选项ID重排/换消息清空、33/33/33及100/100/50、0票、真实时间推进300ms动画、取消/选择/清空、pending ID防御复制/只读/非法ID拒绝与新cell恢复。完整MuMu Android15回归通过（phase-c-poll-full-device.log），包含全部旧组件、TGS完整周期/GIF重绑续播与收藏尺寸，以及Location/Poll专项。最后补齐投票颜色key刷新登记与回调契约注释，最新root构建（phase-c-poll-final-build.log）及投票设备专项（phase-c-poll-final-device.log）通过；最终消费端debug/R8 release复验通过（phase-c-poll-final-host.log）。
 - 投票真操作：夜间单选产生100%结果；多选勾两项→VOTE→各100%，View Results显示宿主统计；附件新建问题与两选项→预览→Send→聊天气泡→投票→具体选项回调；日间显示、长按多选正常，无AndroidRuntime错误。截图 TEMP/poll-{night,voted,multi,checked,multi-results,host-results,create,preview,sent,day2,sent-voted,selected}.png。poll-day.png实际仍夜间（关闭弹窗动画未完成就点主题），日间证据是poll-day2.png，不混淆记录。
 - 投票限制：无quiz/解释/定时结束倒计时/近期投票人头像及库内参与者列表；多选pending底部圆环为宿主异步状态补的反馈。英文资源在中文系统的复数回退可能显示“1 votes”，宿主应覆盖资源；极窄长计数/自定义长时间、更多语言/平板/大字体仍待人工检查。README/CHANGELOG/demo/sample已接入，无破坏性旧API变更。
-- 下一项：带缩略图的文件气泡，然后inline/reply keyboard。阶段 C 仍未完成，D–F 未开始；不得把已完成项当作整个目标完成。
+- 投票已独立提交并推送 b113f0c，PR #4 已更新。
+- 文件缩略图实现：扩展既有 DocumentBubbleCell 的固定上游 TYPE_FILE/createDocumentLayout/drawContent/onLayout 分支（8153/10637/11759/12581/22119等），保留无图44dp FILE按钮和旧6参factory，新增 documentThumbnail 与末尾thumbnail/caption重载。86dp缩略图、48dp居中状态按钮、原2行文件名/信息/菜单/圆角、说明及群聊/转发/回复/反应；宿主Drawable/加载/打开回调，无新依赖或文件读取。ReplyTo沿用文件缩略图；getThumbnailRect/getButtonRect供宿主定位。
+- 文件审查修复：同对象替换图/方向/状态重算、READY有图隐藏FILE图标、取消/重绑/离窗释放父拦截、长按选择不误开文件、绘制后恢复宿主bounds。caption/反应间距和pinned行高按上游分支；有图forward+reply补2dp。曾因非上游min150导致240dp群聊长文件名+caption背景越界，已删除该下限并保留旧无图无caption原宽度公式，86dp图不缩小。RTL caption按TextLayoutBlocks最小lineLeft归一并按真实lineRight计宽，混排保留整体范围；夜间预览按钮按上游hasImageSet清除bubble gradient，避免下载箭头染色。
+- 文件构建：首轮库release/demo/test/publish（TEMP/phase-c-document-build.log）、host debug/R8（phase-c-document-host.log）及设备专项（phase-c-document-device.log）通过。最终root（phase-c-document-final-build.log）与加强设备专项（phase-c-document-final-device.log）通过；最终host debug/R8 release（phase-c-document-final-host.log）及完整MuMu Android15回归（phase-c-document-full-device.log）均通过，包含旧TGS完整周期/GIF重绑续播和收藏尺寸。专项覆盖旧无图44dp/新图86dp+居中48dp、240/400dp收发群/转发/回复/反应、三种下载状态、替换图实际像素和bounds、取消/重绑/选择/清空/长按、长文件名/说明的背景标题菜单边界、旧宽度兼容，以及纯RTL/混排各行在气泡内。
+- 文件真操作：日间带caption预览/打开宿主回调，下载→显示3.2MB/8MB→取消回箭头，菜单、长按多选和夜间切换均已操作。截图TEMP/document-{day,open,loading,cancel,actions,selected,night}.png；最终APK已重查夜间白色下载箭头、模拟下载完成后隐藏图标及再次点击正确文件名回调，截图document-final-night.png、document-ready.png、document-downloaded-open.png；无AndroidRuntime崩溃输出。demo下载为模拟进度，不声明真实网络或文件打开；sample展示AAR宿主状态回调。库不提供PDF封面生成/文件URI加载，说明链接暂无独立点击；文件相册/剧透/缩略图模糊和渐变尚未移植，其它Android版本/平板/大字体仍需人工检查。
+- 下一项：inline keyboard，然后reply keyboard。阶段 C 仍未完成，D–F 未开始；不得把已完成项当作整个目标完成。
 
 ### 阶段 B 当前交接
 

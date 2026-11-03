@@ -215,6 +215,8 @@ public class TextBubbleMessage {
     // --- document
     public String fileName;
     public long fileSize;
+    /** Optional host-provided thumbnail for a document; the host owns this drawable. */
+    public Drawable documentThumbnail;
 
     /** upstream TLRPC.ReactionCount reduced to a static emoji, its count and whether it is mine. */
     public static class Reaction {
@@ -358,6 +360,8 @@ public class TextBubbleMessage {
                 reply.thumb = message.sticker.thumbnail;
             } else if (message.type == TYPE_GIF && message.gif != null) {
                 reply.thumb = message.gif.thumbnail;
+            } else if (message.type == TYPE_DOCUMENT) {
+                reply.thumb = message.documentThumbnail;
             } else if (message.type == TYPE_CONTACT && message.contact != null) {
                 reply.thumb = message.contact.avatar;
             }
@@ -402,6 +406,11 @@ public class TextBubbleMessage {
         message.fileName = fileName;
         message.fileSize = fileSize;
         return message;
+    }
+
+    public static TextBubbleMessage document(long id, boolean isOut, String time, int state, String fileName, long fileSize, Drawable thumbnail, CharSequence caption) {
+        TextBubbleMessage message = document(id, isOut, time, state, fileName, fileSize);
+        message.documentThumbnail = thumbnail; message.text = caption; return message;
     }
 
     /** One group row: member ids remain available to the host's media click callback. */
