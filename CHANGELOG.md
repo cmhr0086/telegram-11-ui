@@ -5,6 +5,8 @@
 ## Unreleased
 
 ### 新增
+- 阶段 D：搬运 `MessageSendPreview` 与 `ReactionsContainerLayout` 效果选择分支；复用既有气泡，新增宿主 `MessageEffect`、本地JSON/TGS单轮预览、取消保留草稿和生命周期/迟到发送隔离。`onSendTextWithEffect` / `onSendVoiceWithEffect` 默认转调旧回调；demo/sample接入，无新运行依赖或网络层。
+- 行为变更：文字/语音长按发送默认打开预览，`setSendPreviewEnabled(false)` 可恢复旧弹出菜单；未删除旧API。气泡新增默认开启的 `setDrawTime` 与只读时间坐标，供预览隐藏时间/状态并定位效果。未移植的逐字/相机/超宽缩放转场见README。
 - 阶段 D：搬运 `BotCommandsMenuView` / `BotCommandsMenuContainer`，恢复输入栏 Menu 入口、滚动与下拉关闭；宿主 `BotCommand` 快照和 `onBotCommandSelected` 回调取代机器人资料/发送业务，默认复用既有 `onSendText`，长按填入命令供编辑。demo/sample接入，无新增运行依赖、网络或权限。
 - 阶段 D：搬运 `SuggestEmojiView` 原箭头浮层与横向候选，新增宿主 `EmojiSuggestion` / `EmojiSuggestionQuery` / `EmojiSuggestionsController`；支持异步关键词/emoji查询、Unicode/本地动态表情替换、连续相同emoji替换及长按回调。demo/sample接入，无新增运行依赖或网络层。
 - 阶段 D：从上游普通用户分支搬运 `MentionsContainerView` / `MentionCell`；宿主 `Mention` / `MentionQuery` / `MentionsController` 支持异步候选、失效查询隔离、光标处插入和无用户名ID提及。`ChatInputLayout` 增加输入上方候选面板挂载，demo/sample接入，无新依赖或网络层。

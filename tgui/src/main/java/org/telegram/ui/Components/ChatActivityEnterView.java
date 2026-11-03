@@ -162,6 +162,8 @@ import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.ActionBar.SimpleTextView;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
+import org.telegram.ui.MessageSendPreview;
+import org.telegram.ui.Cells.TextBubbleMessage;
 
 
 
@@ -384,6 +386,15 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
          */
         default void onSendText(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate) {
 
+        }
+
+        /** Effect IDs belong to the host; the default preserves the existing send callback. */
+        default void onSendTextWithEffect(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate, long effectId) {
+            onSendText(text, entities, notify, scheduleDate);
+        }
+
+        default void onSendVoiceWithEffect(MediaController.RecordedAudio audio, boolean notify, int scheduleDate, long effectId) {
+            onSendVoice(audio, notify, scheduleDate);
         }
 
         /** tgui: a voice message recorded by {@link MediaController.Recorder} was sent (from the preview or directly). */
@@ -3720,12 +3731,113 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     }
 
     private ActionBarMenuSubItem actionScheduleButton;
-    // tgui: upstream 11.x opens MessageSendPreview (a full message preview with effects) here and
-    // only uses this popup for forwards/stories; MessageSendPreview needs ChatActivity, so the popup is used always.
+    private boolean sendPreviewEnabled = true;
+    private MessageSendPreview messageSendPreview;
+    private List<MessageEffect> messageEffects = java.util.Collections.emptyList();
+    private long previewDraftVersion;
+
+    /** Disable to retain the legacy long-press schedule/silent popup. */
+    public void setSendPreviewEnabled(boolean enabled) {
+        sendPreviewEnabled = enabled;
+        if (!enabled) dismissMessageSendPreview();
+    }
+
+    public MessageSendPreview getMessageSendPreview() { return messageSendPreview; }
+
+    public void setMessageEffects(List<MessageEffect> effects) {
+        ArrayList<MessageEffect> snapshot = new ArrayList<>();
+        java.util.HashSet<Long> ids = new java.util.HashSet<>();
+        if (effects != null) for (MessageEffect effect : effects) {
+            if (effect == null || !ids.add(effect.id)) throw new IllegalArgumentException("Effects require unique non-null IDs");
+            snapshot.add(effect);
+        }
+        messageEffects = java.util.Collections.unmodifiableList(snapshot);
+        if (messageSendPreview != null) messageSendPreview.setEffects(messageEffects);
+    }
+
+    private void dismissMessageSendPreview() {
+        MessageSendPreview old = messageSendPreview;
+        messageSendPreview = null;
+        if (old != null) old.dismissImmediately();
+    }
+
+    /** Opens the upstream preview for a text or recorded-voice draft. Data never leaves the host. */
+    public boolean showMessageSendPreview() {
+        if (!sendPreviewEnabled || destroyed || isPaused || !isAttachedToWindow() || editingMessageObject != null
+                || recordingAudioVideo || videoToSendMessageObject != null || isInScheduleMode()
+                || slowModeTimer > 0 || (delegate != null && delegate.hasForwardingMessages())) return false;
+        if (messageSendPreview != null && messageSendPreview.isShowing()) return true;
+        CharSequence text = messageEditText == null ? "" : messageEditText.getTextToUse();
+        if (audioToSend == null && TextUtils.isEmpty(AndroidUtilities.getTrimmedString(text))) return false;
+        dismissMessageSendPreview();
+        dismissBotCommandsMenu();
+        final long version = previewDraftVersion;
+        final MediaController.RecordedAudio audio = audioToSend;
+        final Object reply = replyingMessageObject;
+        final MessageSendPreview preview = new MessageSendPreview(parentActivity, resourcesProvider);
+        TextBubbleMessage message = audio == null
+                ? new TextBubbleMessage(0, new SpannableStringBuilder(text), true, "", TextBubbleMessage.STATE_NONE)
+                : TextBubbleMessage.voice(0, true, "", TextBubbleMessage.STATE_NONE, Math.max(1, Math.round(audio.durationMs / 1000f)), audio.waveform);
+        preview.setMessages(java.util.Collections.singletonList(message));
+        preview.setEffects(messageEffects);
+        preview.setEffectId(effectId);
+        messageSendPreview = preview;
+        preview.setOnDismissListener(dialog -> { if (messageSendPreview == preview) messageSendPreview = null; });
+        preview.setSendButton(sendButton, true, v -> sendFromPreview(preview, version, audio, reply, true, 0));
+        boolean self = delegate != null && delegate.isSelfChat();
+        boolean schedule = canSchedule() && !voiceOnce;
+        boolean online = schedule && !self && dialog_id > 0 && delegate != null && delegate.canSendWhenOnline();
+        boolean silent = !self;
+        if (schedule || silent) {
+            ActionBarPopupWindow.ActionBarPopupWindowLayout options = new ActionBarPopupWindow.ActionBarPopupWindowLayout(parentActivity, resourcesProvider);
+            options.setAnimationEnabled(false);
+            if (schedule) {
+                ActionBarMenuSubItem item = previewOption(options, getContext().getString(self ? R.string.SetReminder : R.string.ScheduleMessage), R.drawable.msg_calendar2, true, !online && !silent);
+                item.setOnClickListener(v -> {
+                    if (messageSendPreview != preview || !preview.isInteractive()) return;
+                    AlertsCreator.createScheduleDatePickerDialog(parentActivity, dialog_id,
+                            (notify, date) -> sendFromPreview(preview, version, audio, reply, notify, date), resourcesProvider);
+                });
+            }
+            if (online) previewOption(options, getContext().getString(R.string.SendWhenOnline), R.drawable.msg_online, false, !silent)
+                    .setOnClickListener(v -> sendFromPreview(preview, version, audio, reply, true, 0x7FFFFFFE));
+            if (silent) previewOption(options, getContext().getString(R.string.SendWithoutSound), R.drawable.input_notify_off, !schedule, true)
+                    .setOnClickListener(v -> sendFromPreview(preview, version, audio, reply, false, 0));
+            options.setupRadialSelectors(getThemedColor(Theme.key_dialogButtonSelector));
+            preview.setOptionsView(options);
+        }
+        preview.show();
+        if (delegate != null) delegate.onSendLongClick();
+        return true;
+    }
+
+    private ActionBarMenuSubItem previewOption(ActionBarPopupWindow.ActionBarPopupWindowLayout options, String text, int icon, boolean first, boolean last) {
+        ActionBarMenuSubItem item = new ActionBarMenuSubItem(getContext(), first, last, resourcesProvider);
+        item.setTextAndIcon(text, icon);
+        item.setMinimumWidth(dp(196));
+        options.addView(item, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+        return item;
+    }
+
+    private void sendFromPreview(MessageSendPreview preview, long version, MediaController.RecordedAudio audio, Object reply, boolean notify, int date) {
+        if (messageSendPreview != preview || !preview.isInteractive() || destroyed || isPaused) return;
+        if (version != previewDraftVersion || audioToSend != audio || replyingMessageObject != reply || editingMessageObject != null) {
+            dismissMessageSendPreview();
+            return;
+        }
+        long chosenEffect = preview.getSelectedEffect();
+        // Claim this preview before callbacks, so double taps and host reentry cannot send twice.
+        messageSendPreview = null;
+        preview.dismiss(true);
+        setEffectId(chosenEffect);
+        sendMessageInternal(notify, date, true);
+    }
+
     private boolean onSendLongClick(View view) {
         if (isInScheduleMode()) {
             return false;
         }
+        if (showMessageSendPreview()) return true;
 
         boolean self = delegate != null && delegate.isSelfChat();
 
@@ -4293,6 +4405,8 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
             @Override
             public void onTextChanged(CharSequence charSequence, int start, int before, int count) {
+                previewDraftVersion++;
+                dismissMessageSendPreview();
                 dismissBotCommandsMenu();
                 checkBotCommandsMenu(true);
                 if (ignorePrevTextChange) {
@@ -4832,6 +4946,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     }
 
     public void onDestroy() {
+        dismissMessageSendPreview();
         if (botCommandsMenuContainer != null) {
             botCommandsMenuContainer.destroy();
             if (botCommandsMenuContainer.getParent() instanceof ViewGroup) ((ViewGroup) botCommandsMenuContainer.getParent()).removeView(botCommandsMenuContainer);
@@ -4990,6 +5105,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     private Runnable hideKeyboardRunnable;
 
     public void onPause() {
+        dismissMessageSendPreview();
         isPaused = true;
         if (botCommandsMenuContainer != null) botCommandsMenuContainer.dismissImmediately();
         checkBotCommandsMenu(false);
@@ -5465,9 +5581,10 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             MediaController.getInstance().cleanRecording(false);
             // tgui: upstream builds a voice TL_message and sends it with SendMessagesHelper
             MediaController.RecordedAudio audio = audioToSend;
+            long sentEffectId = effectId;
             sendButton.setEffect(effectId = 0);
             if (delegate != null) {
-                delegate.onSendVoice(audio, notify, scheduleDate);
+                delegate.onSendVoiceWithEffect(audio, notify, scheduleDate, sentEffectId);
                 delegate.onMessageSend(null, notify, scheduleDate);
             }
             hideRecordedAudioPanel(true);
@@ -5615,10 +5732,11 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 }
                 CharSequence[] message = new CharSequence[]{ part };
                 ArrayList<TLRPC.MessageEntity> entities = MediaDataController.getInstance(currentAccount).getEntities(message, supportsNewEntities);
+                long sentEffectId = effectId;
                 sendButton.setEffect(effectId = 0);
                 // tgui: upstream builds SendMessageParams (reply, web page preview, effects, quick replies) for SendMessagesHelper
                 if (delegate != null) {
-                    delegate.onSendText(message[0], entities, notify, scheduleDate);
+                    delegate.onSendTextWithEffect(message[0], entities, notify, scheduleDate, sentEffectId);
                 }
                 start = end + 1;
             } while (end != text.length());

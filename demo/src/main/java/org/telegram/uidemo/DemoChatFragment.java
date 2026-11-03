@@ -118,6 +118,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_MENTIONS = 26;
     private static final int MENU_SUGGEST_EMOJI = 27;
     private static final int MENU_BOT_COMMANDS = 28;
+    private static final int MENU_SEND_PREVIEW = 29;
     private long firstInlineId;
     private final ArrayList<Runnable> inlineCompletions = new ArrayList<>();
     private long firstDocumentThumbnailId;
@@ -581,6 +582,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     scrollToMessage(firstLocationId);
                 } else if (id == MENU_POLL) {
                     scrollToMessage(firstPollId);
+                } else if (id == MENU_SEND_PREVIEW) {
+                    enterView.setFieldText(context.getString(org.telegram.uidemo.R.string.send_preview_draft));
+                    AndroidUtilities.runOnUIThread(() -> enterView.showMessageSendPreview(), 200);
                 } else if (id == MENU_BOT_COMMANDS) {
                     enterView.showBotCommandsMenu();
                 } else if (id == MENU_SUGGEST_EMOJI) {
@@ -627,6 +631,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.addSubItem(MENU_MENTIONS, R.drawable.msg_addcontact, context.getString(org.telegram.uidemo.R.string.mention_menu));
         otherItem.addSubItem(MENU_SUGGEST_EMOJI, R.drawable.msg_emoji_smiles, context.getString(org.telegram.uidemo.R.string.suggest_emoji_menu));
         otherItem.addSubItem(MENU_BOT_COMMANDS, R.drawable.input_bot2, context.getString(org.telegram.uidemo.R.string.bot_commands_menu));
+        otherItem.addSubItem(MENU_SEND_PREVIEW, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.send_preview_menu));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -708,6 +713,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         contentView.addView(enterView, contentView.getChildCount(), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
         contentView.setEnterView(enterView);
         enterView.setReplyKeyboard(sampleReplyKeyboard(context, true, false), false);
+        enterView.setMessageEffects(java.util.Arrays.asList(
+                new org.telegram.ui.Components.MessageEffect(1, "🐥", LocalEmojiSamples.JSON_ID),
+                new org.telegram.ui.Components.MessageEffect(2, "🥰", LocalEmojiSamples.TGS_ID)));
         enterView.setBotCommands(java.util.Arrays.asList(
                 new org.telegram.ui.bots.BotCommand("start", "start", context.getString(org.telegram.uidemo.R.string.bot_command_start)),
                 new org.telegram.ui.bots.BotCommand("help", "help", context.getString(org.telegram.uidemo.R.string.bot_command_help)),
@@ -1127,6 +1135,22 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 for (int i = stickerSamples.gifs.size() - 1; i >= 0; i--) if (stickerSamples.gifs.get(i).id == gif.id) stickerSamples.gifs.remove(i);
                 refreshMediaPanel();
             }
+        }
+
+        @Override
+        public void onSendTextWithEffect(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate, long effectId) {
+            onSendText(text, entities, notify, scheduleDate);
+            showSentEffect(effectId);
+        }
+
+        @Override public void onSendVoiceWithEffect(MediaController.RecordedAudio audio, boolean notify, int scheduleDate, long effectId) {
+            onSendVoice(audio, notify, scheduleDate);
+            showSentEffect(effectId);
+        }
+
+        private void showSentEffect(long effectId) {
+            if (effectId != 0 && getParentActivity() != null) android.widget.Toast.makeText(getParentActivity(),
+                    getParentActivity().getString(org.telegram.uidemo.R.string.send_preview_effect_sent, effectId), android.widget.Toast.LENGTH_SHORT).show();
         }
 
         @Override

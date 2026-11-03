@@ -83,4 +83,5 @@
     <string name="bot_command_weather">Weather for a location supplied by the host</string>
     <string name="bot_command_about">About this local demo</string>
     <string name="bot_command_feedback">Send feedback</string>
+    <string name="send_preview_effect_sent">Host received effect %1$d</string>
 </resources>

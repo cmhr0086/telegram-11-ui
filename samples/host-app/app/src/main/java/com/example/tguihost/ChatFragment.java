@@ -295,6 +295,10 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 org.telegram.messenger.MediaDataController.addAnimatedEmojiSpans(entities, styled, Theme.chat_msgTextPaint.getFontMetricsInt());
                 send(styled);
             }
+            @Override public void onSendTextWithEffect(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate, long effectId) {
+                onSendText(text, entities, notify, scheduleDate);
+                if (effectId != 0) android.widget.Toast.makeText(context, context.getString(com.example.tguihost.R.string.send_preview_effect_sent, effectId), android.widget.Toast.LENGTH_SHORT).show();
+            }
             @Override public void onEmojiPanelCreated(EmojiView panel) { emojiPanel = panel; updateMediaPanel(); }
             @Override public void onSendSticker(Sticker sticker) { sendSticker(sticker); }
             @Override public void onSendGif(Gif gif) {
@@ -310,6 +314,8 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         contentView.addView(enterView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
         contentView.setEnterView(enterView);
         enterView.setReplyKeyboard(sampleReplyKeyboard(context, true, false), false);
+        enterView.setMessageEffects(java.util.Collections.singletonList(
+                new org.telegram.ui.Components.MessageEffect(1, "🐥", 90001)));
         enterView.setBotCommands(java.util.Arrays.asList(
                 new org.telegram.ui.bots.BotCommand("start", "start", context.getString(com.example.tguihost.R.string.bot_command_start)),
                 new org.telegram.ui.bots.BotCommand("help", "help", context.getString(com.example.tguihost.R.string.bot_command_help)),

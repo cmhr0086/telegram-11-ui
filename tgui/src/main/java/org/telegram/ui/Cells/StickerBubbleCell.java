@@ -135,6 +135,8 @@ public class StickerBubbleCell extends PhotoBubbleCell {
         float timeX = message.isOut ? getMeasuredWidth() - timeWidth - AndroidUtilities.dp(42)
                 : Math.max(AndroidUtilities.dp(26), backgroundWidth - AndroidUtilities.dp(4) - timeWidth) + incomingAvatarInset();
         timeX -= AndroidUtilities.dp(STICKER_STATUS_OFFSET);
+        recordTimePosition(timeX - timeLayout.getLineLeft(0), photoRect.bottom - AndroidUtilities.dp(7.3f) - timeLayout.getHeight());
+        if (!shouldDrawTime()) return;
         float x1 = timeX - AndroidUtilities.dp(4);
         float offsetX = AndroidUtilities.dp(2);
         float top = photoRect.bottom - AndroidUtilities.dp(23);

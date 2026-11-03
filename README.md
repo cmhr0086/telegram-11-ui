@@ -564,6 +564,29 @@ cell.setMessage(file, pinnedTop, pinnedBottom);
 
 宿主负责解码和异步加载，收到缩略图后替换字段并重绑；下载进度可调用 `updateButtonState(animated)`。库不读取文件 URI、不生成 PDF 封面、不下载或打开文件；`getThumbnailRect(RectF)` / `getButtonRect(RectF)` 返回最近布局的缩略图/状态控件区域，宿主 Drawable 的原 bounds 在绘制后恢复。demo 的 ⋮ “File thumbnails” 包含带说明的预览、长文件名下载/取消，以及无图说明；sample 演示同一 AAR API。demo 下载为本地进度模拟，打开动作用回调提示展示；sample 下载按钮切换示例状态。说明文字显示样式和表情，但暂不支持独立的说明链接点击；不包含文件相册分组、剧透预览或缩略图模糊/加载渐变。
 
+## 长按发送预览与本地特效
+
+`org.telegram.ui.MessageSendPreview` 从固定上游 Dialog 搬运，复用现有气泡；文字或录音草稿长按发送默认打开预览。选项保留静音、定时及宿主允许的上线发送。返回/点击空白取消并保留草稿，草稿修改、暂停、销毁会使旧预览失效。`setSendPreviewEnabled(false)` 恢复旧弹出菜单；编辑、慢速、转发或圆视频录制使用既有路径。
+
+```java
+// ID belongs to the host. animationDocumentId resolves through the existing local SourceProvider.
+enterView.setMessageEffects(Arrays.asList(new MessageEffect(1, "🐥", 90001)));
+enterView.setDelegate(new ChatActivityEnterView.ChatActivityEnterViewDelegate() {
+    @Override public void onSendTextWithEffect(CharSequence text,
+            ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate, long effectId) {
+        // Store/send using your own backend; 0 means no effect.
+    }
+    // onSendVoiceWithEffect(RecordedAudio, notify, scheduleDate, effectId) is analogous.
+});
+enterView.showMessageSendPreview(); // optional programmatic entry
+```
+
+新增发送方法默认转调旧 `onSendText` / `onSendVoice`，原宿主实现保持可用。只给分段文本的第一条传效果ID；库不向网络发送数据。`MessageEffect(id, emoticon, animationDocumentId)` 是不可变宿主模型，id 非零且列表内唯一，动画ID也必须非零；源无法加载时回退静态emoji候选。宿主通过 `AnimatedEmojiDrawable.setSourceProvider` 提供本地 JSON/TGS。选择同一效果再次点击取消；全屏动画播放一轮后释放，发送结果交宿主。demo 菜单“Send preview and effects”与真实长按入口均可操作，鸭子动画是现有本地样例，不代表 Telegram 服务端特效素材；sample 提供同样的 AAR 接线。
+
+独立使用时，创建 `MessageSendPreview(context, resourcesProvider)`，设置 `setMessages(List<TextBubbleMessage>)`、`setSendButton(anchor, fillWhenClose, listener)`、可选 `setOptionsView(view)` / `setEffects(list)` 后 `show()`。`getSelectedEffect()` 返回宿主ID，发送后由宿主 `dismiss(true)`，取消 `dismiss(false)`，生命周期退出用 `dismissImmediately()`。窗口关闭期间 `isInteractive()` 为false，宿主异步回调应检查它；实例销毁后不可重用。列表复制容器而不深拷贝消息，宿主应把预览消息作为稳定快照提供。文本、语音及现有图片/文件/相册/贴纸/GIF/圆视频/音乐/联系人/位置/投票复用既有 cell；独立预览不启动音视频播放器。
+
+保留上游350ms EASE_OUT_QUINT开合、250ms Overshoot(0.5)效果选择器，以及原尺寸、颜色key、日夜模糊滤镜。预览隐藏时间/发送状态，并从气泡实际时间坐标定位效果；`TextBubbleCell.setDrawTime` 默认true，正常聊天不受影响。明确限制：没有输入文字逐字变成气泡、相机纹理、超宽列表缩放与发出后追踪气泡的转场；输入自动预览不生成宿主reply/forward头，独立调用可提供完整模型。模糊只捕获宿主Activity，不合成其它窗口；候选复用本地动画而非上游独立首帧缩略文档，不含Premium/Stars/网络特效目录/展开全量选择器。实际软件IME过渡、其它Android版本、平板和复杂RTL/大字体仍需人工检查。
+
 ## 包含的组件
 
 | 类别 | 类 |
@@ -574,6 +597,7 @@ cell.setMessage(file, pinnedTop, pinnedBottom);
 | 转发来源 | `TextBubbleMessage.ForwardedFrom` / `ForwardBackground`：普通与无背景媒体来源头、头像、原按压动画、宿主来源回调；贴纸/圆视频旁侧回复 |
 | @提及 | 原 MentionsContainerView / MentionCell 普通用户分支，宿主候选查询、异步隔离、光标插入及ID span |
 | 表情联想 | 原 SuggestEmojiView 浮层与横向候选，宿主关键词/emoji查询、Unicode及本地动态表情替换 |
+| 发送预览与特效 | MessageSendPreview、MessageEffect、ReactionsContainerLayout；文字/语音长按预览、本地JSON/TGS效果及宿主发送回调 |
 | 机器人命令菜单 | 原 BotCommandsMenuView / Container，输入栏入口、滚动/下拉关闭、短按宿主发送/长按编辑 |
 | 回复键盘 | 原 `ui.bots.BotKeyboardView`，宿主不可变行快照、紧凑/全高/单次模式；原输入栏切换与按钮回调 |
 | 内联按钮 | 上游44dp按钮行、类型图标/按压/加载反馈；宿主行模型与短按/长按回调，所有既有气泡共用 |
@@ -624,7 +648,7 @@ cell.setMessage(file, pinnedTop, pinnedBottom);
 | `ChatMessageCell` / `MessageObject` | 不整体移植，换成上面的轻量 `TextBubbleCell` / `TextBubbleMessage`；回复块（`replyNameLayout` / `replyTextLayout` / `drawNamesLayout` 的 hasReply 段 / `checkReplyTouchEvent`）、链接（`MessageObject.addLinks` + `checkTextBlockMotionEvent`）照上游数值移植进 `TextBubbleCell`；`ReplyMessageLine` 只保留单色条和底色（颜色来自 `ReplyTo.colorId`，不读服务器 peer color，没有双色 / 三色条纹、背景表情和加载动画）；`ChatActionCell` 只保留文字胶囊（礼物、头像、按钮、剧透都去掉）；`Theme.applyChatServiceMessageColor` 移植了服务消息颜色部分，`BitmapDrawable` 壁纸不做模糊 shader，用平均色；语音 / 图片 / 文件气泡按上游对应分支（`createDocumentLayout`、`setMessageContent`、`onLayout`、`drawContent`、`getIconForCurrentState`…）移植到 `VoiceBubbleCell` / `PhotoBubbleCell` / `DocumentBubbleCell`，每个类的头注释写明来源方法 |
 | `PhotoViewer` | 不移植（2 万行，含加载器、编辑、PiP、ExoPlayer）；改写成简易的 `MediaViewer`，见上表 |
 | `RadialProgress2` | 上游原版，去掉 `ImageReceiver` 覆盖图（音乐封面用的 `setImageOverlay`） |
-| `ChatActivityEnterView` 的业务边界 | 构造参数从 `ChatActivity` 换成 `BaseFragment`；`ChatActivityEnterViewDelegate` 全部改成 default 方法，并新增宿主回调：`onSendText(text, entities, notify, scheduleDate)`、`onSendVoice(RecordedAudio, …)`、`onEditDone`、`onSendContent`（键盘发来的 GIF / 贴纸）、`onImagePasted`、`onSilentChanged`、`onRecordTypingStatus`、`onTopViewTranslationChanged`、`canScheduleMessage` / `isInScheduleMode` / `isSelfChat` / `canSendWhenOnline`、`roundVideoNeedsCameraPermission`、`onEmojiPanelCreated`、`onSendSticker` / `onSendGif` / `onStickerSetRequested` / `onStickerFavoriteChanged` / `onGifRemoved`；聊天权限 / 频道 / 圆形视频 / 慢速模式用 `setChatPermissions()`、`setChannel()`、`setRoundVideoEnabled()`、`setSlowModeTimer()` 设置；回复目标是宿主的任意对象（`setReplyingMessageObject(Object)`），编辑用 `EditingMessage(id, text, entities, caption)`。删掉的业务分支：机器人键盘的发送/持久化业务和命令菜单的机器人资料/执行业务（UI已恢复） / WebView 容器、以…身份发送、礼物按钮、生日提示、Premium / 动态表情检查、快捷回复与商务链接、网页预览、`MessageSendPreview`（长按发送的消息预览，改用上游自带的弹出菜单）、草稿同步 |
+| `ChatActivityEnterView` 的业务边界 | 构造参数从 `ChatActivity` 换成 `BaseFragment`；`ChatActivityEnterViewDelegate` 全部改成 default 方法，并新增宿主回调：`onSendText(text, entities, notify, scheduleDate)`、`onSendVoice(RecordedAudio, …)`、`onEditDone`、`onSendContent`（键盘发来的 GIF / 贴纸）、`onImagePasted`、`onSilentChanged`、`onRecordTypingStatus`、`onTopViewTranslationChanged`、`canScheduleMessage` / `isInScheduleMode` / `isSelfChat` / `canSendWhenOnline`、`roundVideoNeedsCameraPermission`、`onEmojiPanelCreated`、`onSendSticker` / `onSendGif` / `onStickerSetRequested` / `onStickerFavoriteChanged` / `onGifRemoved`；聊天权限 / 频道 / 圆形视频 / 慢速模式用 `setChatPermissions()`、`setChannel()`、`setRoundVideoEnabled()`、`setSlowModeTimer()` 设置；回复目标是宿主的任意对象（`setReplyingMessageObject(Object)`），编辑用 `EditingMessage(id, text, entities, caption)`。删掉的业务分支：机器人键盘的发送/持久化业务和命令菜单的机器人资料/执行业务（UI已恢复） / WebView 容器、以…身份发送、礼物按钮、生日提示、Premium / 动态表情检查、快捷回复与商务链接、网页预览、发送特效的网络目录与账号策略（MessageSendPreview UI已恢复）、草稿同步 |
 | `MediaController` | 只保留语音消息录制 / 预览接口，交给可替换的 `MediaController.Recorder`；默认实现 `DefaultRecorder` 用 `MediaRecorder`（AAC .m4a，按 `getMaxAmplitude()` 出波纹和 5-bit 波形，打包格式与上游 native `set_bits` 相同）+ `MediaPlayer` 试听。宿主可换成自己的 Opus 编码器；录制状态仍通过上游的 `NotificationCenter` 事件（`recordStarted` / `recordProgressChanged` / `recordStopped` / `audioDidSent`…）回到输入栏，新增 `voiceRecordedForSend` 表示松手直接发送。圆形视频的相机（上游 `InstantCameraView`）由宿主在 `needStartRecordVideo` 里实现 |
 | `TLRPC` / `MediaDataController` | `TLRPC` 只剩消息实体（粗体、链接、自定义表情 id…）的纯数据类；`MediaDataController` 只保留文字实体相关的静态方法（`getEntities`、`addStyleToText`、`addTextStyleRuns`…，原样复制） |
 | `ProfileActivity` | 只移植了用户资料页的头部（`needLayout` / `setAvatarExpandProgress` / `needLayoutText` / `TopView` / `OverlaysView` 的数值和动画）、写消息按钮和信息行的单元格，改写成 `ProfileFragment` + 纯模型；去掉头像相册翻页（`ProfileGalleryView`，展开的就是那张 `Profile.photo`）、`SharedMediaLayout` 共享媒体分页（换成 `TextCell` 计数行）、群组 / 频道资料、成员列表、Stories、表情状态、Premium、个人颜色背景与图案、二维码 / 搜索 / 通话按钮、从聊天头像飞入的打开动画、修改头像、`AboutLinkCell`（简介用多行 `TextDetailCell`）、`UndoView` |
@@ -670,7 +694,7 @@ cell.setMessage(file, pinnedTop, pinnedBottom);
 7. **对话列表（已完成）**：`DialogCell`、滑动动作、多选、列表动画、文件夹标签、抽屉、写消息按钮；下拉显示隐藏归档（`PullForegroundDrawable`）、文件夹左右翻页（`DialogsViewPager`）也已完成；对话搜索（`DialogsSearchController`）也已完成；`UndoView` 归档/删除撤销已提供，隐藏归档等其它提示尚未移植
 8. **消息菜单与多选（已完成静态版）**：`MessageContextMenu`（单击：遮罩、浮起气泡、弹出菜单、静态表情反应条），长按多选（复选框、ActionMode、底部回复 / 转发栏、拖动连选）；气泡里的反应胶囊（`ReactionsLayoutInBubble`，静态表情 + 计数动画）已完成；后续：动态反应（上游 lottie 选中 / 飞入动画、反应者头像、展开全部反应、自定义表情反应），依赖阶段 C
 9. **媒体气泡（已完成第一批）**：语音、图片、文件；回复引用、链接、日期分隔条、气泡里的反应已完成；视频缩略图 / 简易查看器、照片视频相册及普通圆形视频已提供；更高阶媒体能力见各组件限制
-10. 输入增强：`SuggestEmojiView`、提及列表、机器人回复键盘和命令菜单已接入；下一项 `MessageSendPreview`（长按发送的消息预览与特效）
+10. 输入增强：`SuggestEmojiView`、提及列表、机器人回复键盘和命令菜单已接入；`MessageSendPreview`（长按发送预览与本地特效）已接入，体验差异见上文
 
 ## 抽取工具（`tools/`）
 

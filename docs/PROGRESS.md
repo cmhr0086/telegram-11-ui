@@ -11,13 +11,25 @@
 | A 贴纸与 GIF | 已完成，限制见下 | PR #2，库/消费端/仪器及 MuMu 真操作通过；WEBM 首帧降级 |
 | B 附件菜单 | 已实现并推送 PR #3 | 主体/五页/权限/选择/确认与宿主回调；简化交互和人工补验见下 |
 | C 更多消息 | 已完成，限制见下 | PR #4；11项功能已实现，库/消费端/完整设备回归通过，人工补验见各项记录 |
-| D 输入增强 | 进行中 | @提及、表情联想、机器人命令菜单已完成；发送预览未开始 |
+| D 输入增强 | 已完成，限制见下 | PR #5；@提及、表情联想、命令菜单和发送预览，库/消费端/完整MuMu回归通过 |
 | E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
 
-roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；阶段 C 已完成本任务的11项功能，PR #4已转为可审查；阶段D进行中，E–F未开始。
+roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；阶段 C 已完成本任务的11项功能，PR #4已转为可审查；阶段D四项已完成，E–F未开始。
 
 ### 阶段 D 当前交接
+
+- 阶段D最终验证：库release/demo/debugAndroidTest/publishToMavenLocal（TEMP/phase-d-preview-verified-build.log）、独立host debug/R8 release（phase-d-preview-final-host.log）通过；专项phase-d-preview-final-device.log与完整MuMu Android15回归phase-d-preview-full-device.log通过，后者包含全部旧功能及用户反馈的TGS完整周期/循环后续播、GIF临时重绑和收藏尺寸。
+- 预览专项覆盖真实Dialog与长文本/多消息/选项/效果不重叠，实际TGS候选及全屏动画的帧/像素推进、完整周期后释放，选择/取消/换源，双击及关闭期间迟到发送拒绝，取消保草稿/草稿版本失效、禁用/暂停恢复/销毁，多窗口共用anchor，文本/语音效果ID和旧回调兼容；语音测试只验证回调，没有实际音频文件。
+- MuMu真操作完成：长按输入发送按钮，日间/夜间预览和取消保草稿，选择本地特效→实际覆盖层动画→一轮消失，普通/静音发送显示宿主收到effect 2，定时选择器确认后demo显示闹钟前缀；只是宿主演示，不代表后台定时发送实现。截图TEMP/preview-{final-day,cancel-night,night,night-effect,night-complete,silent,schedule,scheduled-sent}.png，无AndroidRuntime错误。sample未单独安装实操，实际软件IME、其它Android版本/平板/复杂RTL/大字体仍待人工检查。
+- 四项D功能已按独立提交推进；本项提交后推送codex/phase-d并更新PR #5、转为可审查，目标dev/ui-lib，不合并。下一阶段从本分支拉codex/phase-e继续查看器升级。整个目标尚未完成，E/F仍待实现。
+
+- MessageSendPreview本轮完成：tools/pull先搬入固定上游MessageSendPreview/ReactionsContainerLayout，再裁掉账号/TL/网络/Premium/Stars；宿主MessageEffect、本地SourceProvider与既有BubbleCell提供内容。输入自动文字/语音预览，静音/定时/上线发送，新增effect回调默认转旧回调；demo菜单和sample接入。未改main或合并PR。
+- 预览保留350ms EASE_OUT_QUINT，效果选择器116dp区域、52×40dp候选/34dp图标、12dp提示、26dp圆角和8/4dp尾巴、250ms Overshoot(.5)；选中缩放.76/240ms。全屏本地TGS效果首轮结束释放，setEffects快照/稳定ID/旧holder隔离。新增setDrawTime隐藏预览时间/状态但不改普通气泡尺寸，getTimePosition让效果定位实际时间原点。模糊按14倍缩小、上游日夜饱和度/亮度及等比CLAMP shader处理，但只捕获宿主Activity。
+- 审查修复：关闭动画期间迟到的schedule回调需检查isInteractive；草稿代次/audio/reply身份校验；发送前占用预览避免重复点击/重入；多实例共用anchor不互相恢复alpha；高消息/效果/选项联合限高；选项GONE不占高；源替换/负ID/离窗及销毁资源释放。候选错误的边缘缩放已撤掉，上游该代码未启用。发送完成的效果ID默认只交宿主，demo Toast明确展示收到ID，不假装服务器执行。
+- 限制：未移植逐字输入变气泡、相机纹理、超宽列表缩放/发送后追踪气泡转场，输入自动预览不生成宿主回复/转发头；候选复用动画而非上游独立首帧文档，无Premium/网络目录/展开全量picker。现有processSendingText硬截断长文本使用start=end+1（上游同样），可能漏分段边界字符，单独记录待修，未为本功能顺手改发送语义。
+- 用户补充“贴纸播放到一半停止”已核对到现有83b85da/578bcf2修复；本轮基线完整MuMu回归phase-d-preview-baseline-device.log通过，包含180帧TGS末段/回卷后续播、发送状态重绑/GIF及收藏尺寸，未重复改已修代码。预览首轮root build+publish、独立host debug/R8（phase-d-preview-host.log）和专项phase-d-preview-device.log通过；最终验证记录随后补充。
+
 
 - 机器人命令菜单本轮完成：tools/pull搬运固定上游org.telegram.ui.bots.BotCommandsMenuView/Container，BotCommand快照替代TL机器人资料；恢复ChatActivityEnterView左Menu入口、32dp高/40dp收缩宽/15dp文字，原emoji/edit的10+width/57+width边距，保留文本与键盘状态决定展开、150ms位移动画。行说明16dp/命令14dp、16/8dp内边距/最多两行；36dp仅首次行高估算，布局后用实际前四行高度+8dp+12dp计算，不能把36当固定行高。
 - 上浮菜单沿输入上沿定位并同步输入位移，与底部emoji/reply面板共存，不占emojiPadding；原320ms Overshoot(0.8)入场、150ms收起/回弹和>16dp下拉关闭保留。短按清草稿/关闭后交onBotCommandSelected，默认转既有onSendText；长按覆盖为command+' '不发送。旧行对象身份隔离、回调重入更新菜单、编辑/录音/暂停/空数据关闭及销毁清理；显示期间压制提及/emoji联想，Back优先关闭菜单。来源：上游Enter3890/4061/4525–4641/5295/12340、ChatActivity4176/17288，未接网络或WebView。
