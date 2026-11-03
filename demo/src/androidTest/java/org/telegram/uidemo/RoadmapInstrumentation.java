@@ -37,6 +37,7 @@ public class RoadmapInstrumentation extends Instrumentation {
                 Intent intent = new Intent(getTargetContext(), MainActivity.class);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 activity = startActivitySync(intent);
+                ThemeFileDeviceChecks.run(activity);
                 Bundle status = new Bundle();
                 status.putString("stream", "\nUndoView checks started\n");
                 sendStatus(1, status);

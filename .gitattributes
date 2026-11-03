@@ -1,0 +1,2 @@
+# Theme assets have byte offsets and are parsed line by line on Android.
+*.attheme text eol=lf

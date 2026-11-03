@@ -26,6 +26,7 @@ import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.AnimatedEmojiSpan;
 import org.telegram.ui.Components.EditTextEffects;
 import org.telegram.ui.Components.RLottieDrawable;
+import org.telegram.ui.ActionBar.Theme;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -184,6 +185,9 @@ public final class AnimatedEmojiDeviceChecks {
         final long[] pixels = {0};
         final boolean[] havePixels = {false};
         final boolean[] changed = {false};
+        final Bitmap[] snapshots = new Bitmap[2];
+        final String[] diagnostics = new String[2];
+        final int[] sampledCount = {0};
         for (int attempt = 0; attempt < 35; attempt++) {
             main(() -> {
                 for (int i = 0; i < spans.length; i++) {
@@ -195,20 +199,126 @@ public final class AnimatedEmojiDeviceChecks {
                     }
                 }
                 if (advanced[0] && advanced[1] && view.getWidth() > 0 && view.getHeight() > 0) {
+                    String before = describeDrawing(view, spans, "before draw");
                     Bitmap bitmap = Bitmap.createBitmap(view.getWidth(), view.getHeight(), Bitmap.Config.ARGB_8888);
                     view.draw(new Canvas(bitmap));
+                    String after = describeDrawing(view, spans, "after draw");
                     long hash = 1;
                     for (int y = 0; y < bitmap.getHeight(); y += 2) for (int x = 0; x < bitmap.getWidth(); x += 2) hash = hash * 31 + bitmap.getPixel(x, y);
-                    bitmap.recycle();
-                    if (!havePixels[0]) { pixels[0] = hash; havePixels[0] = true; }
-                    else if (hash != pixels[0]) changed[0] = true;
+                    sampledCount[0]++;
+                    String sample = "sample=" + sampledCount[0] + " hash=" + hash + "\n" + before + "\n" + after;
+                    if (!havePixels[0]) {
+                        pixels[0] = hash;
+                        havePixels[0] = true;
+                        snapshots[0] = bitmap;
+                        diagnostics[0] = sample;
+                    } else {
+                        if (snapshots[1] != null) snapshots[1].recycle();
+                        snapshots[1] = bitmap;
+                        diagnostics[1] = sample;
+                        if (hash != pixels[0]) changed[0] = true;
+                    }
                 }
             });
-            if (advanced[0] && advanced[1] && changed[0]) return;
+            if (advanced[0] && advanced[1] && changed[0]) {
+                if (snapshots[0] != null) snapshots[0].recycle();
+                if (snapshots[1] != null) snapshots[1].recycle();
+                return;
+            }
             SystemClock.sleep(180);
         }
+        if (!advanced[0] || !advanced[1] || !changed[0]) {
+            String details = "label=" + label + " samples=" + sampledCount[0] +
+                    " initialFrames=" + firstFrames[0] + "," + firstFrames[1] +
+                    " advanced=" + advanced[0] + "," + advanced[1] +
+                    " changed=" + changed[0] + "\nFIRST:\n" + diagnostics[0] + "\nLAST:\n" + diagnostics[1];
+            details += saveFailureBitmaps(label, snapshots);
+            status(details);
+        }
+        if (snapshots[0] != null) snapshots[0].recycle();
+        if (snapshots[1] != null) snapshots[1].recycle();
         check(advanced[0] && advanced[1], label + " JSON and TGS frames must both advance");
         check(changed[0], label + " actual View.draw pixels must change across frames");
+    }
+
+    private String describeDrawing(View view, AnimatedEmojiSpan[] spans, String phase) {
+        StringBuilder result = new StringBuilder(phase);
+        result.append(" view=").append(view.getClass().getSimpleName())
+                .append(" dimensions=").append(view.getWidth()).append('x').append(view.getHeight())
+                .append(" visibility=").append(view.getVisibility()).append(" alpha=").append(view.getAlpha())
+                .append(" attached=").append(view.isAttachedToWindow())
+                .append(" themePaintColor=0x").append(Integer.toHexString(Theme.chat_msgTextPaint.getColor()))
+                .append(" themePaintAlpha=").append(Theme.chat_msgTextPaint.getAlpha())
+                .append(" themePaintSize=").append(Theme.chat_msgTextPaint.getTextSize());
+        try {
+            if (view instanceof TextBubbleCell) {
+                Object layout = readField(TextBubbleCell.class, view, "textLayout");
+                Object time = readField(TextBubbleCell.class, view, "timeLayout");
+                Object paint = readField(TextBubbleCell.class, view, "textPaint");
+                result.append(" textLayout=").append(layout == null ? "null" : layout.getClass().getSimpleName() + "@" + System.identityHashCode(layout));
+                if (layout instanceof Layout) {
+                    Layout l = (Layout) layout;
+                    result.append(" textLayoutSize=").append(l.getWidth()).append('x').append(l.getHeight());
+                    result.append(" text=").append(l.getText());
+                }
+                result.append(" timeLayout=").append(time == null ? "null" : ((Layout) time).getText());
+                if (paint instanceof TextPaint) {
+                    TextPaint p = (TextPaint) paint;
+                    result.append(" actualTextPaint=0x").append(Integer.toHexString(p.getColor()))
+                            .append("/alpha=").append(p.getAlpha()).append("/size=").append(p.getTextSize());
+                }
+            }
+            for (int i = 0; i < spans.length; i++) {
+                AnimatedEmojiSpan span = spans[i];
+                Object drawable = readField(AnimatedEmojiSpan.class, span, "drawable");
+                result.append("\n span[").append(i).append("] id=").append(span.getDocumentId())
+                        .append(" size=").append(span.size)
+                        .append(" measured=").append(readField(AnimatedEmojiSpan.class, span, "measuredSize"))
+                        .append(" drawableSize=").append(readField(AnimatedEmojiSpan.class, span, "drawableSize"))
+                        .append(" drawable=").append(drawable == null ? "null" : System.identityHashCode(drawable));
+                if (drawable instanceof AnimatedEmojiDrawable) {
+                    AnimatedEmojiDrawable d = (AnimatedEmojiDrawable) drawable;
+                    result.append(" bounds=").append(d.getBounds().toShortString())
+                            .append(" frame=").append(d.getCurrentFrame());
+                    Object delegate = readField(AnimatedEmojiDrawable.class, d, "animation");
+                    if (delegate instanceof RLottieDrawable) {
+                        RLottieDrawable lottie = (RLottieDrawable) delegate;
+                        result.append(" lottie=").append(System.identityHashCode(lottie))
+                                .append(" nativePtr=").append(readField(RLottieDrawable.class, lottie, "nativePtr"))
+                                .append(" running=").append(lottie.isRunning())
+                                .append(" bitmapPaintAlpha=").append(lottie.getPaint().getAlpha())
+                                .append(" renderingBitmap=").append(readField(RLottieDrawable.class, lottie, "renderingBitmap") != null)
+                                .append(" nextBitmap=").append(readField(RLottieDrawable.class, lottie, "nextRenderingBitmap") != null)
+                                .append(" isInvalid=").append(readField(RLottieDrawable.class, lottie, "isInvalid"));
+                    }
+                }
+            }
+        } catch (ReflectiveOperationException e) {
+            result.append(" reflectionError=").append(e);
+        }
+        return result.toString();
+    }
+
+    private static Object readField(Class<?> type, Object value, String name) throws ReflectiveOperationException {
+        Field field = type.getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(value);
+    }
+
+    private String saveFailureBitmaps(String label, Bitmap[] snapshots) {
+        StringBuilder result = new StringBuilder();
+        String prefix = label.replaceAll("[^a-zA-Z0-9_-]", "_");
+        for (int i = 0; i < snapshots.length; i++) {
+            if (snapshots[i] == null) continue;
+            File file = new File(instrumentation.getTargetContext().getFilesDir(), "emoji-diagnostic-" + prefix + (i == 0 ? "-first.png" : "-last.png"));
+            try (FileOutputStream stream = new FileOutputStream(file)) {
+                if (!snapshots[i].compress(Bitmap.CompressFormat.PNG, 100, stream)) throw new java.io.IOException("PNG compression failed");
+                result.append("\nbitmap ").append(i).append('=').append(file.getAbsolutePath());
+            } catch (Exception e) {
+                result.append("\nbitmap ").append(i).append(" error=").append(e);
+            }
+        }
+        return result.toString();
     }
 
     private void emojiOnlyAndInPlaceEdit() {
