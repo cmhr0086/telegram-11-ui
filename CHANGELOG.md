@@ -5,6 +5,7 @@
 ## Unreleased
 
 ### 新增
+- 阶段 C：`PollBubbleCell` 从上游投票分支裁剪单选、多选、票数/结果条形及过渡；`TextBubbleMessage.Poll` / `PollOption` 为宿主快照，提交和结果通过回调交宿主。demo/sample 支持附件创建后发送可投票气泡，无新增运行依赖或网络层。
 - 阶段 C：`LocationBubbleCell` / `TextBubbleMessage.Location` 从上游普通坐标/地点分支裁剪，宿主提供地图 Drawable，保留原地图尺寸/图钉/圆角/标题地址和消息头；`onLocationPressed` 默认兼容既有媒体回调。demo/sample 附件发送位置气泡，无地图 SDK、GPS 或网络依赖。
 - 阶段 C：`MusicBubbleCell` 从上游音乐分支裁剪，复用原播放/进度/菜单布局与动画；新增 `TextBubbleMessage.music(...)`、`musicTitle` / `musicPerformer` / `audioPaused`，宿主控制播放及下载，旧 API 兼容。demo 使用本地 MediaPlayer 实播、暂停/拖动/切曲；sample 接入 AAR 回调，无新增运行依赖。
 - 阶段 C：`ContactBubbleCell` / `TextBubbleMessage.Contact` 从上游联系人分支裁剪；保留头像、姓名/号码、名片侧线和底部动作，支持群聊/回复/转发。`MediaDelegate.onContactAction` 将查看、发送消息、添加交给宿主；demo/sample 附件联系人直接显示名片，无通讯录权限或新依赖，旧 API 兼容。

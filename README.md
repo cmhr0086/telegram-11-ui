@@ -256,7 +256,7 @@ new ChatAttachAlert(activity, new ChatAttachAlert.Delegate() {
 
 面板包含相册、文件、联系人、位置和投票页，当前页的选择通过 `Attachment` 模型返回；联系人由 `getContacts()` 提供，位置页通过 `createLocationView(Context, LocationCallback)` 注入宿主地图并回传位置，投票由本地表单创建。`onPermissionResult` 可接收相册权限及部分授权状态。库不读取系统联系人，也不提供地图或上传服务。
 
-相册使用 MediaStore，并按系统版本申请媒体读取权限；Android 14 的部分照片访问可重新选择。文件页使用系统文档选择器，返回的 `Uri` 及其授权取决于提供方；宿主需要处理访问失败，并在需要长期使用时保存可持久授权或复制内容。选择器进行中如果 Activity 重建，待处理选择会取消，需要重新打开。demo 当前将选择的图片和视频以 URI 文字摘要展示；文件使用文件气泡，联系人使用名片气泡，位置显示地图气泡，投票显示示例摘要，说明文字单独显示。
+相册使用 MediaStore，并按系统版本申请媒体读取权限；Android 14 的部分照片访问可重新选择。文件页使用系统文档选择器，返回的 `Uri` 及其授权取决于提供方；宿主需要处理访问失败，并在需要长期使用时保存可持久授权或复制内容。选择器进行中如果 Activity 重建，待处理选择会取消，需要重新打开。demo 当前将选择的图片和视频以 URI 文字摘要展示；文件使用文件气泡，联系人使用名片气泡，位置显示地图气泡，投票显示可操作气泡，说明文字单独显示。
 
 附件预览是精简列表，不包含 `PhotoViewer` 图片编辑功能；顶部手柄支持拖动，但不包含上游完整的整页联动。贴纸 WEBM 的首帧降级限制见上节。
 
@@ -397,6 +397,40 @@ cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
 
 demo 的 ⋮ “Location messages” 有地点、纯坐标及缺图示例；附件位置页选择并确认后直接发送位置气泡。demo 和 sample 的道路图是生成的示意图，坐标 `(0,0)` 仅用于回调演示，不是真实地图服务。暂不含实时位置共享、地图加载渐变/缩放和闪动占位；静态占位采用上游关闭背景动画时的 alpha 70 分支。说明文字通过附件流程作为独立消息发送。
 
+### 投票消息
+
+```java
+List<TextBubbleMessage.PollOption> options = Arrays.asList(
+        new TextBubbleMessage.PollOption("walk", "Walk", 0, false),
+        new TextBubbleMessage.PollOption("read", "Read", 0, false));
+TextBubbleMessage.Poll poll = new TextBubbleMessage.Poll(question, options,
+        0, true, false, false, false); // totalVoters, anonymous, multiple, closed, pending
+TextBubbleMessage message = TextBubbleMessage.poll(id, outgoing, time, state, poll);
+PollBubbleCell cell = new PollBubbleCell(context, resourcesProvider);
+cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+    @Override public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) { }
+    @Override public void onPollVote(TextBubbleCell cell, TextBubbleMessage message, List<String> ids) {
+        // Publish a pending snapshot, then ask your own data source to record the vote.
+        // Replace message.poll with the authoritative result (or pending=false on failure)
+        // and rebind on the UI thread. The library does not add votes itself.
+    }
+    @Override public void onPollResults(TextBubbleCell cell, TextBubbleMessage message) {
+        // Open the host's results page for a public poll.
+    }
+    @Override public void onPollOptionPressed(TextBubbleCell cell, TextBubbleMessage message,
+                                             TextBubbleMessage.PollOption option) {
+        // Show this option's count or host-provided voters.
+    }
+});
+cell.setMessage(message, pinnedTop, pinnedBottom);
+```
+
+`PollBubbleCell` 从固定上游 `ChatMessageCell.TYPE_POLL` 布局、绘制、触摸与结果过渡分支裁剪。单选点选后提交；多选先勾选，再点 VOTE；已投票或关闭时显示结果。问题/选项文字、稳定选项 ID、票数、当前用户 chosen、匿名/多选/关闭/pending 均由宿主快照提供；选项 ID 在同一投票的后续快照中保持稳定。未发送完成的消息不接受投票。结果行回调包含具体选项，公开投票的底部按钮回调为 `onPollResults`。
+
+百分比沿用上游整数和余数分配规则，等票可能显示 `33% / 33% / 33%`；多选的分母是投票人数，百分比总和可以超过100。条形长度相对最高选项，保留原最短5dp及300ms结果过渡。宿主应在回调里立即发布 pending 状态，完成或失败后替换快照并重绑；不要把 UI 的勾选直接当作已确认选票。构造器可追加第8参 `List<String> pendingOptionIds`，传入正在提交的稳定 ID，使列表复用/重建后仍能恢复对应等待圆环和多选勾选。
+
+demo ⋮ “Poll messages” 提供单选、多选公开投票和关闭结果；本地回调延迟650ms展示 pending，然后更新内存票数。sample 同样展示宿主更新模型；附件创建投票→确认发送后直接成为可投票气泡。这些数据只用于本地演示，不连接服务器。暂不含 quiz/答题解释/定时关闭倒计时、最近投票者头像和库内投票者列表；实际参与者、撤票或关闭操作由宿主处理。极窄宽度下的长票数/自定义长时间、大字体和更多语言仍需人工检查；当前内置文案为英文，宿主可覆盖 Android 资源。
+
 ## 包含的组件
 
 | 类别 | 类 |
@@ -405,6 +439,7 @@ demo 的 ⋮ “Location messages” 有地点、纯坐标及缺图示例；附�
 | 服务消息 | `ChatActionCell` / `ServiceMessage`：加入、邀请、改名、置顶，用户与消息回调 |
 | 群聊消息 | `TextBubbleMessage.Sender` / `MessageGrouping` / `ChatAvatarDecoration`：原配色姓名、头像列、连续消息及滚动吸底头像 |
 | 转发来源 | `TextBubbleMessage.ForwardedFrom` / `ForwardBackground`：普通与无背景媒体来源头、头像、原按压动画、宿主来源回调；贴纸/圆视频旁侧回复 |
+| 投票消息 | `PollBubbleCell` / `TextBubbleMessage.Poll`：单选/多选、结果条形与百分比、宿主提交和结果回调 |
 | 位置消息 | `LocationBubbleCell` / `TextBubbleMessage.Location`：宿主地图、纯坐标/地点布局、原图钉与位置回调 |
 | 音乐消息 | `MusicBubbleCell` / `TextBubbleMessage.music(...)`：播放/暂停、拖动、下载状态、说明与宿主回调 |
 | 联系人消息 | `ContactBubbleCell` / `TextBubbleMessage.Contact`：原名片布局、查看/发消息/添加按钮及宿主回调 |
@@ -471,7 +506,7 @@ demo 的 ⋮ “Location messages” 有地点、纯坐标及缺图示例；附�
 
 主题 `.attheme` 解析同时接受 LF / CRLF，壁纸二进制偏移按原始字节计算；`.gitattributes` 固定新检出的主题资源为 LF。Windows 上此前出现的夜间文字透明/缺失已修复，设备覆盖打包的 night/darkblue 与两种换行格式。
 
-- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸、GIF、联系人、音乐和位置；已有群聊头像、名字和转发来源；没有投票等其它媒体、带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
+- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸、GIF、联系人、音乐、位置和投票；已有群聊头像、名字和转发来源；尚缺带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 查看器 `MediaViewer`：只是简易版——没有缩略图条、分享 / 保存 / 转发 / 删除菜单、图片编辑、画中画、倍速、静音、视频缩略图预览、横屏全屏按钮、多图相册分组；视频用系统 `MediaPlayer`（格式取决于设备解码器，没有缓冲进度、不循环），播放中不能连续翻页预加载；图片直接画宿主给的 `Drawable`（大图要宿主自己先缩放）；打开 / 关闭动画不处理被 ActionBar 或输入栏遮住的那部分（上游会裁剪），起点用整张图片的位置；平板没有专门布局
 - 输入栏：附件按钮由宿主回调打开 `ChatAttachAlert`；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；没有机器人键盘、命令菜单和 WebView 按钮；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 

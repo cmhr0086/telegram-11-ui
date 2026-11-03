@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | A 贴纸与 GIF | 已完成，限制见下 | PR #2，库/消费端/仪器及 MuMu 真操作通过；WEBM 首帧降级 |
 | B 附件菜单 | 已实现并推送 PR #3 | 主体/五页/权限/选择/确认与宿主回调；简化交互和人工补验见下 |
-| C 更多消息 | 进行中 | 未读/服务/群聊/转发/联系人/音乐/位置已完成；投票/文件缩略图和键盘待实现 |
+| C 更多消息 | 进行中 | 未读/服务/群聊/转发/联系人/音乐/位置/投票已完成；文件缩略图和键盘待实现 |
 | D 输入增强 | 未开始 | 提及、表情联想、命令、发送预览 |
 | E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
@@ -42,7 +42,13 @@ roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功�
 - 位置审查修复：纯坐标含反应时仍用 mediaBackground，反应与时间按原分支定位；图钉只在宿主地图存在时显示，绘制后恢复宿主 Drawable bounds。PhotoBubbleCell 只释放自己持有的父列表拦截，重复 DOWN 不先释放，避免 RecyclerListView 清空点击任务；取消/重绑/离窗分别覆盖。占位测试最初误认为 SVG 中心必不透明，诊断确认该点本来透明，改为区域可见性检查和白底红蓝混合强度断言，未通过改生产底色来迁就测试。
 - 位置最终构建：库 release/demo/debugAndroidTest/publishToMavenLocal 通过（TEMP/phase-c-location-final-build.log），独立 host debug/R8 release 通过（phase-c-location-final-host.log）。完整 MuMu Android15 仪器回归通过（phase-c-location-full-device.log），包括旧 TGS 完整周期、GIF 重绑续播和收藏尺寸。位置专项覆盖 240/400dp、收发、坐标/地点、长 RTL 地址、群聊/转发/回复/反应、原尺寸/圆角、空图与 alpha70、Drawable bounds、回调身份、取消/长按/选择/重绑/清空，以及拦截拥有权与重复 DOWN。
 - MuMu 位置真操作：日夜主题、地图回调显示 0.000/0.000、缺图占位、附件位置选择→确认→发送、长按多选均通过。截图 TEMP/location-{day,venue,callback,night,missing,sent,final-tap,final-select}.png；最终 APK 重查点击和选择。示例地图明确标示为示意图，不是真实地理数据。未移植实时位置/GPS、地图加载渐变与 shimmer；坐标有效性、地图内容/定位居中和实际跳转由宿主负责，平板/大字体/其它 Android 版本仍需人工检查。
-- 下一项：投票气泡，再做文件缩略图、inline/reply keyboard。阶段 C 仍未完成，D–F 未开始；不得把已完成项当作整个目标完成。
+- 位置独立提交 b8f3e6f 已推送，PR #4 已更新。
+- 投票实现：从固定上游 ChatMessageCell TYPE_POLL 的7680/2902/21808/11879等分支裁剪 PollBubbleCell。保留500dp正文上限、群聊让位、16/15dp问题/选项、26dp选项间距、5dp结果条/2dp圆角/最短5dp、300ms结果过渡与原等待圆环参数；百分比按上游floor/条件余数分配，等票允许33/33/33，多选以总人数为分母可超过100。Poll/PollOption快照和稳定ID、单/多选/pending/关闭/选中/结果由宿主提供，无网络或新依赖。
+- 投票审查修复：footer背景横坐标、已投结果改chosen后旧勾清理、checkbox原20/type9、按压ripple、RTL副标题、底部文字省略、转发+回复额外2dp、pinned行高及等待圆环旋转/伸缩。7参Poll兼容，8参pendingOptionIds保留异步选项，单/多选新cell重建后恢复反馈；宿主须同步发布pending，再在成功/失败后发布新快照。结果行给具体选项回调，公开底部按钮独立查看结果；demo650ms本地确认并取消销毁页面的迟到任务，sample同步更新快照。
+- 投票构建/专项：首次demo编译漏AlertDialog类引用，改为现有类全名后通过；库release/demo/debugAndroidTest/publishToMavenLocal（TEMP/phase-c-poll-build2.log）、host debug/R8 release（phase-c-poll-host.log）通过。MuMu component=poll（phase-c-poll-device.log）通过：240/400dp收发/主题provider/群聊转发回复反应、单多选回调身份、发送中禁投、重复提交、pending失败重试、选项ID重排/换消息清空、33/33/33及100/100/50、0票、真实时间推进300ms动画、取消/选择/清空、pending ID防御复制/只读/非法ID拒绝与新cell恢复。完整MuMu Android15回归通过（phase-c-poll-full-device.log），包含全部旧组件、TGS完整周期/GIF重绑续播与收藏尺寸，以及Location/Poll专项。最后补齐投票颜色key刷新登记与回调契约注释，最新root构建（phase-c-poll-final-build.log）及投票设备专项（phase-c-poll-final-device.log）通过；最终消费端debug/R8 release复验通过（phase-c-poll-final-host.log）。
+- 投票真操作：夜间单选产生100%结果；多选勾两项→VOTE→各100%，View Results显示宿主统计；附件新建问题与两选项→预览→Send→聊天气泡→投票→具体选项回调；日间显示、长按多选正常，无AndroidRuntime错误。截图 TEMP/poll-{night,voted,multi,checked,multi-results,host-results,create,preview,sent,day2,sent-voted,selected}.png。poll-day.png实际仍夜间（关闭弹窗动画未完成就点主题），日间证据是poll-day2.png，不混淆记录。
+- 投票限制：无quiz/解释/定时结束倒计时/近期投票人头像及库内参与者列表；多选pending底部圆环为宿主异步状态补的反馈。英文资源在中文系统的复数回退可能显示“1 votes”，宿主应覆盖资源；极窄长计数/自定义长时间、更多语言/平板/大字体仍待人工检查。README/CHANGELOG/demo/sample已接入，无破坏性旧API变更。
+- 下一项：带缩略图的文件气泡，然后inline/reply keyboard。阶段 C 仍未完成，D–F 未开始；不得把已完成项当作整个目标完成。
 
 ### 阶段 B 当前交接
 

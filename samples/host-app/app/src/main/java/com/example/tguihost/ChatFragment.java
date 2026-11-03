@@ -127,6 +127,9 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         TextBubbleMessage.ForwardedFrom source = new TextBubbleMessage.ForwardedFrom(-100,
                 app.getString(com.example.tguihost.R.string.forward_source_name));
         messages.get(0).forwardedFrom = source;
+        messages.add(TextBubbleMessage.poll(nextId++, false, "12:41", TextBubbleMessage.STATE_NONE, samplePoll(app, false, false)));
+        messages.add(TextBubbleMessage.poll(nextId++, true, "12:41", TextBubbleMessage.STATE_READ, samplePoll(app, true, false)));
+        messages.add(TextBubbleMessage.poll(nextId++, false, "12:41", TextBubbleMessage.STATE_NONE, samplePoll(app, false, true)));
         for (TextBubbleMessage message : messages) {
             if (message.type == TextBubbleMessage.TYPE_STICKER || message.type == TextBubbleMessage.TYPE_ALBUM
                     || message.type == TextBubbleMessage.TYPE_ROUND_VIDEO) message.forwardedFrom = source;
@@ -314,6 +317,13 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                     } else if (item.type == Attachment.Type.CONTACT) {
                         append(TextBubbleMessage.contact(nextId++, true, time, TextBubbleMessage.STATE_SENT,
                                 new TextBubbleMessage.Contact(item.contact.id, item.contact.name, item.contact.phone, item.contact.avatar)));
+                    } else if (item.type == Attachment.Type.POLL) {
+                        ArrayList<TextBubbleMessage.PollOption> options = new ArrayList<>();
+                        for (int i = 0; i < item.poll.options.size(); i++) {
+                            options.add(new TextBubbleMessage.PollOption(Integer.toString(i), item.poll.options.get(i), 0, false));
+                        }
+                        append(TextBubbleMessage.poll(nextId++, true, time, TextBubbleMessage.STATE_SENT,
+                                new TextBubbleMessage.Poll(item.poll.question, options, 0, item.poll.anonymous, item.poll.multipleChoice, false, false)));
                     } else if (item.type == Attachment.Type.LOCATION) {
                         append(TextBubbleMessage.location(nextId++, true, time, TextBubbleMessage.STATE_SENT,
                                 new TextBubbleMessage.Location(item.location.latitude, item.location.longitude,
@@ -337,6 +347,37 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 if (!android.text.TextUtils.isEmpty(caption)) append(new TextBubbleMessage(nextId++, caption, true, time, TextBubbleMessage.STATE_SENT));
             }
         }, getResourceProvider()).show();
+    }
+
+    private static TextBubbleMessage.Poll samplePoll(Context context, boolean multiple, boolean closed) {
+        ArrayList<TextBubbleMessage.PollOption> options = new ArrayList<>();
+        int[] labels = {com.example.tguihost.R.string.poll_option_walk, com.example.tguihost.R.string.poll_option_coffee, com.example.tguihost.R.string.poll_option_read};
+        for (int i = 0; i < labels.length; i++) {
+            options.add(new TextBubbleMessage.PollOption(Integer.toString(i), context.getString(labels[i]), closed ? new int[]{4, 3, 2}[i] : 0, closed && i == 0));
+        }
+        return new TextBubbleMessage.Poll(context.getString(multiple ? com.example.tguihost.R.string.poll_question_multiple : com.example.tguihost.R.string.poll_question),
+                options, closed ? 9 : 0, !multiple, multiple, closed, false);
+    }
+
+    private static TextBubbleMessage.Poll localPollResult(TextBubbleMessage.Poll poll, List<String> ids) {
+        ArrayList<TextBubbleMessage.PollOption> options = new ArrayList<>();
+        for (TextBubbleMessage.PollOption option : poll.options) {
+            boolean chosen = ids.contains(option.id);
+            options.add(new TextBubbleMessage.PollOption(option.id, option.text, option.voters + (chosen ? 1 : 0), chosen));
+        }
+        return new TextBubbleMessage.Poll(poll.question, options, poll.totalVoters + 1, poll.anonymous, poll.multiple, poll.closed, false);
+    }
+
+    private void showPollResults(TextBubbleMessage message) {
+        if (getParentActivity() == null || message.poll == null) return;
+        StringBuilder lines = new StringBuilder();
+        for (TextBubbleMessage.PollOption option : message.poll.options) {
+            if (lines.length() > 0) lines.append('\n');
+            lines.append(getParentActivity().getString(com.example.tguihost.R.string.poll_result_line, option.text, option.voters));
+        }
+        new org.telegram.ui.ActionBar.AlertDialog.Builder(getParentActivity(), getResourceProvider())
+                .setTitle(message.poll.question).setMessage(lines)
+                .setPositiveButton(getParentActivity().getString(org.telegram.tgui.R.string.OK), null).show();
     }
 
     private static android.graphics.drawable.Drawable sampleAttachmentMap(Context context) {
@@ -566,10 +607,24 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             else if (viewType == TextBubbleMessage.TYPE_GIF) cell = new org.telegram.ui.Cells.GifBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_DOCUMENT) cell = new org.telegram.ui.Cells.DocumentBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_MUSIC) cell = new org.telegram.ui.Cells.MusicBubbleCell(context, getResourceProvider());
+            else if (viewType == TextBubbleMessage.TYPE_POLL) cell = new org.telegram.ui.Cells.PollBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_LOCATION) cell = new org.telegram.ui.Cells.LocationBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_CONTACT) cell = new org.telegram.ui.Cells.ContactBubbleCell(context, getResourceProvider());
             else cell = new TextBubbleCell(context, getResourceProvider());
             cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+                @Override public void onPollVote(TextBubbleCell cell, TextBubbleMessage message, List<String> optionIds) {
+                    if (actionBar.isActionModeShowed() || message.poll == null || message.poll.pending) return;
+                    message.poll = localPollResult(message.poll, optionIds);
+                    int position = messages.indexOf(message);
+                    if (position >= 0) notifyItemChanged(position);
+                }
+                @Override public void onPollOptionPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.PollOption option) {
+                    if (actionBar.isActionModeShowed() || getParentActivity() == null) return;
+                    Toast.makeText(getParentActivity(), getParentActivity().getString(com.example.tguihost.R.string.poll_result_line, option.text, option.voters), Toast.LENGTH_SHORT).show();
+                }
+                @Override public void onPollResults(TextBubbleCell cell, TextBubbleMessage message) {
+                    if (!actionBar.isActionModeShowed()) showPollResults(message);
+                }
                 @Override public void onLocationPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Location location) {
                     if (actionBar.isActionModeShowed()) { toggle(message); return; }
                     Toast.makeText(context, context.getString(com.example.tguihost.R.string.location_action,

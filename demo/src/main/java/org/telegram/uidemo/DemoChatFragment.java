@@ -105,6 +105,9 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_CONTACT = 9;
     private static final int MENU_MUSIC = 20;
     private static final int MENU_LOCATION = 21;
+    private static final int MENU_POLL = 22;
+    private long firstPollId;
+    private final ArrayList<Runnable> pollCompletions = new ArrayList<>();
     private long firstLocationId;
     private long firstMusicId;
     private long firstContactId;
@@ -277,6 +280,17 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         addSample(TextBubbleMessage.location(nextId++, false, "10:12", TextBubbleMessage.STATE_NONE,
                 new TextBubbleMessage.Location(0, 0, sampleContext.getString(org.telegram.uidemo.R.string.location_sample_missing),
                         sampleContext.getString(org.telegram.uidemo.R.string.location_sample_address), null)));
+        TextBubbleMessage pollSample = TextBubbleMessage.poll(nextId++, false, "10:12", TextBubbleMessage.STATE_NONE,
+                samplePoll(sampleContext, false, false));
+        firstPollId = pollSample.id;
+        pollSample.forwardedFrom = source;
+        pollSample.replyTo = TextBubbleMessage.ReplyTo.of(looksLike, "You");
+        react(pollSample, "👍", 2, false);
+        addSample(pollSample);
+        addSample(TextBubbleMessage.poll(nextId++, true, "10:12", TextBubbleMessage.STATE_READ,
+                samplePoll(sampleContext, true, false)));
+        addSample(TextBubbleMessage.poll(nextId++, false, "10:12", TextBubbleMessage.STATE_NONE,
+                samplePoll(sampleContext, false, true)));
         try {
             LocalEmojiSamples.install(ApplicationLoader.applicationContext);
             addSample(LocalEmojiSamples.text(ApplicationLoader.applicationContext.getString(org.telegram.uidemo.R.string.local_emoji_sample)), false, "10:13", TextBubbleMessage.STATE_NONE);
@@ -327,6 +341,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         if (enterView != null) {
             enterView.onDestroy();
         }
+        for (Runnable completion : pollCompletions) AndroidUtilities.cancelRunOnUIThread(completion);
+        pollCompletions.clear();
         stopFakeVideo();
         stopVoice();
         if (roundPlayer != null) roundPlayer.stop();
@@ -520,6 +536,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     scrollToMessage(firstMusicId);
                 } else if (id == MENU_LOCATION) {
                     scrollToMessage(firstLocationId);
+                } else if (id == MENU_POLL) {
+                    scrollToMessage(firstPollId);
                 }
             }
         });
@@ -539,6 +557,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.addSubItem(MENU_CONTACT, R.drawable.msg_addcontact, context.getString(org.telegram.uidemo.R.string.contact_messages));
         otherItem.addSubItem(MENU_MUSIC, R.drawable.bot_music, context.getString(org.telegram.uidemo.R.string.music_messages));
         otherItem.addSubItem(MENU_LOCATION, R.drawable.msg_location, context.getString(org.telegram.uidemo.R.string.location_messages));
+        otherItem.addSubItem(MENU_POLL, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.poll_messages));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -1173,6 +1192,13 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     } else if (item.type == Attachment.Type.CONTACT) {
                         appendMessage(TextBubbleMessage.contact(nextId++, true, time, TextBubbleMessage.STATE_SENT,
                                 new TextBubbleMessage.Contact(item.contact.id, item.contact.name, item.contact.phone, item.contact.avatar)));
+                    } else if (item.type == Attachment.Type.POLL) {
+                        ArrayList<TextBubbleMessage.PollOption> options = new ArrayList<>();
+                        for (int i = 0; i < item.poll.options.size(); i++) {
+                            options.add(new TextBubbleMessage.PollOption(Integer.toString(i), item.poll.options.get(i), 0, false));
+                        }
+                        appendMessage(TextBubbleMessage.poll(nextId++, true, time, TextBubbleMessage.STATE_SENT,
+                                new TextBubbleMessage.Poll(item.poll.question, options, 0, item.poll.anonymous, item.poll.multipleChoice, false, false)));
                     } else if (item.type == Attachment.Type.LOCATION) {
                         appendMessage(TextBubbleMessage.location(nextId++, true, time, TextBubbleMessage.STATE_SENT,
                                 new TextBubbleMessage.Location(item.location.latitude, item.location.longitude,
@@ -1196,6 +1222,37 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 if (!android.text.TextUtils.isEmpty(caption)) appendMessage(new TextBubbleMessage(nextId++, caption, true, time, TextBubbleMessage.STATE_SENT));
             }
         }, getResourceProvider()).show();
+    }
+
+    private static TextBubbleMessage.Poll samplePoll(Context context, boolean multiple, boolean closed) {
+        ArrayList<TextBubbleMessage.PollOption> options = new ArrayList<>();
+        int[] labels = {org.telegram.uidemo.R.string.poll_option_walk, org.telegram.uidemo.R.string.poll_option_coffee, org.telegram.uidemo.R.string.poll_option_read};
+        for (int i = 0; i < labels.length; i++) {
+            options.add(new TextBubbleMessage.PollOption(Integer.toString(i), context.getString(labels[i]), closed ? new int[]{4, 3, 2}[i] : 0, closed && i == 0));
+        }
+        return new TextBubbleMessage.Poll(context.getString(multiple ? org.telegram.uidemo.R.string.poll_question_multiple : org.telegram.uidemo.R.string.poll_question),
+                options, closed ? 9 : 0, !multiple, multiple, closed, false);
+    }
+
+    private static TextBubbleMessage.Poll localPollResult(TextBubbleMessage.Poll poll, List<String> ids) {
+        ArrayList<TextBubbleMessage.PollOption> options = new ArrayList<>();
+        for (TextBubbleMessage.PollOption option : poll.options) {
+            boolean chosen = ids.contains(option.id);
+            options.add(new TextBubbleMessage.PollOption(option.id, option.text, option.voters + (chosen ? 1 : 0), chosen));
+        }
+        return new TextBubbleMessage.Poll(poll.question, options, poll.totalVoters + 1, poll.anonymous, poll.multiple, poll.closed, false);
+    }
+
+    private void showPollResults(TextBubbleMessage message) {
+        if (getParentActivity() == null || message.poll == null) return;
+        StringBuilder lines = new StringBuilder();
+        for (TextBubbleMessage.PollOption option : message.poll.options) {
+            if (lines.length() > 0) lines.append('\n');
+            lines.append(getParentActivity().getString(org.telegram.uidemo.R.string.poll_result_line, option.text, option.voters));
+        }
+        new org.telegram.ui.ActionBar.AlertDialog.Builder(getParentActivity(), getResourceProvider())
+                .setTitle(message.poll.question).setMessage(lines)
+                .setPositiveButton(getParentActivity().getString(org.telegram.tgui.R.string.OK), null).show();
     }
 
     private static Drawable sampleAttachmentMap(Context context) {
@@ -1387,6 +1444,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
 
     /** What the reply panel / copy shows for a message: the text, or a media label like upstream's MessageObject.messageText. */
     private static CharSequence previewText(TextBubbleMessage message) {
+        if (message.type == TextBubbleMessage.TYPE_POLL && message.poll != null) return message.poll.question;
         if (message.type == TextBubbleMessage.TYPE_LOCATION && message.location != null) {
             return android.text.TextUtils.isEmpty(message.location.title)
                     ? ApplicationLoader.applicationContext.getString(R.string.ChatLocation) : message.location.title;
@@ -1771,6 +1829,32 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     }
 
     private final TextBubbleCell.MediaDelegate mediaDelegate = new TextBubbleCell.MediaDelegate() {
+        @Override public void onPollVote(TextBubbleCell cell, TextBubbleMessage message, List<String> optionIds) {
+            if (actionBar.isActionModeShowed() || message.poll == null || message.poll.pending) return;
+            final TextBubbleMessage.Poll before = message.poll;
+            final ArrayList<String> ids = new ArrayList<>(optionIds);
+            final TextBubbleMessage.Poll pending = new TextBubbleMessage.Poll(before.question, before.options,
+                    before.totalVoters, before.anonymous, before.multiple, before.closed, true, ids);
+            message.poll = pending;
+            updateState(message, message.state);
+            Runnable completion = new Runnable() {
+                @Override public void run() {
+                    pollCompletions.remove(this);
+                    if (!messages.contains(message) || message.poll != pending) return;
+                    message.poll = localPollResult(before, ids);
+                    updateState(message, message.state);
+                }
+            };
+            pollCompletions.add(completion);
+            AndroidUtilities.runOnUIThread(completion, 650);
+        }
+        @Override public void onPollOptionPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.PollOption option) {
+            if (actionBar.isActionModeShowed() || getParentActivity() == null) return;
+            Toast.makeText(getParentActivity(), getParentActivity().getString(org.telegram.uidemo.R.string.poll_result_line, option.text, option.voters), Toast.LENGTH_SHORT).show();
+        }
+        @Override public void onPollResults(TextBubbleCell cell, TextBubbleMessage message) {
+            if (!actionBar.isActionModeShowed()) showPollResults(message);
+        }
         @Override public void onLocationPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Location location) {
             if (actionBar.isActionModeShowed()) { processRowSelect(message); return; }
             Toast.makeText(getParentActivity(), getParentActivity().getString(org.telegram.uidemo.R.string.location_action,
@@ -2028,6 +2112,8 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 cell = new DocumentBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_MUSIC) {
                 cell = new org.telegram.ui.Cells.MusicBubbleCell(context, getResourceProvider());
+            } else if (viewType == TextBubbleMessage.TYPE_POLL) {
+                cell = new org.telegram.ui.Cells.PollBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_LOCATION) {
                 cell = new org.telegram.ui.Cells.LocationBubbleCell(context, getResourceProvider());
             } else if (viewType == TextBubbleMessage.TYPE_CONTACT) {

@@ -39,4 +39,11 @@
     <string name="location_sample_address">Illustration only · not a real map</string>
     <string name="location_sample_missing">Host map image unavailable</string>
     <string name="location_action">Host location callback: %1$.3f, %2$.3f</string>
+    <string name="poll_messages">Poll messages</string>
+    <string name="poll_question">How would you spend a free afternoon?</string>
+    <string name="poll_question_multiple">Which activities would you choose? Select all that apply.</string>
+    <string name="poll_option_walk">Go for a walk</string>
+    <string name="poll_option_coffee">Meet friends for coffee</string>
+    <string name="poll_option_read">Read a book</string>
+    <string name="poll_result_line">%1$s: %2$d votes (local example)</string>
 </resources>

@@ -700,6 +700,14 @@ public class TextBubbleCell extends View {
     public interface MediaDelegate {
         /** The play / download / open button (or the photo, or the file row) was tapped. */
         void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message);
+        /** Host synchronously rebinds pending=true, then publishes a result or pending=false on failure. */
+        default void onPollVote(TextBubbleCell cell, TextBubbleMessage message, java.util.List<String> optionIds) { }
+        /** Result row pressed; the host can show voters for this option. */
+        default void onPollOptionPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.PollOption option) {
+            onPollResults(cell, message);
+        }
+        /** Host opens the voters/results screen for a public poll. */
+        default void onPollResults(TextBubbleCell cell, TextBubbleMessage message) { }
         /** A static location map was tapped. */
         default void onLocationPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Location location) {
             onMediaPressed(cell, message);
@@ -747,6 +755,9 @@ public class TextBubbleCell extends View {
             Theme.key_chat_inContactBackground, Theme.key_chat_outContactBackground,
             Theme.key_chat_inContactIcon, Theme.key_chat_outContactIcon,
             Theme.key_chat_inMenu, Theme.key_chat_outMenu, Theme.key_chat_inMenuSelected, Theme.key_chat_outMenuSelected,
+            // poll choices and footer
+            Theme.key_chat_inAudioSeekbarFill, Theme.key_chat_outAudioSeekbarFill,
+            Theme.key_chat_inPreviewInstantText, Theme.key_chat_outPreviewInstantText, Theme.key_checkboxCheck,
             // reply quote, links and date separators (ChatActionCell)
             Theme.key_chat_inReplyLine, Theme.key_chat_outReplyLine, Theme.key_chat_inReplyNameText, Theme.key_chat_outReplyNameText,
             Theme.key_chat_inReplyMessageText, Theme.key_chat_outReplyMessageText,

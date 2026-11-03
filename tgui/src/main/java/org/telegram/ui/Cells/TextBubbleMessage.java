@@ -59,6 +59,49 @@ public class TextBubbleMessage {
     public static final int TYPE_GIF = 7;
     public static final int TYPE_CONTACT = 8;
     public static final int TYPE_MUSIC = 9;
+    public static final int TYPE_POLL = 11;
+    public static final class PollOption {
+        public final String id;
+        public final CharSequence text;
+        public final int voters;
+        public final boolean chosen;
+        public PollOption(String id, CharSequence text, int voters, boolean chosen) {
+            if (id == null || text == null) throw new IllegalArgumentException("option id and text required");
+            this.id = id; this.text = text; this.voters = Math.max(0, voters); this.chosen = chosen;
+        }
+    }
+    /** Immutable host-supplied poll snapshot; chosen options indicate a completed vote. */
+    public static final class Poll {
+        public final CharSequence question;
+        public final java.util.List<PollOption> options;
+        public final java.util.List<String> pendingOptionIds;
+        public final int totalVoters;
+        public final boolean anonymous, multiple, closed, pending;
+        public Poll(CharSequence question, java.util.List<PollOption> options, int totalVoters,
+                    boolean anonymous, boolean multiple, boolean closed, boolean pending) {
+            this(question, options, totalVoters, anonymous, multiple, closed, pending, java.util.Collections.emptyList());
+        }
+        public Poll(CharSequence question, java.util.List<PollOption> options, int totalVoters,
+                    boolean anonymous, boolean multiple, boolean closed, boolean pending, java.util.List<String> pendingOptionIds) {
+            if (question == null || options == null || options.size() < 2 || options.size() > 10) throw new IllegalArgumentException("poll requires a question and 2..10 options");
+            java.util.HashSet<String> ids = new java.util.HashSet<>();
+            for (PollOption option : options) if (option == null || !ids.add(option.id)) throw new IllegalArgumentException("unique option ids required");
+            if (pendingOptionIds == null) throw new IllegalArgumentException("pending option ids required");
+            java.util.HashSet<String> pendingIds = new java.util.HashSet<>();
+            for (String id : pendingOptionIds) if (!ids.contains(id) || !pendingIds.add(id)) throw new IllegalArgumentException("pending ids must be unique poll options");
+            this.question = question; this.options = java.util.Collections.unmodifiableList(new ArrayList<>(options));
+            this.pendingOptionIds = java.util.Collections.unmodifiableList(new ArrayList<>(pendingOptionIds));
+            this.totalVoters = Math.max(0, totalVoters); this.anonymous = anonymous;
+            this.multiple = multiple; this.closed = closed; this.pending = pending;
+        }
+        public boolean isVoted() { for (PollOption option : options) if (option.chosen) return true; return false; }
+    }
+    public Poll poll;
+    public static TextBubbleMessage poll(long id, boolean isOut, String time, int state, Poll poll) {
+        if (poll == null) throw new IllegalArgumentException("poll required");
+        TextBubbleMessage result = new TextBubbleMessage(id, null, isOut, time, state);
+        result.type = TYPE_POLL; result.poll = poll; return result;
+    }
     public static final int TYPE_LOCATION = 10;
 
     /** Host-owned static map and coordinates. The map should not contain a marker. */
@@ -285,6 +328,9 @@ public class TextBubbleMessage {
                         } else {
                             text = org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.AttachContact);
                         }
+                        break;
+                    case TYPE_POLL:
+                        text = message.poll != null ? message.poll.question : org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.PublicPoll);
                         break;
                     case TYPE_LOCATION:
                         text = message.location != null && !android.text.TextUtils.isEmpty(message.location.title)

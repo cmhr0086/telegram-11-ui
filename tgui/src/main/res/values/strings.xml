@@ -256,4 +256,11 @@
     <string name="AttachMusic">Music</string>
     <string name="AudioUnknownArtist">Unknown artist</string>
     <string name="AudioUnknownTitle">Unknown title</string>
+    <string name="AnonymousPoll">Anonymous Poll</string>
+    <string name="PublicPoll">Poll</string>
+    <string name="PollSubmitVotes">VOTE</string>
+    <string name="PollViewResults">VIEW RESULTS</string>
+    <string name="FinalResults">Final Results</string>
+    <string name="NoVotes">No votes</string>
+    <plurals name="tgui_poll_votes"><item quantity="one">%1$d vote</item><item quantity="other">%1$d votes</item></plurals>
 </resources>
