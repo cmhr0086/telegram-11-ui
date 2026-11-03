@@ -5,6 +5,9 @@
 ## Unreleased
 
 ### 新增
+- 阶段 A：宿主 `MediaSource` / `StickerSet` / `Sticker` / `Gif`，本地 WEBP/TGS/GIF 渲染和 WEBM 首帧回退，无新增运行依赖；加载取消、复用隔离、隐藏停止及 detach 释放。
+- `StickerBubbleCell` 透明贴纸/service 时间和 `GifBubbleCell` 自动播放，既有照片布局、状态与媒体回调兼容；新增模型类型不改变旧 API。
+- 原 `EmojiView` 恢复 GIF 比例网格、贴纸包封面/最近/收藏与宿主发送；输入栏透传发送和收藏等回调。`StickersAlert` 包预览、`ContentPreviewViewer` 200ms 长按与 120ms 进出、1300ms 操作菜单。demo/发布 AAR sample 均有可操作页面。
 - `RoundVideoBubbleCell`：从上游普通圆视频分支裁剪圆形预览、0.6 直径、阴影、时长/未读点、播放进度环和媒体回调；`TextBubbleMessage.roundVideo` / `videoPaused` 表达宿主数据。demo 以本地 MediaPlayer + 圆形 TextureView 实播，支持暂停恢复、切换、离屏/页面退出释放；消费端有纯 UI 示例，设备检查覆盖几何/手势与真实播放器生命周期。
 - 相册分组：从上游 `MessageObject.GroupedMessages` 抽取 `GroupedMediaLayout`，`AlbumBubbleCell` 复用原照片气泡展示 2–10 张本地照片/视频缩略图、说明、回复、反应和单个时间；每格下载状态/播放图标、点击及查看器来源 API，长按选择整组。demo 含 2/3/4/5 张及菜单 10 张样例，消费端含三图相册。单行组合的内部边距与上游多 cell 存在已记录差异。
 - 阶段 C 本地动态表情：`AnimatedEmojiDrawable.SourceProvider` 将 documentId 映射至宿主 JSON / gzip TGS 文件，经私有缓存副本交给既有 rlottie；最后解绑回收，支持重新绑定和来源切换。无账号、下载或 Telegram 服务器依赖。
@@ -19,6 +22,8 @@
 - demo：点图片 / 视频打开查看器，可在聊天里所有已下载的图片和视频之间翻页；加了一条 6 秒的示例视频消息（`demo/res/raw/sample_video.mp4`，80 KB）。
 
 ### 修复
+- 将 demo 与 tgui 的 roadmap_strings.xml 合并回各自 strings.xml。
+- 新预览接线发现普通短按被 RecyclerListView 的拦截解除回调取消，现仅在预览接管手势后解除；设备通过真实触摸分发验证发送隔离。
 - 本地 TGS 解压流在成功和异常路径都显式关闭，避免反复加载依赖 GC 释放 inflater；设备用例补充截断 gzip 与超过 4 MiB 解压上限的回退及宿主原件保留。
 - 主题解析忽略 CRLF 的行尾 CR，避免 Windows 检出后数字颜色被读为 0、夜间文字透明；保持 WPS 二进制壁纸偏移，增加 LF/CRLF/打包暗色主题设备检查，并固定 attheme 检出换行。
 - `Emoji.replaceEmoji(createNew=true)` 保留已有样式和自定义表情 span，重建普通 EmojiSpan 时移除旧实例，避免混排丢失 ID 或重复 span；实体回填忽略负起点。
