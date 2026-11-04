@@ -4657,8 +4657,10 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
         topView = view;
         topView.setVisibility(GONE);
+        dispatchTopViewTranslation();
         topViewEnterProgress = 0f;
         topView.setTranslationY(height);
+        dispatchTopViewTranslation();
         addView(topView, 0, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, height, Gravity.TOP | Gravity.LEFT, 0, 2, 0, 0));
         needShowTopView = false;
     }
@@ -4702,11 +4704,18 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         emojiView.switchToGifRecent();
     }
 
+    private void dispatchTopViewTranslation() {
+        if (sizeNotifierLayout instanceof ChatInputLayout) {
+            ((ChatInputLayout) sizeNotifierLayout).onTopViewTranslationChanged();
+        }
+    }
+
     private final ValueAnimator.AnimatorUpdateListener topViewUpdateListener = animation -> {
         if (topView != null) {
             float v = (float) animation.getAnimatedValue();
             topViewEnterProgress = v;
             topView.setTranslationY(animatedTop + (1f - v) * topView.getLayoutParams().height);
+            dispatchTopViewTranslation();
             topLineView.setAlpha(v);
             topLineView.setTranslationY(animatedTop);
             if (delegate != null) {
@@ -4767,6 +4776,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             } else {
                 topViewEnterProgress = 1f;
                 topView.setTranslationY(0);
+                dispatchTopViewTranslation();
                 topLineView.setAlpha(1.0f);
             }
             if (openKeyboardInternal) {
@@ -4824,6 +4834,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                     public void onAnimationEnd(Animator animation) {
                         if (currentTopViewAnimation != null && currentTopViewAnimation.equals(animation)) {
                             topView.setVisibility(GONE);
+                            dispatchTopViewTranslation();
                             topLineView.setVisibility(GONE);
                             resizeForTopView(false);
                             currentTopViewAnimation = null;
@@ -4843,10 +4854,12 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             } else {
                 topViewEnterProgress = 0f;
                 topView.setVisibility(GONE);
+                dispatchTopViewTranslation();
                 topLineView.setVisibility(GONE);
                 topLineView.setAlpha(0.0f);
                 resizeForTopView(false);
                 topView.setTranslationY(topView.getLayoutParams().height);
+                dispatchTopViewTranslation();
             }
         }
     }
@@ -4908,11 +4921,13 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                     allowShowTopView = false;
                     if (needShowTopView) {
                         topView.setVisibility(GONE);
+                        dispatchTopViewTranslation();
                         topLineView.setVisibility(GONE);
                         topLineView.setAlpha(0.0f);
                         resizeForTopView(false);
                         topViewEnterProgress = 0f;
                         topView.setTranslationY(topView.getLayoutParams().height);
+                        dispatchTopViewTranslation();
                     }
                 }
             } else {
@@ -4925,6 +4940,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                         resizeForTopView(true);
                         topViewEnterProgress = 1f;
                         topView.setTranslationY(0);
+                        dispatchTopViewTranslation();
                     }
                 }
             }

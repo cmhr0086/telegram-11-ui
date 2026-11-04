@@ -86,4 +86,26 @@
     <string name="send_preview_effect_sent">Host received effect %1$d</string>
     <string name="media_viewer_host_action">Host received %1$s for media %2$d. Demo callback only; no files exported or deleted.</string>
     <string name="media_viewer_speed_error">The device could not play this video at %1$s×.</string>
+    <string name="profile_group_menu">Group profile</string>
+    <string name="profile_channel_menu">Channel profile</string>
+    <string name="profile_group_title">Local study group</string>
+    <string name="profile_channel_title">Local announcements</string>
+    <string name="profile_theme">Switch day / night</string>
+    <string name="profile_about">Description</string>
+    <string name="profile_about_text">Study notes, upcoming meetups, and ideas shared by our community.</string>
+    <string name="profile_username">Public link</string>
+    <string name="profile_notifications">Notifications</string>
+    <string name="profile_subscribers">Subscribers</string>
+    <string name="profile_admins">Administrators</string>
+    <string name="profile_members">Members</string>
+    <string name="profile_online">online</string>
+    <string name="profile_recent">last seen recently</string>
+    <string name="profile_owner">Owner</string>
+    <string name="profile_admin">Admin</string>
+    <string name="profile_leave">Leave</string>
+    <string name="profile_join">Join</string>
+    <string name="profile_open_callback">Host received open chat</string>
+    <string name="profile_list_callback">Host received subscriber list request</string>
+    <string name="profile_member_callback">Host received member %1$s</string>
+    <string name="profile_membership_callback">Local membership callback only; no server request</string>
 </resources>

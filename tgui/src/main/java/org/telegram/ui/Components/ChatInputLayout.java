@@ -254,7 +254,7 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
         enterView.setTranslationY(translation);
         updateSuggestionsTranslation();
         if (contentView != null) {
-            contentView.setTranslationY(translation);
+            contentView.setTranslationY(translation + enterView.getTopViewTranslation());
         }
         invalidate();
     }
@@ -347,6 +347,14 @@ public class ChatInputLayout extends SizeNotifierFrameLayout {
             contentView.setTranslationY(translation + enterView.getTopViewTranslation());
         }
         setEmojiOffset(inProgress, inProgress ? enterView.getEmojiPadding() - translation : 0);
+        invalidate();
+    }
+
+    /** Keeps the list and input overlays aligned while the reply/edit top panel moves. */
+    void onTopViewTranslationChanged() {
+        if (enterView == null) return;
+        updateSuggestionsTranslation();
+        if (contentView != null) contentView.setTranslationY(enterView.getTranslationY() + enterView.getTopViewTranslation());
         invalidate();
     }
 

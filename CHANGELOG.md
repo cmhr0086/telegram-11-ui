@@ -4,7 +4,12 @@
 
 ## Unreleased
 
+- 阶段F群组／频道资料：扩展既有ProfileFragment，新增兼容Kind/人数状态、Header/Member行；搬运并裁剪上游UserCell普通成员分支与讨论图标，保留原尺寸/颜色，宿主提供角色、头像和所有操作。demo/sample新增可操作资料示例，旧用户资料和原Row编号不变。
+
+- 修复独立宿主冷启动无法进入聊天：本地动态表情数据不再读取尚未初始化的 Theme 聊天字体，交由气泡绑定时应用字体度量；debug/R8及release实际发送、日夜切换通过。
+
 ### 新增
+- 阶段 F：新增 `ChatFragmentBase`，从既有demo/sample提取列表、输入、ActionBar、壁纸/主题与生命周期装配；宿主提供adapter和输入回调。demo/sample改为继承，保留旧低层写法；输入回复/编辑顶栏位移在容器内部逐帧同步，无新增依赖或不兼容API。
 - 阶段 E：搬入 `SpeedButtonsLayout` 并复用上游 SpeedSlider/SpeedIconDrawable，为 `MediaViewer` 增加0.2–3倍速与观看静音；缓存暂停/完成时的选择，恢复后再应用，跨页保留本次偏好。API21–22仅静音；宿主可接状态/速度失败回调，demo/sample有本地视频，不引入ExoPlayer或新依赖。
 - 阶段 E：`MediaViewer` 新增按页授权的分享/保存/删除菜单与 `Provider.onAction`；复用上游菜单组件、图标和配色，业务执行/确认交宿主。默认不启用，demo/sample明确展示回调，无自动IO或权限请求。
 - 阶段 E：搬运 `GroupedPhotosListView`，`MediaViewer.Item.groupId` / `Provider.forceAllInGroup()` 提供相册缩略图、点击/拖动与滑页同步；保留上游尺寸/动画和绝对页索引。demo/sample相册接入；修复查看器绘制后未恢复宿主Drawable bounds/滤波状态，无新增依赖或旧API破坏。
