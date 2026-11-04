@@ -67,6 +67,9 @@ public class GifBubbleCell extends PhotoBubbleCell {
     }
 
     @Override protected void drawPhoto(Canvas canvas) {
+        // A temporary RecyclerView detach/rebind has no window-attach callback.
+        // Restore playback on the first visible draw, retaining explicit pause.
+        updateAnimation();
         clipPath.rewind();
         clipPath.addRoundRect(photoRect, radii, Path.Direction.CW);
         int save = canvas.save();

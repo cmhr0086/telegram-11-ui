@@ -103,6 +103,10 @@ public class StickerBubbleCell extends PhotoBubbleCell {
     }
 
     @Override protected void drawContent(Canvas canvas) {
+        // RecyclerView may rebind while temporarily detached (isShown=false),
+        // then reattach its scrap without an onAttachedToWindow callback.
+        // Recheck here so a visible sticker resumes without restarting its loop.
+        updateAnimation();
         int x = message.isOut ? getMeasuredWidth() - backgroundWidth - AndroidUtilities.dp(5) : AndroidUtilities.dp(13);
         int y = AndroidUtilities.dp(pinnedTop ? 4 : 5);
         photoRect.set(x, y, x + photoWidth, y + photoHeight);

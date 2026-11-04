@@ -5,6 +5,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Toast;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import org.telegram.tgui.recyclerview.LinearLayoutManager;
@@ -37,12 +38,15 @@ import org.telegram.ui.Components.Sticker;
 import org.telegram.ui.Components.StickerSet;
 import org.telegram.ui.Components.StickersAlert;
 import org.telegram.ui.Components.Gif;
+import org.telegram.ui.Components.Attachment;
+import org.telegram.ui.Components.ChatAttachAlert;
 import org.telegram.ui.TelegramUI;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Locale;
+import java.util.List;
 
 /** Chat screen: wallpaper, TextBubbleCell messages, ChatActivityEnterView, tap menu, long-press multi-select. */
 public class ChatFragment extends BaseFragment implements NotificationCenter.NotificationCenterDelegate {
@@ -211,6 +215,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             @Override public void onStickerSetRequested(StickerSet set) { showStickerSet(set); }
             @Override public void onStickerFavoriteChanged(Sticker sticker, boolean favorite) { setFavorite(sticker, favorite); }
             @Override public void onGifRemoved(Gif gif) { localGifs.remove(gif); updateMediaPanel(); }
+            @Override public void didPressAttachButton() { showAttachments(); }
         });
         enterView.setAllowStickersAndGifs(true, true, true);
         enterView.setRecordButtonVisible(false);
@@ -220,6 +225,61 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         contentView.addView(actionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
         contentView.setActionBar(actionBar);
         return fragmentView;
+    }
+
+    private void showAttachments() {
+        if (getParentActivity() == null) return;
+        new ChatAttachAlert(getParentActivity(), new ChatAttachAlert.Delegate() {
+            @Override public List<Attachment.Contact> getContacts() {
+                ArrayList<Attachment.Contact> contacts = new ArrayList<>();
+                contacts.add(new Attachment.Contact(1, getParentActivity().getString(com.example.tguihost.R.string.attach_sample_contact_one), "+1 202 555 0101", null));
+                contacts.add(new Attachment.Contact(2, getParentActivity().getString(com.example.tguihost.R.string.attach_sample_contact_two), "+1 202 555 0102", null));
+                return contacts;
+            }
+            @Override public View createLocationView(Context context, ChatAttachAlert.LocationCallback callback) {
+                TextView map = new TextView(context);
+                map.setGravity(Gravity.CENTER); map.setTextSize(18); map.setTextColor(android.graphics.Color.WHITE);
+                map.setBackground(sampleAttachmentMap(context)); map.setText(com.example.tguihost.R.string.attach_sample_map);
+                map.setShadowLayer(3, 1, 1, android.graphics.Color.BLACK);
+                map.setOnClickListener(v -> callback.onLocationSelected(new Attachment.Location(0, 0,
+                        context.getString(com.example.tguihost.R.string.attach_sample_location), null)));
+                return map;
+            }
+            @Override public void onSend(List<Attachment> selection, CharSequence caption) {
+                String time = timeFormat.format(new Date());
+                for (Attachment item : selection) {
+                    if (item.type == Attachment.Type.FILE) {
+                        append(TextBubbleMessage.document(nextId++, true, time, TextBubbleMessage.STATE_SENT, item.name, item.size));
+                    } else {
+                        String description;
+                        switch (item.type) {
+                            case PHOTO: case VIDEO:
+                                description = getParentActivity().getString(com.example.tguihost.R.string.attach_media_result, item.name, item.uri); break;
+                            case CONTACT:
+                                description = getParentActivity().getString(com.example.tguihost.R.string.attach_contact_result, item.contact.name, item.contact.phone); break;
+                            case LOCATION:
+                                description = getParentActivity().getString(com.example.tguihost.R.string.attach_location_result, item.location.title, item.location.latitude, item.location.longitude); break;
+                            case POLL:
+                                description = getParentActivity().getString(com.example.tguihost.R.string.attach_poll_result, item.poll.question, android.text.TextUtils.join(" / ", item.poll.options)); break;
+                            default: continue;
+                        }
+                        append(new TextBubbleMessage(nextId++, description, true, time, TextBubbleMessage.STATE_SENT));
+                    }
+                }
+                if (!android.text.TextUtils.isEmpty(caption)) append(new TextBubbleMessage(nextId++, caption, true, time, TextBubbleMessage.STATE_SENT));
+            }
+        }, getResourceProvider()).show();
+    }
+
+    private static android.graphics.drawable.Drawable sampleAttachmentMap(Context context) {
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(480, 240, android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap); canvas.drawColor(0xffa9c7b3);
+        android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(0xffe7e3cf); paint.setStrokeWidth(18);
+        canvas.drawLine(0, 70, 480, 155, paint); canvas.drawLine(105, 0, 195, 240, paint);
+        canvas.drawLine(330, 0, 270, 240, paint);
+        paint.setColor(0xffc65050); canvas.drawCircle(240, 120, 14, paint);
+        return new android.graphics.drawable.BitmapDrawable(context.getResources(), bitmap);
     }
 
     private void send(CharSequence text) {
@@ -436,6 +496,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             else if (viewType == TextBubbleMessage.TYPE_ROUND_VIDEO) cell = new org.telegram.ui.Cells.RoundVideoBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_STICKER) cell = new org.telegram.ui.Cells.StickerBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_GIF) cell = new org.telegram.ui.Cells.GifBubbleCell(context, getResourceProvider());
+            else if (viewType == TextBubbleMessage.TYPE_DOCUMENT) cell = new org.telegram.ui.Cells.DocumentBubbleCell(context, getResourceProvider());
             else cell = new TextBubbleCell(context, getResourceProvider());
             cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
                 @Override public void onMediaPressed(TextBubbleCell source, TextBubbleMessage item) {

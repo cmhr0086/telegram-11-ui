@@ -236,10 +236,35 @@ demo 的 Chat 页包含上述消息，输入面板可选择、发送、收藏、
 
 限制：WEBM 当前固定降级为设备 MediaMetadataRetriever 解出的首帧，解码失败保留宿主缩略图；没有视频贴纸实播。GIF 在 API 28+ 使用系统 AnimatedImageDrawable，21–27 使用 Movie（后者尚未设备验证）。不含服务器搜索、精选包/安装管理、Premium、完整上游拖拽展开/预览模糊与滑出菜单动画；包弹窗布局裁剪为固定五列。贴纸回复/转发头暂不绘制，下载业务交宿主；GIF 回复/说明沿用现有照片气泡。尚未逐像素标定所有屏幕尺寸/平板/RTL。
 
+### 附件面板
+
+输入栏的附件按钮通过 `didPressAttachButton` 回调宿主；宿主可在其中打开 `ChatAttachAlert`，并处理选中的附件和说明文字：
+
+```java
+new ChatAttachAlert(activity, new ChatAttachAlert.Delegate() {
+    @Override
+    public void onSend(List<Attachment> items, CharSequence caption) {
+        // 由宿主读取 URI、保存或发送附件及说明。
+    }
+
+    @Override
+    public List<Attachment.Contact> getContacts() {
+        return Collections.emptyList(); // 可替换为宿主提供的联系人
+    }
+}, resourcesProvider).show();
+```
+
+面板包含相册、文件、联系人、位置和投票页，当前页的选择通过 `Attachment` 模型返回；联系人由 `getContacts()` 提供，位置页通过 `createLocationView(Context, LocationCallback)` 注入宿主地图并回传位置，投票由本地表单创建。`onPermissionResult` 可接收相册权限及部分授权状态。库不读取系统联系人，也不提供地图或上传服务。
+
+相册使用 MediaStore，并按系统版本申请媒体读取权限；Android 14 的部分照片访问可重新选择。文件页使用系统文档选择器，返回的 `Uri` 及其授权取决于提供方；宿主需要处理访问失败，并在需要长期使用时保存可持久授权或复制内容。选择器进行中如果 Activity 重建，待处理选择会取消，需要重新打开。demo 当前将选择的图片和视频以 URI 文字摘要展示；文件使用文件气泡，联系人、位置和投票显示示例摘要，说明文字单独显示。
+
+附件预览是精简列表，不包含 `PhotoViewer` 图片编辑功能；顶部手柄支持拖动，但不包含上游完整的整页联动。贴纸 WEBM 的首帧降级限制见上节。
+
 ## 包含的组件
 
 | 类别 | 类 |
 | --- | --- |
+| 附件面板 | `ChatAttachAlert`、`Attachment`、`AttachmentAccess`：相册、文件、联系人、位置与投票选择及宿主回调 |
 | 圆形视频 | `RoundVideoBubbleCell`、`TextBubbleMessage.roundVideo(...)`、上游 `RoundVideoShadow`：圆形预览、时长、未读/下载状态、播放环及宿主回调 |
 | 贴纸与 GIF | `StickerBubbleCell` / `GifBubbleCell`、`StickerSet` / `Sticker` / `Gif` / `MediaSource`、`LocalMediaView`；本地 WEBP/TGS/GIF、WEBM 首帧，自动播放及宿主加载回调 |
 | 贴纸预览 | `StickersAlert` 五列包预览、`ContentPreviewViewer` 长按/滑动切换及发送/收藏/移除回调 |
@@ -304,7 +329,7 @@ demo 的 Chat 页包含上述消息，输入面板可选择、发送、收藏、
 
 - 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸和 GIF；没有头像、名字、转发、音乐 / 位置等其它媒体、带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 查看器 `MediaViewer`：只是简易版——没有缩略图条、分享 / 保存 / 转发 / 删除菜单、图片编辑、画中画、倍速、静音、视频缩略图预览、横屏全屏按钮、多图相册分组；视频用系统 `MediaPlayer`（格式取决于设备解码器，没有缓冲进度、不循环），播放中不能连续翻页预加载；图片直接画宿主给的 `Drawable`（大图要宿主自己先缩放）；打开 / 关闭动画不处理被 ActionBar 或输入栏遮住的那部分（上游会裁剪），起点用整张图片的位置；平板没有专门布局
-- 输入栏：附件按钮只回调宿主（没有 `ChatAttachAlert`）；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；没有机器人键盘、命令菜单和 WebView 按钮；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
+- 输入栏：附件按钮由宿主回调打开 `ChatAttachAlert`；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；没有机器人键盘、命令菜单和 WebView 按钮；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 
 - 只支持主题自带的颜色/渐变壁纸和默认图案壁纸，不支持壁纸文件和视差（motion）效果；各强调色原本的不同图案都显示成同一个 `default_pattern`
 - Lottie 只带了库内引用到的 `R.raw` JSON（对话列表的归档 / 滑动动作图标、骰子 / 飞镖等），外加上游 APK 自带的 46 个大幅插画：11 只 Utya 小鸭子 `R.raw.utyan_*`、两步验证猴子 `tsv_setup_monkey_*` / `tsv_monkey_close`、设置和邮箱引导（`tsv_setup_*`、`email_*`）、钱包 `wallet_*`、`qr_login`、`filter_new` 等，以及一批白色线条图标（`passcode_lock`、`stats`、`fragment*`、`boosts` 等，上游画在彩色圆形上，可配合 `AlertDialog.Builder.setTopAnimationIsNew(true)` 使用），demo 的 "Lottie illustrations" 页分组展示全部动画。客户端里另一些鸭子（搜索无结果等空状态）和动态表情、贴纸是运行时从服务器贴纸包下载的，不在 APK 里；其它动画 JSON 由宿主放进自己的 `res/raw`，再 `setTopAnimation(R.raw.xxx, …)` / `new RLottieDrawable(R.raw.xxx, …)` 使用

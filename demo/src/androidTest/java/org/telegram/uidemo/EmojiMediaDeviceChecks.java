@@ -11,6 +11,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ImageView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.BottomSheet;
@@ -103,6 +104,18 @@ public final class EmojiMediaDeviceChecks {
     private void tapAndPreview() throws Exception {
         clickTab(2);
         waitFor(() -> emoji.getCurrentPage() == 2 && readyCell(page("stickerPage"), sticker), "sticker cell layout and animations");
+        checkOnMain(() -> {
+            LinearLayout strip = (LinearLayout) field(page("stickerPage"), "tabs");
+            check(strip.getChildCount() == 3, "favorites, recent and pack tabs");
+            for (int i = 0; i < 3; i++) {
+                FrameLayout tab = (FrameLayout) strip.getChildAt(i);
+                check(tab.getMeasuredWidth() == AndroidUtilities.dp(33) && tab.getMeasuredHeight() == AndroidUtilities.dp(36), "upstream tab dimensions");
+                View icon = tab.getChildAt(0);
+                int expected = AndroidUtilities.dp(i == 2 ? 26 : 24);
+                check(icon.getMeasuredWidth() == expected && icon.getMeasuredHeight() == expected, "upstream tab icon dimensions");
+                if (i < 2) check(((ImageView) icon).getScaleType() == ImageView.ScaleType.CENTER_CROP, "system icons fit their 24dp box");
+            }
+        });
         RecyclerListView stickerList = list(page("stickerPage"));
         View cell = getOnMain(() -> findMediaCell(page("stickerPage"), sticker));
         tap(stickerList, cell);
