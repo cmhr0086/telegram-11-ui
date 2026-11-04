@@ -22,6 +22,8 @@ public class TextBubbleMessage {
     public static final int TYPE_DOCUMENT = 3;
     public static final int TYPE_ALBUM = 4;
     public static final int TYPE_ROUND_VIDEO = 5;
+    public static final int TYPE_STICKER = 6;
+    public static final int TYPE_GIF = 7;
 
     /** Media is available locally: voice shows play / pause, files show their extension icon. */
     public static final int MEDIA_READY = 0;
@@ -72,6 +74,10 @@ public class TextBubbleMessage {
      * {@link #duration} pill, and MediaViewer plays this uri.
      */
     public android.net.Uri videoUri;
+
+    /** Host-owned local media; no Telegram document or network state is required. */
+    public org.telegram.ui.Components.Sticker sticker;
+    public org.telegram.ui.Components.Gif gif;
 
     /** Ordered local photo/video items, 2..10, for TYPE_ALBUM; the group's text is its caption. */
     public final ArrayList<TextBubbleMessage> albumMedia = new ArrayList<>();
@@ -178,6 +184,12 @@ public class TextBubbleMessage {
                     case TYPE_ROUND_VIDEO:
                         text = org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.tgui_round_video);
                         break;
+                    case TYPE_STICKER:
+                        text = org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.tgui_sticker);
+                        break;
+                    case TYPE_GIF:
+                        text = org.telegram.messenger.ApplicationLoader.applicationContext.getString(org.telegram.tgui.R.string.tgui_gif);
+                        break;
                     default:
                         text = message.fileName != null ? message.fileName : "File";
                         break;
@@ -191,6 +203,10 @@ public class TextBubbleMessage {
                 reply.thumb = message.photo;
             } else if (message.type == TYPE_ALBUM && !message.albumMedia.isEmpty()) {
                 reply.thumb = message.albumMedia.get(0).photo;
+            } else if (message.type == TYPE_STICKER && message.sticker != null) {
+                reply.thumb = message.sticker.thumbnail;
+            } else if (message.type == TYPE_GIF && message.gif != null) {
+                reply.thumb = message.gif.thumbnail;
             }
             return reply;
         }
@@ -260,6 +276,30 @@ public class TextBubbleMessage {
         message.photo = thumb;
         message.videoUri = uri;
         message.duration = Math.max(0, duration);
+        return message;
+    }
+
+    public static TextBubbleMessage sticker(long id, boolean isOut, String time, int state,
+                                            org.telegram.ui.Components.Sticker sticker) {
+        if (sticker == null) throw new IllegalArgumentException("sticker is required");
+        TextBubbleMessage message = new TextBubbleMessage(id, null, isOut, time, state);
+        message.type = TYPE_STICKER;
+        message.sticker = sticker;
+        message.photo = sticker.thumbnail;
+        message.photoWidth = sticker.width;
+        message.photoHeight = sticker.height;
+        return message;
+    }
+
+    public static TextBubbleMessage gif(long id, boolean isOut, String time, int state,
+                                        org.telegram.ui.Components.Gif gif, CharSequence caption) {
+        if (gif == null) throw new IllegalArgumentException("gif is required");
+        TextBubbleMessage message = new TextBubbleMessage(id, caption, isOut, time, state);
+        message.type = TYPE_GIF;
+        message.gif = gif;
+        message.photo = gif.thumbnail;
+        message.photoWidth = gif.width;
+        message.photoHeight = gif.height;
         return message;
     }
 }

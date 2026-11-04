@@ -207,4 +207,18 @@
     <string name="ChatsArchived">Chats archived.</string>
     <string name="ChatDeletedUndo">Chat deleted</string>
     <string name="ChatsDeletedUndo">Chats deleted.</string>
+    <string name="tgui_album">Album</string>
+    <string name="tgui_round_video">Video message</string>
+    <string name="tgui_stickers">Stickers</string>
+    <string name="tgui_gifs">GIFs</string>
+    <string name="tgui_sticker">Sticker</string>
+    <string name="tgui_gif">GIF</string>
+    <string name="tgui_favorites">Favorites</string>
+    <string name="tgui_sticker_recent">Recent</string>
+    <string name="tgui_no_stickers">No stickers</string>
+    <string name="tgui_no_gifs">No GIFs</string>
+    <string name="tgui_favorite_add">Add to favorites</string>
+    <string name="tgui_favorite_remove">Remove from favorites</string>
+    <string name="tgui_view_pack">View sticker pack</string>
+    <string name="tgui_remove_gif">Remove GIF</string>
 </resources>

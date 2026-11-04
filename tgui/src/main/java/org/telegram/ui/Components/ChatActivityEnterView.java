@@ -364,6 +364,12 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
         }
 
+        default void onSendSticker(Sticker sticker) { }
+        default void onSendGif(Gif gif) { }
+        default void onStickerSetRequested(StickerSet set) { }
+        default void onStickerFavoriteChanged(Sticker sticker, boolean favorite) { }
+        default void onGifRemoved(Gif gif) { }
+
         /**
          * tgui: the message text and its formatting entities (bold, italic, links, ...) when the
          * send button is pressed. {@link #onMessageSend} is still called afterwards, as upstream.
@@ -7884,6 +7890,12 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         emojiView.setVisibility(GONE);
         emojiView.setShowing(false);
         emojiView.setDelegate(new EmojiView.EmojiViewDelegate() {
+
+            @Override public void onStickerSelected(Sticker sticker) { if (delegate != null) delegate.onSendSticker(sticker); }
+            @Override public void onGifSelected(Gif gif) { if (delegate != null) delegate.onSendGif(gif); }
+            @Override public void onStickerSetRequested(StickerSet set) { if (delegate != null) delegate.onStickerSetRequested(set); }
+            @Override public void onStickerFavoriteChanged(Sticker sticker, boolean favorite) { if (delegate != null) delegate.onStickerFavoriteChanged(sticker, favorite); }
+            @Override public void onGifRemoved(Gif gif) { if (delegate != null) delegate.onGifRemoved(gif); }
 
 
             @Override

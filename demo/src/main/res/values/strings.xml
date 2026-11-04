@@ -2,4 +2,11 @@
 <resources>
     <string name="demo_app_name">Telegram UI Demo</string>
     <string name="undo_demo_applied">Pending action applied</string>
+    <string name="local_emoji_sample">Local JSON / TGS</string>
+    <string name="local_emoji_insert">Insert local animated emoji</string>
+    <string name="album_caption">Album · %1$d photos</string>
+    <string name="album_ten">Send a 10-photo album</string>
+    <string name="round_video_error">This local video could not be played</string>
+    <string name="local_sticker_pack">Local stickers</string>
+    <string name="local_gif_caption">Local GIF · autoplay</string>
 </resources>

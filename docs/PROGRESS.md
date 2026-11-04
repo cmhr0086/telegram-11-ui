@@ -1,5 +1,34 @@
 # 路线图进度与交接
 
+## 新任务 A–F（2026-11-03）
+
+用户已合并 PR #1；远端 `dev/ui-lib` 基线为 `3834565`。当前工作分支 `codex/phase-a`。每阶段结束推送并创建目标为 `dev/ui-lib` 的 PR；下阶段从上一阶段分支继续，不等待合并，不自行合并，不改 main。下文旧路线图的“未合并”是当时记录，已由此状态更新。
+
+上游再次核实为 `release-11.4.2-5469`。基线 `:tgui:assembleRelease :demo:assembleDebug` 通过（TEMP/phase-a-baseline.log）。继续复用 tgui、原包名、RecyclerView fork 与 GPL 头，不引入网络层或平行模块。
+
+| 阶段 | 状态 | 剩余工作 |
+| --- | --- | --- |
+| A 贴纸与 GIF | 已完成，限制见下 | PR #2，库/消费端/仪器及 MuMu 真操作通过；WEBM 首帧降级 |
+| B 附件菜单 | 未开始 | ChatAttachAlert、相册权限、多选与各附件页 |
+| C 更多消息 | 未开始 | 群聊、转发、服务消息、更多气泡及键盘 |
+| D 输入增强 | 未开始 | 提及、表情联想、命令、发送预览 |
+| E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
+| F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
+
+roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A 代码已按功能提交，库/demo、消费端及仪器检查已通过；真实页面操作已通过，已推送并创建 PR #2，不能将未开始的 B–F 计为完成。
+
+### 阶段 A 实现及验证记录
+
+- 分功能提交：字符串合并 `943f5a2`；宿主模型/本地解码 `1aa016a`；贴纸气泡 `0ddb2f8`；GIF 气泡 `04384fe`；长按预览 `18d12d5`；贴纸包弹窗 `2162c22`；原面板恢复与 demo/host 接线 `c2ae32e`。
+- 原 EmojiView pager 恢复三页，复制上游 ExtendedGridLayoutManager/Size 和原 GIF/贴纸图标；72dp 列、82dp 格、66dp 图像、36dp 包栏及 100dp GIF 行，收藏/最近/包由宿主快照驱动。业务删除与加载由 MediaSource/模型/回调替换，无新增第三方运行依赖。
+- ContentPreviewViewer 从原类导入裁剪：200ms、移动10dp、120ms进出、180遮罩透明度、1300ms操作菜单及滑动换预览；StickersAlert 五列/82dp/48dp上下栏/200ms选中预览。删除网络、安装、账户、Premium和编辑器等分支；未移植完整模糊、滑出菜单、包弹窗拖拽联动及表情面板拖拽展开。
+- StickerBubbleCell 保留上游手机0.5/平板0.4上限和服务时间色，透明背景；GifBubbleCell 复用 PhotoBubbleCell。贴纸回复/转发头暂未布局，GIF沿用照片回复/说明。WEBM 固定降级为首帧，解码失败显示宿主缩略图；API21–27 Movie fallback、平板/RTL需人工补验。
+- 首轮真实触摸测试发现普通短按未发送：预览组件无条件解除拦截会让 RecyclerListView 清掉点击任务。现仅在预览实际接管手势后解除，测试走真实 dispatchTouchEvent，不放宽断言。
+- 构建 `:tgui:assembleRelease :demo:assembleDebug :demo:assembleDebugAndroidTest :tgui:publishToMavenLocal` 通过，TEMP/phase-a-touch-fix.log；samples/host-app debug + R8 release 通过，TEMP/phase-a-host.log。
+- MuMu Android15完整仪器输出：`UndoView + AnimatedEmojiDeviceChecks + AlbumDeviceChecks + RoundVideoDeviceChecks + StickerMediaDeviceChecks + StickerBubbleDeviceChecks + EmojiMediaDeviceChecks passed`。新增检查覆盖真TGS帧/GIF像素推进与暂停、WEBP/真实VP9 WEBM首帧、异步取消/迟到回调、detach重绑、原件保留、透明几何/一次时间/点击身份、页类型/禁用页/预览取消/发送隔离。
+- MuMu 真操作通过：GIF/WEBP 短按发送；持续长按出现大图和 Send / 收藏 / View sticker pack；移除默认收藏并加入 TGS 鸭子后收藏页更新；包预览点选及 Send 后聊天出现鸭子；夜→日主题切换无崩溃。证据 TEMP/sticker-{gif-send,sent,hold,hold-menu,added-fav,pack-preview,pack-selected,pack-send,day}.png。日间输入 placeholder/展开箭头偏浅是实际观察，尚未定位，保留为后续检查项；收藏持久化由宿主负责，本demo不持久化。
+- 已推送 [PR #2](https://github.com/cmhr0086/telegram-11-ui/pull/2)，目标 dev/ui-lib，不自行合并。最终 build 日志 TEMP/phase-a-final.log；cee4e65 避免demo快照使用API24的removeIf，保留minSdk21兼容。下一阶段从phase-a继续。
+
 最后更新：2026-11-03。工作分支：`codex/roadmap`，基线 `origin/dev/ui-lib` @ `7eb17f0`，PR 目标 `dev/ui-lib`。禁止修改或推送 main，完成后推送工作分支并创建 PR，不自行合并。
 
 已推送并创建 [PR #1：恢复 UndoView、本地动态表情、相册与圆形视频](https://github.com/cmhr0086/telegram-11-ui/pull/1)，目标 `dev/ui-lib`，未合并。六个实现/修复提交已在远端；本地和设备验收通过。GitHub Actions 已触发，最后查询为运行中，不能把它记成 CI 已通过。

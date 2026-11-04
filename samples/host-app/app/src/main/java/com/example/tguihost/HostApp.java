@@ -21,6 +21,12 @@ public class HostApp extends Application {
                 while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
             }
             org.telegram.ui.Components.AnimatedEmojiDrawable.setSourceProvider(id -> id == 90001 ? file : null);
+            try (java.io.InputStream input = getResources().openRawResource(com.example.tguihost.R.raw.sample_sticker);
+                 java.io.FileOutputStream output = new java.io.FileOutputStream(new java.io.File(getFilesDir(), "local-sticker.gif"))) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+            }
         } catch (java.io.IOException error) {
             org.telegram.messenger.FileLog.e(error);
         }
