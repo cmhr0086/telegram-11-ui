@@ -1,3 +1,8 @@
+/*
+ * Adapted from Telegram for Android release-11.4.2-5469.
+ * Copyright Nikolai Kudashov, 2013-2018. Licensed under GNU GPL v. 2 or later.
+ * See LICENSE in this archive.
+ */
 package org.telegram.ui.Cells;
 
 import android.content.Context;
@@ -55,15 +60,16 @@ public class PhotoBubbleCell extends TextBubbleCell {
     protected final float[] radii = new float[8];
     private final PhotoRenderer photoRenderer = new PhotoRenderer();
 
-    private int photoWidth, photoHeight;
-    private int photoY;
-    private boolean mediaBackground;
+    protected int photoWidth, photoHeight;
+    protected int photoY;
+    protected boolean mediaBackground;
     private StaticLayout captionLayout;
     private int captionHeight;
-    private int namesOffset;
+    protected int namesOffset;
     private int buttonState = -1;
     private boolean photoPressed;
     private boolean photoTouch;
+    private boolean photoInterceptHeld;
     private float photoTouchX, photoTouchY;
     private Runnable photoLongPress;
     private boolean photoVisible = true;
@@ -83,6 +89,8 @@ public class PhotoBubbleCell extends TextBubbleCell {
 
     @Override
     public void setMessage(TextBubbleMessage message, boolean pinnedTop, boolean pinnedBottom) {
+        resetPhotoTouch();
+        releasePhotoIntercept();
         boolean changed = this.message != message;
         if (changed) {
             photoVisible = true;
@@ -135,7 +143,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
             imageH = message.photo.getIntrinsicHeight();
         }
 
-        int[] size = measurePhoto(width, imageW, imageH);
+        int[] size = measurePhoto(Math.max(1, width - incomingAvatarInset()), imageW, imageH);
         int w = size[0];
         int h = size[1];
 
@@ -160,7 +168,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         int widthForCaption;
         boolean fixPhotoWidth = false;
         // MessageObject.getMaxMessageTextWidth without avatars
-        int minCaptionWidth = Math.min(width, AndroidUtilities.displaySize.y) - AndroidUtilities.dp(80);
+        int minCaptionWidth = Math.min(width - incomingAvatarInset(), AndroidUtilities.displaySize.y) - AndroidUtilities.dp(80);
         if (caption != null && photoWidth < minCaptionWidth) {
             widthForCaption = minCaptionWidth;
             fixPhotoWidth = true;
@@ -215,8 +223,10 @@ public class PhotoBubbleCell extends TextBubbleCell {
             additionHeight += reactionsLayoutInBubble.totalHeight;
         }
 
-        // totalHeight / photoImage y (no name / forward header)
-        namesOffset = buildReplyLayout(backgroundWidth - AndroidUtilities.dp(mediaBackground ? 22 : 31) - AndroidUtilities.dp(out ? 30 : 20), false);
+        // totalHeight / photoImage y includes the author, forwarding and reply headers.
+        namesOffset = authorHeight + forwardOffset() + buildReplyLayout(backgroundWidth - AndroidUtilities.dp(mediaBackground ? 22 : 31) - AndroidUtilities.dp(out ? 30 : 20), false);
+        if (hasForwardLayout()) namesOffset += AndroidUtilities.dp(5);
+        else if (hasAuthorLayout() && replyNameLayout == null) namesOffset += AndroidUtilities.dp(7);
         totalHeight = photoHeight + AndroidUtilities.dp(14) + namesOffset + additionHeight;
         if (pinnedTop) {
             namesOffset -= AndroidUtilities.dp(1);
@@ -236,7 +246,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         if (captionLayout != null || !reactionsLayoutInBubble.isEmpty) {
             bl = br = minRad;
         }
-        if (replyNameLayout != null) {
+        if (replyNameLayout != null || hasAuthorLayout() || hasForwardLayout()) {
             tl = tr = minRad;
         }
         if (pinnedTop) {
@@ -320,14 +330,14 @@ public class PhotoBubbleCell extends TextBubbleCell {
         // drawBackground with mediaBackground: always the tail-less media drawable, 9dp from the side
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
-        final int layoutHeight = getMeasuredHeight();
+        final int layoutHeight = getBubbleContentHeight();
         Theme.MessageDrawable drawable;
         if (drawSelectionBackground) {
             drawable = out ? Theme.chat_msgOutMediaSelectedDrawable : Theme.chat_msgInMediaSelectedDrawable;
         } else {
             drawable = out ? Theme.chat_msgOutMediaDrawable : Theme.chat_msgInMediaDrawable;
         }
-        int backgroundLeft = out ? layoutWidth - backgroundWidth - AndroidUtilities.dp(9) : AndroidUtilities.dp(9);
+        int backgroundLeft = out ? layoutWidth - backgroundWidth - AndroidUtilities.dp(9) : AndroidUtilities.dp(9) + incomingAvatarInset();
         int offsetBottom;
         if (pinnedBottom && pinnedTop) {
             offsetBottom = 0;
@@ -363,6 +373,8 @@ public class PhotoBubbleCell extends TextBubbleCell {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
         int backgroundLeft = drawBubbleBackground(canvas);
+        drawAuthor(canvas, mediaBackground);
+        drawForward(canvas, mediaBackground);
         drawReply(canvas, mediaBackground);
 
         // onLayout: photo x
@@ -370,7 +382,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         if (out) {
             x = mediaBackground ? layoutWidth - backgroundWidth - AndroidUtilities.dp(3) : layoutWidth - backgroundWidth + AndroidUtilities.dp(6);
         } else {
-            x = AndroidUtilities.dp(15);
+            x = AndroidUtilities.dp(15) + incomingAvatarInset();
         }
         x -= AndroidUtilities.dp(2);
         int y = photoY + namesOffset;
@@ -429,7 +441,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
             drawTimeAndStatus(canvas);
         } else {
             // drawTimeInternal on media: pill bottom = photo bottom - 6dp, right edge 5dp inside the photo
-            int right = out ? layoutWidth - AndroidUtilities.dp(18) : backgroundWidth;
+            int right = out ? layoutWidth - AndroidUtilities.dp(18) : backgroundWidth + incomingAvatarInset();
             drawTimePill(canvas, right, (int) photoRect.bottom - AndroidUtilities.dp(6), AndroidUtilities.dp(8));
         }
     }
@@ -525,8 +537,11 @@ public class PhotoBubbleCell extends TextBubbleCell {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (message != null && !isCheckBoxVisible() && checkForwardTouchEvent(event)) return true;
+        if (message != null && message.type == TextBubbleMessage.TYPE_STICKER && !isCheckBoxVisible() && checkReplyTouchEvent(event)) return true;
         if (message == null || isCheckBoxVisible() || mediaDelegate == null) {
             resetPhotoTouch();
+            releasePhotoIntercept();
             return super.onTouchEvent(event);
         }
         // checkPhotoImageMotionEvent: the photo takes the tap (viewer, or download / cancel) and the long
@@ -544,10 +559,12 @@ public class PhotoBubbleCell extends TextBubbleCell {
                 photoPressed = buttonState != TextBubbleMessage.MEDIA_READY;
                 if (getParent() != null) {
                     getParent().requestDisallowInterceptTouchEvent(true);
+                    photoInterceptHeld = true;
                 }
                 photoLongPress = () -> {
                     photoLongPress = null;
                     resetPhotoTouch();
+                    releasePhotoIntercept();
                     onInteractiveLongPress(false);
                     invalidate();
                 };
@@ -558,19 +575,19 @@ public class PhotoBubbleCell extends TextBubbleCell {
         } else if (photoTouch) {
             if (action == MotionEvent.ACTION_UP) {
                 resetPhotoTouch();
+                releasePhotoIntercept();
                 playSoundEffect(SoundEffectConstants.CLICK);
                 onPhotoPressed(x, y);
                 invalidate();
             } else if (action == MotionEvent.ACTION_CANCEL) {
                 resetPhotoTouch();
+                releasePhotoIntercept();
                 invalidate();
             } else if (action == MotionEvent.ACTION_MOVE) {
                 float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
                 if (!area || Math.abs(x - photoTouchX) > slop || Math.abs(y - photoTouchY) > slop) {
                     resetPhotoTouch();
-                    if (getParent() != null) {
-                        getParent().requestDisallowInterceptTouchEvent(false);
-                    }
+                    releasePhotoIntercept();
                     invalidate();
                     return false;
                 }
@@ -584,12 +601,19 @@ public class PhotoBubbleCell extends TextBubbleCell {
         mediaDelegate.onMediaPressed(this, message);
     }
 
-    private void resetPhotoTouch() {
+    protected void resetPhotoTouch() {
         photoTouch = false;
         photoPressed = false;
         if (photoLongPress != null) {
             removeCallbacks(photoLongPress);
             photoLongPress = null;
+        }
+    }
+
+    protected void releasePhotoIntercept() {
+        if (photoInterceptHeld) {
+            photoInterceptHeld = false;
+            if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
         }
     }
 
@@ -604,5 +628,6 @@ public class PhotoBubbleCell extends TextBubbleCell {
         super.onDetachedFromWindow();
         radialProgress.onDetachedFromWindow();
         resetPhotoTouch();
+        releasePhotoIntercept();
     }
 }

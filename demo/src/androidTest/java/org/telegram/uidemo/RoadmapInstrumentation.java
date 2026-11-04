@@ -37,6 +37,83 @@ public class RoadmapInstrumentation extends Instrumentation {
                 Intent intent = new Intent(getTargetContext(), MainActivity.class);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 activity = startActivitySync(intent);
+                if ("reply_keyboard".equals(arguments.getString("component"))) {
+                    ReplyKeyboardDeviceChecks.run(this, activity);
+                    main(() -> activity.finish());
+                    result.putString("stream", "\nReplyKeyboardDeviceChecks passed\n");
+                    finish(Activity.RESULT_OK, result);
+                    return;
+                }
+                if ("inline".equals(arguments.getString("component"))) {
+                    InlineKeyboardDeviceChecks.run(this, activity);
+                    main(() -> activity.finish());
+                    result.putString("stream", "\nInlineKeyboardDeviceChecks passed\n");
+                    finish(Activity.RESULT_OK, result);
+                    return;
+                }
+                if ("document".equals(arguments.getString("component"))) {
+                    DocumentMessageDeviceChecks.run(this, activity);
+                    main(() -> activity.finish());
+                    result.putString("stream", "\nDocumentMessageDeviceChecks passed\n");
+                    finish(Activity.RESULT_OK, result);
+                    return;
+                }
+                if ("poll".equals(arguments.getString("component"))) {
+                    PollMessageDeviceChecks.run(this, activity);
+                    main(() -> activity.finish());
+                    result.putString("stream", "\nPollMessageDeviceChecks passed\n");
+                    finish(Activity.RESULT_OK, result);
+                    return;
+                }
+                if ("location".equals(arguments.getString("component"))) {
+                    LocationMessageDeviceChecks.run(this, activity);
+                    main(() -> activity.finish());
+                    result.putString("stream", "\nLocationMessageDeviceChecks passed\n");
+                    finish(Activity.RESULT_OK, result);
+                    return;
+                }
+                if ("music".equals(arguments.getString("component"))) {
+                    MusicMessageDeviceChecks.run(this, activity);
+                    main(() -> activity.finish());
+                    result.putString("stream", "\nMusicMessageDeviceChecks passed\n");
+                    finish(Activity.RESULT_OK, result);
+                    return;
+                }
+                if ("contact".equals(arguments.getString("component"))) {
+                    ContactMessageDeviceChecks.run(this, activity);
+                    main(() -> activity.finish());
+                    result.putString("stream", "\nContactMessageDeviceChecks passed\n");
+                    finish(Activity.RESULT_OK, result);
+                    return;
+                }
+                if ("forward".equals(arguments.getString("component"))) {
+                    ForwardMessageDeviceChecks.run(this, activity);
+                    main(() -> activity.finish());
+                    result.putString("stream", "\nForwardMessageDeviceChecks passed\n");
+                    finish(Activity.RESULT_OK, result);
+                    return;
+                }
+                if ("group".equals(arguments.getString("component"))) {
+                    GroupMessageDeviceChecks.run(this, activity);
+                    main(() -> activity.finish());
+                    result.putString("stream", "\nGroupMessageDeviceChecks passed\n");
+                    finish(Activity.RESULT_OK, result);
+                    return;
+                }
+                if ("service".equals(arguments.getString("component"))) {
+                    ServiceMessageDeviceChecks.run(this, activity);
+                    main(() -> activity.finish());
+                    result.putString("stream", "\nServiceMessageDeviceChecks passed\n");
+                    finish(Activity.RESULT_OK, result);
+                    return;
+                }
+                if ("unread".equals(arguments.getString("component"))) {
+                    ChatUnreadDeviceChecks.run(this, activity);
+                    main(() -> activity.finish());
+                    result.putString("stream", "\nChatUnreadDeviceChecks passed\n");
+                    finish(Activity.RESULT_OK, result);
+                    return;
+                }
                 ThemeFileDeviceChecks.run(activity);
                 Bundle status = new Bundle();
                 status.putString("stream", "\nUndoView checks started\n");
@@ -58,13 +135,24 @@ public class RoadmapInstrumentation extends Instrumentation {
                 EmojiMediaDeviceChecks.run(this, activity);
                 AttachmentAccessDeviceChecks.run(this, activity);
                 AttachmentDeviceChecks.run(this, activity);
+                ChatUnreadDeviceChecks.run(this, activity);
+                ServiceMessageDeviceChecks.run(this, activity);
+                GroupMessageDeviceChecks.run(this, activity);
+                ForwardMessageDeviceChecks.run(this, activity);
+                ContactMessageDeviceChecks.run(this, activity);
+                MusicMessageDeviceChecks.run(this, activity);
+                LocationMessageDeviceChecks.run(this, activity);
+                PollMessageDeviceChecks.run(this, activity);
+                DocumentMessageDeviceChecks.run(this, activity);
+                InlineKeyboardDeviceChecks.run(this, activity);
+                ReplyKeyboardDeviceChecks.run(this, activity);
                 main(() -> {
                     if (container != null && container.getParent() instanceof ViewGroup) {
                         ((ViewGroup) container.getParent()).removeView(container);
                     }
                     activity.finish();
                 });
-                result.putString("stream", "\nRoadmapInstrumentation: UndoView + AnimatedEmojiDeviceChecks + AlbumDeviceChecks + RoundVideoDeviceChecks + StickerMediaDeviceChecks + StickerBubbleDeviceChecks + EmojiMediaDeviceChecks + AttachmentAccessDeviceChecks + AttachmentDeviceChecks passed\n");
+                result.putString("stream", "\nRoadmapInstrumentation: UndoView + AnimatedEmojiDeviceChecks + AlbumDeviceChecks + RoundVideoDeviceChecks + StickerMediaDeviceChecks + StickerBubbleDeviceChecks + EmojiMediaDeviceChecks + AttachmentAccessDeviceChecks + AttachmentDeviceChecks + ChatUnreadDeviceChecks + ServiceMessageDeviceChecks + GroupMessageDeviceChecks + ForwardMessageDeviceChecks + ContactMessageDeviceChecks + MusicMessageDeviceChecks + LocationMessageDeviceChecks + PollMessageDeviceChecks + DocumentMessageDeviceChecks + InlineKeyboardDeviceChecks + ReplyKeyboardDeviceChecks passed\n");
                 finish(Activity.RESULT_OK, result);
             } catch (Throwable failure) {
                 StringWriter trace = new StringWriter();

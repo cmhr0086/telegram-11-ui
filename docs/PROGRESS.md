@@ -2,7 +2,7 @@
 
 ## 新任务 A–F（2026-11-03）
 
-用户已合并 PR #1；远端 `dev/ui-lib` 基线为 `3834565`。当前工作分支 `codex/phase-b`，基于阶段 A 的 `909c7ab`。每阶段结束推送并创建目标为 `dev/ui-lib` 的 PR；下阶段从上一阶段分支继续，不等待合并，不自行合并，不改 main。下文旧路线图的“未合并”是当时记录，已由此状态更新。
+用户已合并 PR #1；远端 `dev/ui-lib` 基线为 `3834565`。当前工作分支 `codex/phase-c`，基于阶段 B 的 `344a205`。每阶段结束推送并创建目标为 `dev/ui-lib` 的 PR；下阶段从上一阶段分支继续，不等待合并，不自行合并，不改 main。下文旧路线图的“未合并”是当时记录，已由此状态更新。
 
 上游再次核实为 `release-11.4.2-5469`。基线 `:tgui:assembleRelease :demo:assembleDebug` 通过（TEMP/phase-a-baseline.log）。继续复用 tgui、原包名、RecyclerView fork 与 GPL 头，不引入网络层或平行模块。
 
@@ -10,12 +10,64 @@
 | --- | --- | --- |
 | A 贴纸与 GIF | 已完成，限制见下 | PR #2，库/消费端/仪器及 MuMu 真操作通过；WEBM 首帧降级 |
 | B 附件菜单 | 已实现并推送 PR #3 | 主体/五页/权限/选择/确认与宿主回调；简化交互和人工补验见下 |
-| C 更多消息 | 未开始 | 群聊、转发、服务消息、更多气泡及键盘 |
+| C 更多消息 | 已完成，限制见下 | PR #4；11项功能已实现，库/消费端/完整设备回归通过，人工补验见各项记录 |
 | D 输入增强 | 未开始 | 提及、表情联想、命令、发送预览 |
 | E 查看器升级 | 未开始 | 缩略图条、宿主操作、播放控制、相册分组 |
 | F 聊天页与资料页 | 未开始 | ChatFragmentBase、demo/sample 接入、群组频道资料 |
 
-roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；不能将 C–F 计为完成。
+roadmap_strings.xml 已并回对应模块的 strings.xml。阶段 A/B 已按功能提交并发布 PR #2/#3，库/demo、消费端及仪器检查通过；阶段 C 现已完成本任务的11项功能；D–F仍未开始。
+
+### 阶段 C 当前交接
+
+- 回复键盘完成，随本次独立提交推送：直接搬运 `ui/bots/BotKeyboardView`，保留原GPL、42dp最小行高/16dp文字/15dp外距/10dp行列距和原颜色；`ReplyKeyboard` 不可变快照替换TL标记。原输入栏恢复48dp入口、紧凑/全高/单次/移除、占位提示、表情互斥及宿主动作回调；demo/sample接入，无新增权限、网络或运行依赖。
+- 回复键盘审查：旧按钮重绑/清空后不派发；单次回调重入替换模型不关闭新面板；编辑/录音/销毁阻止打开；切换前清理贴纸展开与搜索。修复关闭动画中IME出现的旧动画竞态；ChatInputLayout在退场期间保留面板padding，避免输入栏先跳到底部再位移。原上游按钮再次点击为收起，不擅自改成强制开启IME。
+- 回复键盘验证：最终库release/demo/debugAndroidTest/publish（TEMP/phase-c-reply-verified-build.log）及独立host debug/R8（phase-c-reply-final-host.log）通过。component=reply_keyboard（phase-c-reply-final-device.log）和完整MuMu Android15回归（phase-c-reply-full-device.log）通过，含旧TGS末段/循环后续播、GIF重绑续播/收藏尺寸。专项涵盖快照/重复ID、42dp/等宽/全高、主题provider、旧按钮失效、面板切换/单次/回调重入/提示恢复、编辑录音门禁、销毁后重建及关闭动画→IME竞态。
+- 回复键盘真操作：紧凑/全高/单次/移除、发送文字、虚构联系人确认并发送、夜间主题与表情切换、单次发送后关闭及重新展开，位置/投票按钮打开正确附件页。截图TEMP/reply-{entry,compact,text,contact-confirm,night,emoji,full,once,once-sent,removed,location,poll}.png；无AndroidRuntime崩溃输出。sample仅构建，未单独安装实操。
+- 回复键盘限制：未移植Telegram answered/closed持久化、persistent常驻、Web App容器、请求用户/群选择器；业务由宿主负责。MuMu仅有搜狗IME，临时开启show_ime_with_hard_keyboard后系统报告IME显示，但没有可见软键盘/非零高度过渡，因此不声称真实IME动画已验；设置已恢复原0。实际软键盘过渡、其它Android版本/平板/大字体需人工补验。README/CHANGELOG已更新，无旧API不兼容变更。
+- 阶段 C 的11项功能已完成；PR #4随本次收尾更新并转为可审查，不自行合并。下一阶段 D 从阶段 C 分支继续。
+
+- 文件缩略图独立提交7d082f4已推送，PR #4已更新。inline keyboard现已实现并完成下述验证，随本次独立提交推送。
+
+- 已提交并推送未读 f4d10cd、服务 7db39c1、群聊 4441ce7、转发864201e；[PR #4](https://github.com/cmhr0086/telegram-11-ui/pull/4) 为 draft，目标 dev/ui-lib，汇总 A–F 状态和未验证部分。此为当时状态；C现已完成，收尾将转为可审查；不合并，不改 main。联系人cc8d05a已提交推送。音乐00140ca已提交推送。位置气泡已实现并通过最终构建和设备验收，随本次独立提交推送。
+- ChatUnreadCell 经 tools/pull 搬运，保留原尺寸/密度资源/GPL；增加主题刷新、demo 锚点跳转和宿主预览。库release/demo/仪器构建及host debug/R8通过（TEMP/phase-c-unread-build.log、phase-c-unread-demo.log、phase-c-unread-host.log）；设备component=unread通过，实测聊天菜单跳转及夜→日刷新，截图TEMP/unread-night.png、unread-day.png。
+- 服务消息已完成：复用 ChatActionCell 原文字胶囊，移植 MessageObject 文字分支为纯 ServiceMessage（普通群返回/大型群加入、邀请、改名、各媒体类型置顶、自定义），用户/置顶目标通过回调交宿主。demo 菜单定位和点击置顶跳原文、日夜显示通过；host 信息按钮预览。库release/demo/test/publish及host debug/R8通过（TEMP/phase-c-service-build.log、phase-c-service-test-build.log、phase-c-service-host.log）；component=service通过（phase-c-service-device.log）。覆盖模板占位、emoji span、同文字换ID、取消点击、两类群加入、20字符预览、清空layout和日期复用。初次测试把span插入顺序误认为文字顺序，已按真实文本位置排序并依实际layout坐标触摸，生产回调断言保留。截图service-day.png、service-night.png、service-pin.png。未迁移服务卡片/礼物、按压高亮、逐链接无障碍导航。
+- 群聊已完成：Sender/原ID姓名配色、组首姓名、42dp头像/48dp列、300秒同发送者合并，复用既有各类气泡；贴纸/圆视频/纯emoji按无背景分支绘制旁侧名字，列表ChatAvatarDecoration复用上游可视组吸底逻辑。demo菜单可切换，sample使用群聊模型；旧API仍可默认行内绘制。头像padding/透明度、API21比较器和贴纸姓名8dp偏移已修；贴纸/圆视频保持原尺寸上限而非再扣头像列缩小。
+- 群聊设备检查发现首次Theme初始化把姓名画笔覆盖成默认12px，首条与后续字号不同，修正后保留原断言通过。component=group覆盖首次/同对象重绑/长姓名、颜色、300秒/未知ID边界、Photo姓名间隔和圆角、旁侧锚点、原贴纸/圆直径、长组末行屏外头像、clipToPadding=false+padding及半透明、宿主Drawable bounds恢复。最终库release/demo/test/publish及host debug/R8通过（TEMP/phase-c-group-size-build.log、phase-c-group-size-host.log）；设备phase-c-group-size-device.log通过。共享Theme修复后完整旧功能回归含服务/群聊已通过（phase-c-group-full-device.log；当时输出结尾漏列Group名称，但runner在返回前已执行该检查，现输出已补）。
+- MuMu群聊真操作：开关群聊、滚动、日夜切换；TGS及GIF继续动，圆视频点中播放并出现00:05/进度环，相册右列打开正确第11/17张后返回。截图group-night.png、group-stickers.png、group-round-size2.png、group-round-play.png、group-album-night.png、group-album-viewer.png、group-text-night.png。动画头像、头像点击、管理员头衔/Premium多色姓名、圆视频播放放大姓名过渡未移植；复杂RTL/平板需人工检查。
+- 转发头：`ForwardBackground` 经 tools/pull 搬入，只有版权头补充；从固定上游 ChatMessageCell/AvatarSpan 裁剪两行来源、1.23倍字号头像、匿名分支、原颜色/位置/按压动画。`ForwardedFrom`/`onForwardPressed` 由宿主提供来源并处理跳转，无网络层。文字/照片/语音/文件/相册/GIF顶部及贴纸/圆视频旁侧接入，纯emoji保留大号显示；旁侧回复与来源共用服务背景但独立点击。
+- 转发审查修复：侧回复不覆盖媒体，短转发+长回复的纯emoji联合限宽，扁贴纸保留完整侧头高度；圆视频时长锚定视频底部，不随扩行下移。保留贴纸比例/圆视频0.6倍原直径；未通过缩小媒体满足窄屏断言。240dp群聊旁侧剩余宽度可能不足一个省略号，来源为空时不响应点击；设备检查区分这一边界和400dp可见来源，而非要求隐藏来源触发回调。
+- 转发最终构建通过：库release/demo/debugAndroidTest/publishToMavenLocal（TEMP/phase-c-forward-final-build.log），外部host debug/R8 release（phase-c-forward-host.log）。完整MuMu Android15回归通过（phase-c-forward-full-device.log），包括8类气泡×收发×240/400dp、匿名/同对象替换/取消/detach/宿主头像bounds恢复、侧回复与来源隔离、800×80扁贴纸行高和大号emoji长回复；旧TGS完整周期/GIF临时重绑续播/收藏尺寸检查也通过。
+- MuMu真操作：转发菜单定位，普通来源点击显示正确ID，日夜切换，群聊开关，纯emoji来源+回复显示，匿名文件头，图片本体打开第1/17张查看器并返回，贴纸旁侧来源回调和回复跳原消息。截图TEMP/forward-night.png、forward-day.png、forward-source-tap.png、forward-emoji.png、forward-photo-viewer.png、forward-stickers.png、forward-sticker-source.png、forward-sticker-reply.png。TGS在贴纸截图间持续变化。圆视频侧头已查看；本轮未重新完成人工播放验收，真实播放器已有完整设备回归覆盖。
+- 转发限制：PSA/导入/Saved特殊头、来源加载状态、动态头像未移植；仅回复不含转发的纯emoji仍沿用旧普通文字气泡。240dp窄群聊旁侧文字可能省略为空；复杂RTL/平板/大字体需人工检查。README/CHANGELOG和demo/sample已更新，无破坏性API变更或新依赖。
+- 联系人：从上游ChatMessageCell TYPE_CONTACT 7485/11301/11698/13929/3062等分支裁剪ContactBubbleCell；46dp头像/22dp圆角、15/13dp字号、270dp宽上限、群聊减102dp、正文宽减111dp、36dp动作/60dp按钮区、原整卡及按钮ripple/bounce。Contact元数据和canMessage/canAdd来自宿主，onContactAction报告VIEW/MESSAGE/ADD；单按钮整卡执行该动作，双按钮整卡VIEW。联系人配色独立于群发送者与转发来源，发出名片按上游覆写outReply色。复用既有回复/转发/反应/选择，未知号码和动作文案使用资源。
+- 联系人验证：库release/demo/test/publish通过（TEMP/phase-c-contact-final-build.log）；独立host debug/R8 release通过（phase-c-contact-final-host.log）；component=contact定向及完整旧功能回归通过（phase-c-contact-device.log、phase-c-contact-full-device.log）。覆盖收发/240和400dp/两套provider色/群聊+转发+回复/46dp头像与bounds恢复/空长号码/单和双按钮身份/取消重绑/清空/选择模式。初次测试缺MediaDelegate抽象方法导致测试编译失败，已补；颜色断言最初固定第0色，与实际联系人ID规则不符，改为按ID核对，生产代码未为错误断言改色。
+- 联系人真操作：日间Message/Add各触发正确宿主回调，夜间群聊模式、长按多选正常；附件Contact选择Alice→预览→Send后出现可点的名片，View Contact回调正确。截图TEMP/contact-day.png、contact-add.png、contact-message.png、contact-night.png、contact-select.png、contact-sent.png、contact-view.png；无AndroidRuntime崩溃输出。文档/demo/sample已更新，无新依赖或通讯录权限，示例动作以Toast展示。vCard解析、电话格式化、实际通讯录操作、动态头像及Premium多色侧线由宿主或后续承担；平板/复杂RTL/大字体需人工补验。
+- 音乐完成：MusicBubbleCell 从固定上游 ChatMessageCell DOCUMENT_ATTACH_TYPE_MUSIC 的7632/10592/11655/12211/3567等布局/绘制/触摸分支裁剪，保留原GPL头、270dp上限、82dp主体、44dp播放圆钮、原文字/时长/菜单/颜色及100ms performer→seek过渡。musicTitle/musicPerformer/audioPaused 和既有MediaDelegate回调由宿主驱动，支持说明/反应/群聊/转发/回复；不引入播放器到库或新增运行依赖。
+- 音乐审查修复：caption间距/末行时间换行、静止后首次播放的100ms过渡、按压和选中色、loading取消命中、同对象改方向颜色、下载刷新、拖动预览被tick覆盖、链接色与取消父拦截。LocalMusicPlayer串行seek并保留最新目标，等待OnSeekComplete时不采旧位置；切曲迟到回调按player身份拒绝。首次构建菜单图标未导入，改用既有bot_music后通过。
+- 最终库release/demo/debugAndroidTest/publishToMavenLocal通过（TEMP/phase-c-music-final-build.log），host debug/R8 release通过（phase-c-music-final-host.log）。完整MuMu Android15设备回归通过（phase-c-music-full-device.log），包含之前TGS完整周期/GIF临时重绑和收藏尺寸；音乐覆盖240/400dp收发、群/转发/回复、取消重绑/选择/清空、三种下载状态、拖动时tick与取消、暂停elapsed、同模型方向颜色，以及真实MediaPlayer推进/暂停/连续seek/恢复/切曲/完成释放、焦点丢失和重复stop。主题provider的isDark分支有断言，实际日夜颜色以UI操作核验。
+- MuMu实际音乐操作：菜单定位，播放后0:01、暂停1.5秒不动、拖到0:08、恢复并切另一条到0:02，前一条回演唱者；下载→进度/取消→下载箭头、音乐菜单、长按选中1条、日夜和群聊布局通过，无AndroidRuntime崩溃。截图TEMP/music-{night,play,pause,pause2,seek,switch,download,cancel,day,menu,select,group}.png。未观察真实扬声器输出，不把进度推进写成听觉验证。
+- 音乐限制：无流式mini下载/封面覆盖/歌词/后台服务和通知播放；说明样式显示但无独立链接点击。demo用生成的12秒PCM音阶，只打包demo，与语音/圆视频互斥；页面离开/重建/选择时停止。sample展示AAR与宿主回调，主demo提供真实播放器。其它Android版本、平板/复杂RTL/大字体及更多音频格式需人工检查。
+- 位置完成：从固定上游 ChatMessageCell TYPE_GEO 普通坐标/venue 分支裁剪 LocationBubbleCell，保留 GPL 头、195dp 地图高、285dp 最大背景宽、群聊让位、原图钉/圆角、15/13dp 地点文字及回复/转发/反应/时间布局。地图由宿主 Drawable 提供，原 map_pin 多密度资源与 map_placeholder.svg 逐文件核对一致；缺图走上游静态 alpha70 占位，无地图 SDK/网络/GPS。新增 Location 模型和 onLocationPressed（默认回落既有媒体回调），旧 API 兼容；demo/sample 坐标、地点及附件选择→预览→发送均接入。
+- 位置审查修复：纯坐标含反应时仍用 mediaBackground，反应与时间按原分支定位；图钉只在宿主地图存在时显示，绘制后恢复宿主 Drawable bounds。PhotoBubbleCell 只释放自己持有的父列表拦截，重复 DOWN 不先释放，避免 RecyclerListView 清空点击任务；取消/重绑/离窗分别覆盖。占位测试最初误认为 SVG 中心必不透明，诊断确认该点本来透明，改为区域可见性检查和白底红蓝混合强度断言，未通过改生产底色来迁就测试。
+- 位置最终构建：库 release/demo/debugAndroidTest/publishToMavenLocal 通过（TEMP/phase-c-location-final-build.log），独立 host debug/R8 release 通过（phase-c-location-final-host.log）。完整 MuMu Android15 仪器回归通过（phase-c-location-full-device.log），包括旧 TGS 完整周期、GIF 重绑续播和收藏尺寸。位置专项覆盖 240/400dp、收发、坐标/地点、长 RTL 地址、群聊/转发/回复/反应、原尺寸/圆角、空图与 alpha70、Drawable bounds、回调身份、取消/长按/选择/重绑/清空，以及拦截拥有权与重复 DOWN。
+- MuMu 位置真操作：日夜主题、地图回调显示 0.000/0.000、缺图占位、附件位置选择→确认→发送、长按多选均通过。截图 TEMP/location-{day,venue,callback,night,missing,sent,final-tap,final-select}.png；最终 APK 重查点击和选择。示例地图明确标示为示意图，不是真实地理数据。未移植实时位置/GPS、地图加载渐变与 shimmer；坐标有效性、地图内容/定位居中和实际跳转由宿主负责，平板/大字体/其它 Android 版本仍需人工检查。
+- 位置独立提交 b8f3e6f 已推送，PR #4 已更新。
+- 投票实现：从固定上游 ChatMessageCell TYPE_POLL 的7680/2902/21808/11879等分支裁剪 PollBubbleCell。保留500dp正文上限、群聊让位、16/15dp问题/选项、26dp选项间距、5dp结果条/2dp圆角/最短5dp、300ms结果过渡与原等待圆环参数；百分比按上游floor/条件余数分配，等票允许33/33/33，多选以总人数为分母可超过100。Poll/PollOption快照和稳定ID、单/多选/pending/关闭/选中/结果由宿主提供，无网络或新依赖。
+- 投票审查修复：footer背景横坐标、已投结果改chosen后旧勾清理、checkbox原20/type9、按压ripple、RTL副标题、底部文字省略、转发+回复额外2dp、pinned行高及等待圆环旋转/伸缩。7参Poll兼容，8参pendingOptionIds保留异步选项，单/多选新cell重建后恢复反馈；宿主须同步发布pending，再在成功/失败后发布新快照。结果行给具体选项回调，公开底部按钮独立查看结果；demo650ms本地确认并取消销毁页面的迟到任务，sample同步更新快照。
+- 投票构建/专项：首次demo编译漏AlertDialog类引用，改为现有类全名后通过；库release/demo/debugAndroidTest/publishToMavenLocal（TEMP/phase-c-poll-build2.log）、host debug/R8 release（phase-c-poll-host.log）通过。MuMu component=poll（phase-c-poll-device.log）通过：240/400dp收发/主题provider/群聊转发回复反应、单多选回调身份、发送中禁投、重复提交、pending失败重试、选项ID重排/换消息清空、33/33/33及100/100/50、0票、真实时间推进300ms动画、取消/选择/清空、pending ID防御复制/只读/非法ID拒绝与新cell恢复。完整MuMu Android15回归通过（phase-c-poll-full-device.log），包含全部旧组件、TGS完整周期/GIF重绑续播与收藏尺寸，以及Location/Poll专项。最后补齐投票颜色key刷新登记与回调契约注释，最新root构建（phase-c-poll-final-build.log）及投票设备专项（phase-c-poll-final-device.log）通过；最终消费端debug/R8 release复验通过（phase-c-poll-final-host.log）。
+- 投票真操作：夜间单选产生100%结果；多选勾两项→VOTE→各100%，View Results显示宿主统计；附件新建问题与两选项→预览→Send→聊天气泡→投票→具体选项回调；日间显示、长按多选正常，无AndroidRuntime错误。截图 TEMP/poll-{night,voted,multi,checked,multi-results,host-results,create,preview,sent,day2,sent-voted,selected}.png。poll-day.png实际仍夜间（关闭弹窗动画未完成就点主题），日间证据是poll-day2.png，不混淆记录。
+- 投票限制：无quiz/解释/定时结束倒计时/近期投票人头像及库内参与者列表；多选pending底部圆环为宿主异步状态补的反馈。英文资源在中文系统的复数回退可能显示“1 votes”，宿主应覆盖资源；极窄长计数/自定义长时间、更多语言/平板/大字体仍待人工检查。README/CHANGELOG/demo/sample已接入，无破坏性旧API变更。
+- 投票已独立提交并推送 b113f0c，PR #4 已更新。
+- 文件缩略图实现：扩展既有 DocumentBubbleCell 的固定上游 TYPE_FILE/createDocumentLayout/drawContent/onLayout 分支（8153/10637/11759/12581/22119等），保留无图44dp FILE按钮和旧6参factory，新增 documentThumbnail 与末尾thumbnail/caption重载。86dp缩略图、48dp居中状态按钮、原2行文件名/信息/菜单/圆角、说明及群聊/转发/回复/反应；宿主Drawable/加载/打开回调，无新依赖或文件读取。ReplyTo沿用文件缩略图；getThumbnailRect/getButtonRect供宿主定位。
+- 文件审查修复：同对象替换图/方向/状态重算、READY有图隐藏FILE图标、取消/重绑/离窗释放父拦截、长按选择不误开文件、绘制后恢复宿主bounds。caption/反应间距和pinned行高按上游分支；有图forward+reply补2dp。曾因非上游min150导致240dp群聊长文件名+caption背景越界，已删除该下限并保留旧无图无caption原宽度公式，86dp图不缩小。RTL caption按TextLayoutBlocks最小lineLeft归一并按真实lineRight计宽，混排保留整体范围；夜间预览按钮按上游hasImageSet清除bubble gradient，避免下载箭头染色。
+- 文件构建：首轮库release/demo/test/publish（TEMP/phase-c-document-build.log）、host debug/R8（phase-c-document-host.log）及设备专项（phase-c-document-device.log）通过。最终root（phase-c-document-final-build.log）与加强设备专项（phase-c-document-final-device.log）通过；最终host debug/R8 release（phase-c-document-final-host.log）及完整MuMu Android15回归（phase-c-document-full-device.log）均通过，包含旧TGS完整周期/GIF重绑续播和收藏尺寸。专项覆盖旧无图44dp/新图86dp+居中48dp、240/400dp收发群/转发/回复/反应、三种下载状态、替换图实际像素和bounds、取消/重绑/选择/清空/长按、长文件名/说明的背景标题菜单边界、旧宽度兼容，以及纯RTL/混排各行在气泡内。
+- 文件真操作：日间带caption预览/打开宿主回调，下载→显示3.2MB/8MB→取消回箭头，菜单、长按多选和夜间切换均已操作。截图TEMP/document-{day,open,loading,cancel,actions,selected,night}.png；最终APK已重查夜间白色下载箭头、模拟下载完成后隐藏图标及再次点击正确文件名回调，截图document-final-night.png、document-ready.png、document-downloaded-open.png；无AndroidRuntime崩溃输出。demo下载为模拟进度，不声明真实网络或文件打开；sample展示AAR宿主状态回调。库不提供PDF封面生成/文件URI加载，说明链接暂无独立点击；文件相册/剧透/缩略图模糊和渐变尚未移植，其它Android版本/平板/大字体仍需人工检查。
+- 内联按钮实现：从固定上游ChatMessageCell 743/3803/9545/14039、MessageObject3999等分支抽取InlineKeyboardLayout，搬运Text及menu_copy_s资源，保留GPL。宿主InlineButton稳定ID/文字/类型/loading与行快照、短按/长按回调；支持CALLBACK/URL/SWITCH_INLINE/COPY，库不执行URL/复制/网络。原44dp按钮、48dp行距、15dp粗体、service色/底排外圆角、0.96按压缩放/350ms Overshoot(2)恢复及LoadingDrawable保留。
+- 内联审查修复：键盘高度与气泡内容高度分开，各媒体/说明/时间/群头像位置保持，键盘后消息断组；wanted宽度用上游StaticLayout/span测量及backgroundWidth下限，纯emoji走media背景分支。按压按screenRefreshRate推进，selector/loading纳入verifyDrawable，复用selector更新主题颜色并登记主题key；缓存行列几何避免宿主换快照时越界，重复ID拒绝；重绑/离窗取消手势和释放drawable/动画，重新挂载恢复布局。所有操作仍由宿主决定，无新依赖或旧API不兼容变更。
+- 内联验证：首轮root构建通过（TEMP/phase-c-inline-build.log）；修正后库release/demo/debugAndroidTest/publish（phase-c-inline-final-build.log）与独立host debug/R8（phase-c-inline-host.log）通过。component=inline（phase-c-inline-device.log）及完整MuMu Android15回归（phase-c-inline-full-device.log）通过，后者含旧TGS完整周期/GIF重绑续播/收藏尺寸。专项覆盖12种气泡×收发×240/400dp、原44dp/边界/占高、URL/loading对象身份、取消重绑选择/父拦截/真实长按、群聊forward+reply+反应的背景时间头像保持、纯emoji与detach/reattach；主题provider路径有覆盖，真实日夜由实操核验。
+- 内联真操作：夜间文字按钮Confirm本地loading→恢复、Website回调、Search here填入输入框、Copy code复制并粘贴出TGUI-1142、URL长按身份；切日间正确刷新。发出图片下按钮loading、长按图片选中1条、退出选择后图片打开正确第4/18张查看器并返回通过，无AndroidRuntime错误。截图TEMP/inline-{night,loading,url-final,query,copy,long,day,paste,photo,photo-loading,selected,viewer}.png。inline-url.png仍显示上一条排队Toast，正确URL回调证据为inline-url-final.png。
+- 内联限制：支付/收据/星币、Web App登录、Telegram邀请识别、服务端callback查询/布局形变过渡未移植；按钮逐项无障碍虚拟节点、多点触控取消未实现。URL样例仅Toast，不访问网络；Confirm为1200ms本地状态模拟。其它Android版本/平板/复杂RTL长按钮/大字体需人工检查；README/CHANGELOG/demo/sample已更新。
+- 下一项：阶段 D 的 MentionsContainerView / SuggestEmojiView / 机器人命令 / MessageSendPreview；D–F 未完成，不得将阶段 C 完成视为整个目标完成。
 
 ### 阶段 B 当前交接
 

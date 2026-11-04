@@ -107,7 +107,7 @@ Manifest 里给 Activity 加上
 
 数据模型都是公开字段：
 - `DialogItem`：`id`（稳定 id，决定头像配色）、`title`、`message`、`senderName`、`mediaPreview`、`draft`、`typing` / `typingType`、`time`、`unreadCount`、`markUnread`、`mention`、`muted`、`pinned`、`verified`、`secret`、`online`、`sentState`（`SENT_*`）、`avatar` / `avatarBitmap` / `avatarType`、`isFolder`（归档行）；搜索用：`status`（`ProfileSearchCell` 第二行）、`statusOnline`、`highlightedWords`（标题和消息里高亮的词）。
-- `TextBubbleMessage`：`id`、`type`（`TYPE_TEXT` / `TYPE_VOICE` / `TYPE_PHOTO` / `TYPE_DOCUMENT`，宿主按它选单元格）、`text`（媒体消息是说明文字）、`isOut`、`time`、`state`（`STATE_*` 发送状态）、`reactions`（`TextBubbleMessage.Reaction` 列表：`emoji`、`count`、`chosen`，按列表顺序显示；`toggleReaction(emoji)` 按上游非 Premium 规则切换“我的”反应：再点取消，换一个则替换原来的）；媒体：`mediaState`（`MEDIA_READY` / `MEDIA_DOWNLOAD` / `MEDIA_LOADING`）+ `mediaProgress`，语音 `duration`（秒）/ `waveform`（上游 5-bit 打包，录音器给的就是这个格式）/ `playing` / `audioProgress` / `audioProgressSec` / `contentUnread`，图片 `photo`（Drawable）/ `photoWidth` / `photoHeight`，文件 `fileName` / `fileSize`。用 `TextBubbleMessage.voice(...)` / `photo(...)` / `document(...)` 创建。
+- `TextBubbleMessage`：`id`、`type`（`TYPE_TEXT` / `TYPE_VOICE` / `TYPE_PHOTO` / `TYPE_DOCUMENT`，宿主按它选单元格）、`text`（媒体消息是说明文字）、`isOut`、`time`、`state`（`STATE_*` 发送状态）、`reactions`（`TextBubbleMessage.Reaction` 列表：`emoji`、`count`、`chosen`，按列表顺序显示；`toggleReaction(emoji)` 按上游非 Premium 规则切换“我的”反应：再点取消，换一个则替换原来的）；媒体：`mediaState`（`MEDIA_READY` / `MEDIA_DOWNLOAD` / `MEDIA_LOADING`）+ `mediaProgress`，语音 `duration`（秒）/ `waveform`（上游 5-bit 打包，录音器给的就是这个格式）/ `playing` / `audioProgress` / `audioProgressSec` / `contentUnread`，图片 `photo`（Drawable）/ `photoWidth` / `photoHeight`，文件 `fileName` / `fileSize` / `documentThumbnail`。用 `TextBubbleMessage.voice(...)` / `photo(...)` / `document(...)` 创建。
 
 库里的图标、字符串等资源都通过 `org.telegram.tgui.R` 引用（AGP 8+ 默认 `nonTransitiveRClass=true`，宿主自己的 `R` 不包含库资源）：
 
@@ -181,7 +181,7 @@ cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
 
 `GroupedMediaLayout` 直接抽取上游 `MessageObject.GroupedMessages` 的 2/3/4 张特殊布局及多图行枚举/评分，保留 800/1000 span、814 高度基准、比例裁剪和边缘标志。照片尺寸来自 `photoWidth/photoHeight` 或 Drawable intrinsic，未知时按正方形处理。`AlbumBubbleCell` 复用 `PhotoBubbleCell` 的中心裁剪、背景、说明、回复、反应、时间和长按；每格支持原下载/取消/播放图标及视频时长，点击回调给出原 item，整组只显示一次时间/状态。修改成员、尺寸或组说明后重新 `setMessage`。
 
-此处以一个 RecyclerView 行呈现整组，按行将上游逻辑宽归一化、相邻格留 2dp，保留外边圆角和 4dp 内角；没有复制上游多 ChatMessageCell + GridLayoutManager 的不对称 inset 和父层延后绘制，因此不宣称所有像素都与客户端相同。当前是照片/视频缩略图相册，不含文件组、各格独立消息多选/删除、captionAbove、头像让位或组布局变化动画。宿主负责下载、解码、数据持久化和播放。
+此处以一个 RecyclerView 行呈现整组，按行将上游逻辑宽归一化、相邻格留 2dp，保留外边圆角和 4dp 内角；没有复制上游多 ChatMessageCell + GridLayoutManager 的不对称 inset 和父层延后绘制，因此不宣称所有像素都与客户端相同。当前是照片/视频缩略图相册，不含文件组、各格独立消息多选/删除、captionAbove 或组布局变化动画。群聊头像列由整行统一让位。宿主负责下载、解码、数据持久化和播放。
 
 查看器可通过 `getTileRectOnScreen(index, rect)` / `getTileRadii(index)` 获取来源，`setTileVisible(index, visible)` 隐藏单格。demo 将相册成员与现有媒体展平成查看器序列，翻页/返回对应格；成员无单独说明时每页显示共享说明。同组成员必须是各自独立的消息对象，复用照片可另建模型。Chat 页有 2/3/4/5 张样例，更多菜单可发送 10 张，长按选择整组。AAR 消费示例也有三图相册。
 
@@ -205,7 +205,7 @@ cell.updatePlayingMessageProgress();
 
 视频解码和声音由宿主负责。`getVideoRectOnScreen(rect)` 给出上次绘制的圆框；可在透明列表后面放圆形 Surface/TextureView，首帧准备好后 `setVideoVisible(false)` 隐藏缩略图，气泡仍在视频上方画时间、状态和环，并继续接收点击。离屏、暂停页面或解绑时宿主必须停止/释放自己的播放器，恢复缩略图。demo 的 `LocalRoundVideoPlayer` 展示 MediaPlayer + TextureView：居中裁剪、本地六秒素材、暂停/恢复、切换播放、音频焦点丢失暂停、离屏/退出释放。消费端提供纯 UI/回调示例。
 
-当前普通圆视频不支持播放扩大/过渡动画、拖环定位、转写、阅后即焚、画中画及圆消息自身的回复块/反应布局；其它既有气泡的回复和反应保持支持。可引用圆视频到普通文字消息。播放器不是库内媒体服务，不处理录制、下载、后台播放和进程恢复；MediaPlayer 格式兼容性由设备决定。窄圆的两个信息条重叠时，时长条向上避让。
+当前普通圆视频不支持播放扩大/过渡动画、拖环定位、转写、阅后即焚、画中画及反应布局；支持旁侧转发头和回复块，也可引用圆视频到普通文字消息。播放器不是库内媒体服务，不处理录制、下载、后台播放和进程恢复；MediaPlayer 格式兼容性由设备决定。窄圆的两个信息条重叠时，时长条向上避让。
 
 ### 本地贴纸与 GIF（阶段 A）
 
@@ -234,7 +234,7 @@ enterView.setDelegate(new ChatActivityEnterView.ChatActivityEnterViewDelegate() 
 
 demo 的 Chat 页包含上述消息，输入面板可选择、发送、收藏、预览包；`samples/host-app` 覆盖发布 AAR 的相同 API。示例的最近/收藏只保存在页面内存；示例 GIF/WEBM 由既有 sample_video.mp4 转码，不增加应用运行依赖。
 
-限制：WEBM 当前固定降级为设备 MediaMetadataRetriever 解出的首帧，解码失败保留宿主缩略图；没有视频贴纸实播。GIF 在 API 28+ 使用系统 AnimatedImageDrawable，21–27 使用 Movie（后者尚未设备验证）。不含服务器搜索、精选包/安装管理、Premium、完整上游拖拽展开/预览模糊与滑出菜单动画；包弹窗布局裁剪为固定五列。贴纸回复/转发头暂不绘制，下载业务交宿主；GIF 回复/说明沿用现有照片气泡。尚未逐像素标定所有屏幕尺寸/平板/RTL。
+限制：WEBM 当前固定降级为设备 MediaMetadataRetriever 解出的首帧，解码失败保留宿主缩略图；没有视频贴纸实播。GIF 在 API 28+ 使用系统 AnimatedImageDrawable，21–27 使用 Movie（后者尚未设备验证）。不含服务器搜索、精选包/安装管理、Premium、完整上游拖拽展开/预览模糊与滑出菜单动画；包弹窗布局裁剪为固定五列。贴纸支持旁侧回复/转发头，下载业务交宿主；GIF 回复/说明沿用现有照片气泡。尚未逐像素标定所有屏幕尺寸/平板/RTL。
 
 ### 附件面板
 
@@ -256,14 +256,270 @@ new ChatAttachAlert(activity, new ChatAttachAlert.Delegate() {
 
 面板包含相册、文件、联系人、位置和投票页，当前页的选择通过 `Attachment` 模型返回；联系人由 `getContacts()` 提供，位置页通过 `createLocationView(Context, LocationCallback)` 注入宿主地图并回传位置，投票由本地表单创建。`onPermissionResult` 可接收相册权限及部分授权状态。库不读取系统联系人，也不提供地图或上传服务。
 
-相册使用 MediaStore，并按系统版本申请媒体读取权限；Android 14 的部分照片访问可重新选择。文件页使用系统文档选择器，返回的 `Uri` 及其授权取决于提供方；宿主需要处理访问失败，并在需要长期使用时保存可持久授权或复制内容。选择器进行中如果 Activity 重建，待处理选择会取消，需要重新打开。demo 当前将选择的图片和视频以 URI 文字摘要展示；文件使用文件气泡，联系人、位置和投票显示示例摘要，说明文字单独显示。
+相册使用 MediaStore，并按系统版本申请媒体读取权限；Android 14 的部分照片访问可重新选择。文件页使用系统文档选择器，返回的 `Uri` 及其授权取决于提供方；宿主需要处理访问失败，并在需要长期使用时保存可持久授权或复制内容。选择器进行中如果 Activity 重建，待处理选择会取消，需要重新打开。demo 当前将选择的图片和视频以 URI 文字摘要展示；文件使用文件气泡，联系人使用名片气泡，位置显示地图气泡，投票显示可操作气泡，说明文字单独显示。
 
 附件预览是精简列表，不包含 `PhotoViewer` 图片编辑功能；顶部手柄支持拖动，但不包含上游完整的整页联动。贴纸 WEBM 的首帧降级限制见上节。
+
+### 未读消息分隔条
+
+`ChatUnreadCell` 直接搬运上游：40dp 行高、27dp 分隔背景、居中文字和右侧箭头。宿主在第一条未读消息前插入独立 adapter 行，分隔行打断连续气泡分组。
+
+```java
+ChatUnreadCell row = new ChatUnreadCell(context, resourcesProvider);
+row.setText(context.getString(org.telegram.tgui.R.string.UnreadMessages));
+// 主题切换后重读 provider；也可沿用 getter / ThemeDescription 更新三个颜色键。
+row.updateColors();
+```
+
+demo 聊天菜单的 Unread Messages 可定位到分隔行；宿主示例菜单提供独立预览。是否已读和未读数量由宿主管理。
+
+服务消息继续使用 `ChatActionCell` 的原版文字胶囊；`ServiceMessage` 提供普通群返回、大型群加入、邀请、改名、置顶及宿主自定义事件。名字和置顶目标只保存宿主 ID，不查询账号或服务器。
+
+```java
+ServiceMessage.Person alice = new ServiceMessage.Person(userId, "Alice");
+ChatActionCell cell = new ChatActionCell(context, resourcesProvider);
+cell.setMessage(ServiceMessage.pin(eventId, alice, false, messageId, "Pinned preview"));
+cell.setDelegate(new ChatActionCell.Delegate() {
+    @Override public void onUserPressed(Object id) { /* host opens profile */ }
+    @Override public void onPinnedMessagePressed(Object id) { /* host locates message */ }
+});
+// join(id, person, isSelf, true) selects the upstream megagroup joined wording.
+```
+
+demo 的 “Service messages” 菜单定位示例；点击置顶正文跳到原消息。宿主 sample 的信息按钮打开 AAR 服务消息预览。文案通过 Android 资源翻译；媒体置顶类型由 `PinnedKind` 指定，文本预览沿用上游 20 字符截断。仅实现文字服务事件，未包含头像变更卡片、礼物、按钮、剧透、链接按压高亮或逐链接无障碍导航；其它事件可由宿主通过 `custom` 提供。
+
+群聊通过既有消息模型启用；姓名使用上游按用户 ID 选择的颜色，宿主也可提供 `Sender.colorId` 色板下标。`avatar` 为静态 Drawable，缺省使用上游首字母头像。普通消息在组首显示姓名；贴纸、圆视频、纯 emoji 使用媒体旁的服务色姓名胶囊。
+
+```java
+message.group = true;
+message.sender = new TextBubbleMessage.Sender(userId, displayName, avatar);
+message.date = unixSeconds;
+cell.setMessage(message, MessageGrouping.canMerge(previous, message),
+        MessageGrouping.canMerge(message, next));
+// Add once to the fork RecyclerView, then enable on each bound cell:
+list.addItemDecoration(new ChatAvatarDecoration());
+cell.setAvatarDrawnByList(true);
+```
+
+`MessageGrouping` 要求同发送者、同收发方向、同群聊上下文、时间相隔不超过 300 秒；未知发送者/时间不合并。日期、服务和未读行应以 null 邻居打断分组。头像为 42dp、左侧列留 48dp；列表装饰在可见区域底部绘制连续组头像，遵守列表 padding 和行透明度。不启用装饰时仍使用行内头像。demo 的 “Group names and avatars” 可切换；host sample 使用群聊模型。尚未包含头像点击/动态头像、管理员头衔/频道签名、Premium 多色姓名，以及圆视频播放放大的姓名过渡；RTL/平板仍需人工检查。
+
+### 转发来源
+
+```java
+message.forwardedFrom = new TextBubbleMessage.ForwardedFrom(sourceId, sourceName,
+        sourceAvatar, -1); // null avatar uses initials; -1 color uses the upstream ID rule.
+cell.setMessage(message, pinnedTop, pinnedBottom);
+cell.setDelegate(new TextBubbleCell.Delegate() {
+    @Override public void onForwardPressed(TextBubbleCell cell, TextBubbleMessage message,
+                                           TextBubbleMessage.ForwardedFrom source) {
+        // Host opens the source; the library performs no account lookup.
+    }
+});
+```
+
+`sourceId=0` 表示匿名来源，保留名字但不画头像；空名字或 `forwardedFrom=null` 隐藏头部。既有普通气泡在正文/媒体上方显示两行来源，贴纸与圆视频放在旁侧，纯 emoji 保留大号绘制并预留上方空间。`ForwardBackground` 直接搬运上游路径、按压水波和回弹；字体、头像比例、间距与颜色 key 来自 `ChatMessageCell` / `AvatarSpan`。同一消息修改来源后重新绑定即可。
+
+贴纸/圆视频的回复块与来源共用服务底色，分别触发 `onReplyPressed` / `onForwardPressed`；媒体区域仍走媒体回调。demo 的 “Forwarded messages” 菜单定位示例，点击来源显示宿主回调；外部 sample 也有来源模型。极窄的群聊媒体行可能没有足够宽度显示旁侧来源（如 240dp），保留上游媒体尺寸并省略文字，不为此缩小贴纸或圆视频。未移植 PSA、导入消息、Saved Messages 特殊头、来源加载状态和动态头像；纯 emoji 只有回复、没有转发时仍沿用既有普通文字气泡布局。复杂 RTL、平板及大字体需人工检查。
+
+### 联系人消息
+
+```java
+TextBubbleMessage.Contact contact = new TextBubbleMessage.Contact(contactId, name,
+        formattedPhone, avatar, canMessage, canAdd);
+TextBubbleMessage message = TextBubbleMessage.contact(messageId, outgoing, time, state, contact);
+ContactBubbleCell cell = new ContactBubbleCell(context, resourcesProvider);
+cell.setMessage(message, pinnedTop, pinnedBottom);
+cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+    @Override public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) { }
+    @Override public void onContactAction(TextBubbleCell cell, TextBubbleMessage message,
+                                         TextBubbleMessage.Contact contact, int action) {
+        // ContactBubbleCell.ACTION_VIEW / ACTION_MESSAGE / ACTION_ADD: host handles the action.
+    }
+});
+```
+
+`ContactBubbleCell` 从上游 `ChatMessageCell.TYPE_CONTACT` 分支裁剪，复用已有气泡、群聊、转发、回复、时间和反应。名片保留 46dp 头像、15/13dp 姓名/号码、270dp 最大气泡和底部 36dp 按钮。四参 `Contact(id,name,phone,avatar)` 默认只有 View Contact；宿主可用 capability 标志提供 Message / Add Contact。单按钮时点击整卡执行该动作，多按钮时整卡打开查看、按钮分别回调；长按仍用于选择消息。
+
+号码由宿主格式化，空号码使用 Android 字符串资源。头像为静态 Drawable，缺省使用首字母或联系人图标。库不查询账号或系统通讯录，不保存联系人、不启动电话或发送消息；示例以 Toast 展示动作，实际操作由宿主接管。demo 的 “Contact messages” 菜单可定位样例，附件菜单选择联系人后显示名片，外部 sample 同样接入。vCard 解析、Premium 多色侧线/背景表情、动态头像尚未移植。
+
+### 音乐消息
+
+```java
+TextBubbleMessage track = TextBubbleMessage.music(id, outgoing, time, state,
+        title, performer, durationSeconds, caption);
+MusicBubbleCell cell = new MusicBubbleCell(context, resourcesProvider);
+cell.setMessage(track, pinnedTop, pinnedBottom);
+cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+    @Override public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) {
+        // Host starts/pauses playback, or downloads/cancels according to mediaState.
+    }
+    @Override public void onSeek(TextBubbleCell cell, TextBubbleMessage message, float progress) {
+        // Seek the host player; progress is in [0, 1].
+    }
+    @Override public void onMenuPressed(TextBubbleCell cell, TextBubbleMessage message, float x, float y) {
+        // Open the host message menu.
+    }
+});
+// From host player updates, on the UI thread:
+track.playing = isPlaying;
+track.audioPaused = hasPausedSession;
+track.audioProgress = positionFraction;
+track.audioProgressSec = elapsedSeconds;
+cell.updatePlayingMessageProgress();
+```
+
+`MusicBubbleCell` 从固定上游 `ChatMessageCell.DOCUMENT_ATTACH_TYPE_MUSIC` 裁剪，保留 270dp 宽上限、82dp 主体、44dp 播放按钮、标题/演唱者/时长颜色与 100ms 演唱者到进度条过渡；支持说明、反应、群聊、转发及回复。暂停时设置 `playing=false, audioPaused=true`，仍显示进度条和已播放秒数；停止会话时两者均为 false。用 `MEDIA_DOWNLOAD` / `MEDIA_LOADING` / `MEDIA_READY` 和 `mediaProgress` 控制下载状态，`updatePlayingMessageProgress()` 同步按钮与进度，无需重绑整个列表。库不持有播放器、文件 URI 或网络加载器。
+
+demo 的 ⋮ “Music messages” 定位三条样例，用系统 `MediaPlayer` 播放项目生成的 12 秒 PCM 音阶，可暂停、拖动、切曲，播完释放；与语音/圆视频互斥，离开页面、重建视图或进入选择时停止。第三条仅模拟下载状态，完成后播放同一本地文件，不访问网络。外部 `samples/host-app` 展示 AAR 气泡和回调，实际播放器接入见主 demo 的 `LocalMusicPlayer`。没有新增运行依赖；WAV 只打包进 demo。
+
+未移植流式 mini 下载按钮、封面覆盖图、播放列表/后台服务/通知控件和歌词时间戳；说明文字显示样式但没有独立链接点击。音频焦点丢失会暂停，需要用户主动恢复。库只渲染宿主提供的元数据，音轨读取、格式支持和 URI 授权由宿主管理。
+
+### 位置消息
+
+```java
+TextBubbleMessage.Location place = new TextBubbleMessage.Location(latitude, longitude,
+        title, address, mapImage); // title empty: plain coordinates; nonempty: venue card
+TextBubbleMessage message = TextBubbleMessage.location(id, outgoing, time, state, place);
+LocationBubbleCell cell = new LocationBubbleCell(context, resourcesProvider);
+cell.setMessage(message, pinnedTop, pinnedBottom);
+cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+    @Override public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) { }
+    @Override public void onLocationPressed(TextBubbleCell cell, TextBubbleMessage message,
+                                          TextBubbleMessage.Location location) {
+        // Host opens its map or handles the selected coordinates.
+    }
+});
+```
+
+`LocationBubbleCell` 从固定上游 `ChatMessageCell.TYPE_GEO` 的普通坐标与地点分支移植。地图固定 195dp 高、气泡最大 285dp；纯坐标使用媒体背景和图内时间，地点卡片在图下显示 15dp 标题及 13dp 地址。保留原图钉、圆角、群聊/转发/回复、反应和长按选择；无新回调实现时 `onLocationPressed` 默认交给既有 `onMediaPressed`。
+
+地图 `Drawable` 由宿主准备，并按中心裁切；请提供以目标坐标居中、不含图钉的底图，库在中心画原图钉。`mapImage=null` 显示原 `map_placeholder` 的静态回退图，仍可点击；宿主取得图片后替换 `message.location` 并重新绑定。`getMapRect(RectF)` / `getMapRadii()` 提供上次布局的图区域。库不加载地图、不定位、不引入地图 SDK，也不直接启动外部地图应用。
+
+demo 的 ⋮ “Location messages” 有地点、纯坐标及缺图示例；附件位置页选择并确认后直接发送位置气泡。demo 和 sample 的道路图是生成的示意图，坐标 `(0,0)` 仅用于回调演示，不是真实地图服务。暂不含实时位置共享、地图加载渐变/缩放和闪动占位；静态占位采用上游关闭背景动画时的 alpha 70 分支。说明文字通过附件流程作为独立消息发送。
+
+### 投票消息
+
+```java
+List<TextBubbleMessage.PollOption> options = Arrays.asList(
+        new TextBubbleMessage.PollOption("walk", "Walk", 0, false),
+        new TextBubbleMessage.PollOption("read", "Read", 0, false));
+TextBubbleMessage.Poll poll = new TextBubbleMessage.Poll(question, options,
+        0, true, false, false, false); // totalVoters, anonymous, multiple, closed, pending
+TextBubbleMessage message = TextBubbleMessage.poll(id, outgoing, time, state, poll);
+PollBubbleCell cell = new PollBubbleCell(context, resourcesProvider);
+cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+    @Override public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) { }
+    @Override public void onPollVote(TextBubbleCell cell, TextBubbleMessage message, List<String> ids) {
+        // Publish a pending snapshot, then ask your own data source to record the vote.
+        // Replace message.poll with the authoritative result (or pending=false on failure)
+        // and rebind on the UI thread. The library does not add votes itself.
+    }
+    @Override public void onPollResults(TextBubbleCell cell, TextBubbleMessage message) {
+        // Open the host's results page for a public poll.
+    }
+    @Override public void onPollOptionPressed(TextBubbleCell cell, TextBubbleMessage message,
+                                             TextBubbleMessage.PollOption option) {
+        // Show this option's count or host-provided voters.
+    }
+});
+cell.setMessage(message, pinnedTop, pinnedBottom);
+```
+
+`PollBubbleCell` 从固定上游 `ChatMessageCell.TYPE_POLL` 布局、绘制、触摸与结果过渡分支裁剪。单选点选后提交；多选先勾选，再点 VOTE；已投票或关闭时显示结果。问题/选项文字、稳定选项 ID、票数、当前用户 chosen、匿名/多选/关闭/pending 均由宿主快照提供；选项 ID 在同一投票的后续快照中保持稳定。未发送完成的消息不接受投票。结果行回调包含具体选项，公开投票的底部按钮回调为 `onPollResults`。
+
+百分比沿用上游整数和余数分配规则，等票可能显示 `33% / 33% / 33%`；多选的分母是投票人数，百分比总和可以超过100。条形长度相对最高选项，保留原最短5dp及300ms结果过渡。宿主应在回调里立即发布 pending 状态，完成或失败后替换快照并重绑；不要把 UI 的勾选直接当作已确认选票。构造器可追加第8参 `List<String> pendingOptionIds`，传入正在提交的稳定 ID，使列表复用/重建后仍能恢复对应等待圆环和多选勾选。
+
+demo ⋮ “Poll messages” 提供单选、多选公开投票和关闭结果；本地回调延迟650ms展示 pending，然后更新内存票数。sample 同样展示宿主更新模型；附件创建投票→确认发送后直接成为可投票气泡。这些数据只用于本地演示，不连接服务器。暂不含 quiz/答题解释/定时关闭倒计时、最近投票者头像和库内投票者列表；实际参与者、撤票或关闭操作由宿主处理。极窄宽度下的长票数/自定义长时间、大字体和更多语言仍需人工检查；当前内置文案为英文，宿主可覆盖 Android 资源。
+
+### 回复键盘（reply keyboard）
+
+`org.telegram.ui.bots.BotKeyboardView` 从同名上游类搬运，`ReplyKeyboard` 替代 TL 标记。集成在原 `ChatActivityEnterView` 内，不需要宿主另建底部容器：
+
+```java
+ReplyKeyboard keyboard = new ReplyKeyboard("greeting-v1",
+        Collections.singletonList(Arrays.asList(
+                new ReplyKeyboard.Button("hello", getString(R.string.greeting), ReplyKeyboard.Button.Type.TEXT),
+                new ReplyKeyboard.Button("location", getString(R.string.location), ReplyKeyboard.Button.Type.REQUEST_LOCATION))),
+        true, false, getString(R.string.choose_reply)); // resize, singleUse, placeholder
+enterView.setReplyKeyboard(keyboard, false); // Bind without interrupting the current panel.
+enterView.showReplyKeyboard();
+// Add this to the existing ChatActivityEnterViewDelegate:
+@Override public void onReplyKeyboardButtonPressed(ReplyKeyboard keyboard, ReplyKeyboard.Button button) {
+    // Host sends text, requests consent, opens its picker or handles its own URL/data.
+}
+```
+
+单参 `setReplyKeyboard(keyboard)` 在输入为空且没有其它面板或系统键盘时自动打开；双参可禁止自动打开。输入栏原48dp键盘按钮负责展开/收起，表情面板与回复键盘互斥，点输入框切回系统输入法。`singleUse` 点击后只收起，模型仍可重新打开；回调中替换模型不会关闭新键盘。`setReplyKeyboard(null)` 移除键盘和入口，`getReplyKeyboardView()` / `getReplyKeyboardButton()` / `isReplyKeyboardShowing()` 供宿主协调界面；独立 `BotKeyboardView` 也可用 `setPanelHeight` / `setButtons` 接入自己的布局。
+
+原布局为42dp最小行高、16dp文字、4dp圆角、左右/首尾15dp及行列10dp间距；`resize=true` 按内容高度显示，false 填充记住的键盘高度，多行超过面板高度可滚动。行列表、按钮文字和占位文字都是快照，按钮ID在键盘内唯一；空总行列表表示无键盘，空单行/空按钮/重复ID会被拒绝。支持 TEXT、REQUEST_CONTACT、REQUEST_LOCATION、POLL、URL、COPY、WEB_VIEW，Web View 保留原右上角图标。实际发送、权限/同意、打开网址或应用都由宿主回调负责，库不访问账号、通讯录、定位或网络。
+
+demo 的 “Reply keyboard” 菜单可切紧凑/全高/单次/移除，普通文字按钮会发送消息，联系人按钮先确认虚构名片，位置和投票交给现有附件示例；sample 同样接入输入栏按钮。没有 Telegram 的 answered/closed 持久化、persistent 强制常驻、机器人命令/Web App容器或请求用户/群选择器；宿主负责这些业务策略。
+
+### 内联按钮（inline keyboard）
+
+消息的 `inlineKeyboard` 由宿主提供多行按钮，文字、照片和其它既有气泡共用上游按钮布局：
+
+```java
+message.inlineKeyboard = Collections.singletonList(Arrays.asList(
+        new TextBubbleMessage.InlineButton("confirm", "Confirm",
+                TextBubbleMessage.InlineButton.Type.CALLBACK, false),
+        new TextBubbleMessage.InlineButton("website", "Website",
+                TextBubbleMessage.InlineButton.Type.URL, false)));
+cell.setDelegate(new TextBubbleCell.Delegate() {
+    @Override public void onInlineButtonPressed(TextBubbleCell cell,
+            TextBubbleMessage message, TextBubbleMessage.InlineButton button) {
+        // Host maps button.id to its action or URL, then publishes an updated snapshot.
+    }
+    @Override public void onInlineButtonLongPressed(TextBubbleCell cell,
+            TextBubbleMessage message, TextBubbleMessage.InlineButton button) {
+        // Optional host action, such as showing button details.
+    }
+});
+```
+
+按钮 ID 在同一键盘内保持唯一。替换行快照并重新 `setMessage` 可更新文案和 `loading`；支持 CALLBACK、URL、SWITCH_INLINE、COPY 的外观，实际 URL/查询/复制/网络均由宿主处理。按钮为44dp高、48dp行距、15dp文字，背景/选择色使用上游 service 颜色键，加载反馈复用 `LoadingDrawable`。键盘放在气泡下方，不改变正文、媒体、时间和头像的内容位置；`getInlineButtonRect(row, column, out)` 可获取按钮区域，`getBubbleContentHeight()` 不包含键盘高度。
+
+demo 的 “Inline buttons” 菜单定位到文字和照片样例：Confirm 显示本地加载反馈，Website 显示宿主回调，Search here 填入输入框，Copy code 由宿主复制示例代码；长按报告对应按钮 ID。消费端 sample 也展示这些回调。未移植支付/收据/星币、Web App 登录、Telegram 邀请识别或服务端 callback 查询；不提供自动 URL 跳转。按钮的逐项无障碍虚拟节点尚未实现。
+
+### 带缩略图的文件消息
+
+```java
+TextBubbleMessage file = TextBubbleMessage.document(id, outgoing, time, state,
+        fileName, fileSize, thumbnail, caption);
+// Equivalent when updating an existing message:
+file.documentThumbnail = thumbnail; // host-provided Drawable, null retains the original file icon
+file.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
+DocumentBubbleCell cell = new DocumentBubbleCell(context, resourcesProvider);
+cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+    @Override public void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message) {
+        // Host opens the file, starts a download, or cancels it according to mediaState.
+    }
+    @Override public void onMenuPressed(TextBubbleCell cell, TextBubbleMessage message, float x, float y) {
+        // Host opens its file/message actions.
+    }
+});
+cell.setMessage(file, pinnedTop, pinnedBottom);
+```
+
+在已有 `DocumentBubbleCell` 内扩展上游 `DOCUMENT_ATTACH_TYPE_DOCUMENT` 的有图分支，没有新建替代组件。缩略图为86dp正方形，居中的状态圆按钮为48dp；无图时保留原44dp按钮。宿主提供 `documentThumbnail` 和下载状态/进度；文件名、大小、后缀、菜单、说明文字、群聊/转发/回复与反应沿用消息布局。旧六参 `document(...)` 可继续使用，新增重载末尾为 `Drawable thumbnail, CharSequence caption`。
+
+宿主负责解码和异步加载，收到缩略图后替换字段并重绑；下载进度可调用 `updateButtonState(animated)`。库不读取文件 URI、不生成 PDF 封面、不下载或打开文件；`getThumbnailRect(RectF)` / `getButtonRect(RectF)` 返回最近布局的缩略图/状态控件区域，宿主 Drawable 的原 bounds 在绘制后恢复。demo 的 ⋮ “File thumbnails” 包含带说明的预览、长文件名下载/取消，以及无图说明；sample 演示同一 AAR API。demo 下载为本地进度模拟，打开动作用回调提示展示；sample 下载按钮切换示例状态。说明文字显示样式和表情，但暂不支持独立的说明链接点击；不包含文件相册分组、剧透预览或缩略图模糊/加载渐变。
 
 ## 包含的组件
 
 | 类别 | 类 |
 | --- | --- |
+| 未读消息 | `ChatUnreadCell`：原版 40dp 分隔行、主题颜色和宿主未读文案 |
+| 服务消息 | `ChatActionCell` / `ServiceMessage`：加入、邀请、改名、置顶，用户与消息回调 |
+| 群聊消息 | `TextBubbleMessage.Sender` / `MessageGrouping` / `ChatAvatarDecoration`：原配色姓名、头像列、连续消息及滚动吸底头像 |
+| 转发来源 | `TextBubbleMessage.ForwardedFrom` / `ForwardBackground`：普通与无背景媒体来源头、头像、原按压动画、宿主来源回调；贴纸/圆视频旁侧回复 |
+| 回复键盘 | 原 `ui.bots.BotKeyboardView`，宿主不可变行快照、紧凑/全高/单次模式；原输入栏切换与按钮回调 |
+| 内联按钮 | 上游44dp按钮行、类型图标/按压/加载反馈；宿主行模型与短按/长按回调，所有既有气泡共用 |
+| 文件缩略图 | 既有 `DocumentBubbleCell`：宿主86dp缩略图、下载状态、说明文字及文件/菜单回调；旧无图布局保留 |
+| 投票消息 | `PollBubbleCell` / `TextBubbleMessage.Poll`：单选/多选、结果条形与百分比、宿主提交和结果回调 |
+| 位置消息 | `LocationBubbleCell` / `TextBubbleMessage.Location`：宿主地图、纯坐标/地点布局、原图钉与位置回调 |
+| 音乐消息 | `MusicBubbleCell` / `TextBubbleMessage.music(...)`：播放/暂停、拖动、下载状态、说明与宿主回调 |
+| 联系人消息 | `ContactBubbleCell` / `TextBubbleMessage.Contact`：原名片布局、查看/发消息/添加按钮及宿主回调 |
 | 附件面板 | `ChatAttachAlert`、`Attachment`、`AttachmentAccess`：相册、文件、联系人、位置与投票选择及宿主回调 |
 | 圆形视频 | `RoundVideoBubbleCell`、`TextBubbleMessage.roundVideo(...)`、上游 `RoundVideoShadow`：圆形预览、时长、未读/下载状态、播放环及宿主回调 |
 | 贴纸与 GIF | `StickerBubbleCell` / `GifBubbleCell`、`StickerSet` / `Sticker` / `Gif` / `MediaSource`、`LocalMediaView`；本地 WEBP/TGS/GIF、WEBM 首帧，自动播放及宿主加载回调 |
@@ -306,7 +562,7 @@ new ChatAttachAlert(activity, new ChatAttachAlert.Delegate() {
 | `ChatMessageCell` / `MessageObject` | 不整体移植，换成上面的轻量 `TextBubbleCell` / `TextBubbleMessage`；回复块（`replyNameLayout` / `replyTextLayout` / `drawNamesLayout` 的 hasReply 段 / `checkReplyTouchEvent`）、链接（`MessageObject.addLinks` + `checkTextBlockMotionEvent`）照上游数值移植进 `TextBubbleCell`；`ReplyMessageLine` 只保留单色条和底色（颜色来自 `ReplyTo.colorId`，不读服务器 peer color，没有双色 / 三色条纹、背景表情和加载动画）；`ChatActionCell` 只保留文字胶囊（礼物、头像、按钮、剧透都去掉）；`Theme.applyChatServiceMessageColor` 移植了服务消息颜色部分，`BitmapDrawable` 壁纸不做模糊 shader，用平均色；语音 / 图片 / 文件气泡按上游对应分支（`createDocumentLayout`、`setMessageContent`、`onLayout`、`drawContent`、`getIconForCurrentState`…）移植到 `VoiceBubbleCell` / `PhotoBubbleCell` / `DocumentBubbleCell`，每个类的头注释写明来源方法 |
 | `PhotoViewer` | 不移植（2 万行，含加载器、编辑、PiP、ExoPlayer）；改写成简易的 `MediaViewer`，见上表 |
 | `RadialProgress2` | 上游原版，去掉 `ImageReceiver` 覆盖图（音乐封面用的 `setImageOverlay`） |
-| `ChatActivityEnterView` 的业务边界 | 构造参数从 `ChatActivity` 换成 `BaseFragment`；`ChatActivityEnterViewDelegate` 全部改成 default 方法，并新增宿主回调：`onSendText(text, entities, notify, scheduleDate)`、`onSendVoice(RecordedAudio, …)`、`onEditDone`、`onSendContent`（键盘发来的 GIF / 贴纸）、`onImagePasted`、`onSilentChanged`、`onRecordTypingStatus`、`onTopViewTranslationChanged`、`canScheduleMessage` / `isInScheduleMode` / `isSelfChat` / `canSendWhenOnline`、`roundVideoNeedsCameraPermission`、`onEmojiPanelCreated`、`onSendSticker` / `onSendGif` / `onStickerSetRequested` / `onStickerFavoriteChanged` / `onGifRemoved`；聊天权限 / 频道 / 圆形视频 / 慢速模式用 `setChatPermissions()`、`setChannel()`、`setRoundVideoEnabled()`、`setSlowModeTimer()` 设置；回复目标是宿主的任意对象（`setReplyingMessageObject(Object)`），编辑用 `EditingMessage(id, text, entities, caption)`。删掉的业务分支：机器人键盘 / 命令菜单 / WebView 按钮、以…身份发送、礼物按钮、生日提示、Premium / 动态表情检查、快捷回复与商务链接、网页预览、`MessageSendPreview`（长按发送的消息预览，改用上游自带的弹出菜单）、草稿同步 |
+| `ChatActivityEnterView` 的业务边界 | 构造参数从 `ChatActivity` 换成 `BaseFragment`；`ChatActivityEnterViewDelegate` 全部改成 default 方法，并新增宿主回调：`onSendText(text, entities, notify, scheduleDate)`、`onSendVoice(RecordedAudio, …)`、`onEditDone`、`onSendContent`（键盘发来的 GIF / 贴纸）、`onImagePasted`、`onSilentChanged`、`onRecordTypingStatus`、`onTopViewTranslationChanged`、`canScheduleMessage` / `isInScheduleMode` / `isSelfChat` / `canSendWhenOnline`、`roundVideoNeedsCameraPermission`、`onEmojiPanelCreated`、`onSendSticker` / `onSendGif` / `onStickerSetRequested` / `onStickerFavoriteChanged` / `onGifRemoved`；聊天权限 / 频道 / 圆形视频 / 慢速模式用 `setChatPermissions()`、`setChannel()`、`setRoundVideoEnabled()`、`setSlowModeTimer()` 设置；回复目标是宿主的任意对象（`setReplyingMessageObject(Object)`），编辑用 `EditingMessage(id, text, entities, caption)`。删掉的业务分支：机器人键盘的发送/持久化业务（UI已恢复） / 命令菜单 / WebView 容器、以…身份发送、礼物按钮、生日提示、Premium / 动态表情检查、快捷回复与商务链接、网页预览、`MessageSendPreview`（长按发送的消息预览，改用上游自带的弹出菜单）、草稿同步 |
 | `MediaController` | 只保留语音消息录制 / 预览接口，交给可替换的 `MediaController.Recorder`；默认实现 `DefaultRecorder` 用 `MediaRecorder`（AAC .m4a，按 `getMaxAmplitude()` 出波纹和 5-bit 波形，打包格式与上游 native `set_bits` 相同）+ `MediaPlayer` 试听。宿主可换成自己的 Opus 编码器；录制状态仍通过上游的 `NotificationCenter` 事件（`recordStarted` / `recordProgressChanged` / `recordStopped` / `audioDidSent`…）回到输入栏，新增 `voiceRecordedForSend` 表示松手直接发送。圆形视频的相机（上游 `InstantCameraView`）由宿主在 `needStartRecordVideo` 里实现 |
 | `TLRPC` / `MediaDataController` | `TLRPC` 只剩消息实体（粗体、链接、自定义表情 id…）的纯数据类；`MediaDataController` 只保留文字实体相关的静态方法（`getEntities`、`addStyleToText`、`addTextStyleRuns`…，原样复制） |
 | `ProfileActivity` | 只移植了用户资料页的头部（`needLayout` / `setAvatarExpandProgress` / `needLayoutText` / `TopView` / `OverlaysView` 的数值和动画）、写消息按钮和信息行的单元格，改写成 `ProfileFragment` + 纯模型；去掉头像相册翻页（`ProfileGalleryView`，展开的就是那张 `Profile.photo`）、`SharedMediaLayout` 共享媒体分页（换成 `TextCell` 计数行）、群组 / 频道资料、成员列表、Stories、表情状态、Premium、个人颜色背景与图案、二维码 / 搜索 / 通话按钮、从聊天头像飞入的打开动画、修改头像、`AboutLinkCell`（简介用多行 `TextDetailCell`）、`UndoView` |
@@ -327,9 +583,9 @@ new ChatAttachAlert(activity, new ChatAttachAlert.Delegate() {
 
 主题 `.attheme` 解析同时接受 LF / CRLF，壁纸二进制偏移按原始字节计算；`.gitattributes` 固定新检出的主题资源为 LF。Windows 上此前出现的夜间文字透明/缺失已修复，设备覆盖打包的 night/darkblue 与两种换行格式。
 
-- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸和 GIF；没有头像、名字、转发、音乐 / 位置等其它媒体、带缩略图的文件、文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
+- 聊天气泡：有文字、语音、图片（单张，可带 `videoUri` 当视频显示：缩略图 + 播放按钮 + 时长）、文件、相册、圆形视频、贴纸、GIF、联系人、音乐、位置和投票；已有群聊头像、名字和转发来源；文件已支持宿主缩略图和说明；尚缺文字选择；图片没有模糊预览缩略图和剧透，语音没有转文字按钮和上游播放时的音量波纹（`AudioVisualizerDrawable`）；多选的整行高亮是简单淡入（上游 `MessageBackgroundDrawable` 从触点圆形展开，浅色主题用壁纸取色的 service 画笔）；表情反应只有静态表情：气泡里的反应没有动态 / 自定义表情、付费星星反应、最近反应者头像、未读反应标记，按模型顺序显示（上游私聊会把已选的排前面），气泡本身的高度变化不做动画（胶囊有动画）；长按菜单的反应条没有动态 / 自定义反应、展开全部反应的按钮、长按放大和飞入气泡的特效；气泡里的剧透（spoiler）实体没有粒子效果（剧透效果在第一阶段已剥离）
 - 查看器 `MediaViewer`：只是简易版——没有缩略图条、分享 / 保存 / 转发 / 删除菜单、图片编辑、画中画、倍速、静音、视频缩略图预览、横屏全屏按钮、多图相册分组；视频用系统 `MediaPlayer`（格式取决于设备解码器，没有缓冲进度、不循环），播放中不能连续翻页预加载；图片直接画宿主给的 `Drawable`（大图要宿主自己先缩放）；打开 / 关闭动画不处理被 ActionBar 或输入栏遮住的那部分（上游会裁剪），起点用整张图片的位置；平板没有专门布局
-- 输入栏：附件按钮由宿主回调打开 `ChatAttachAlert`；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；没有机器人键盘、命令菜单和 WebView 按钮；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
+- 输入栏：附件按钮由宿主回调打开 `ChatAttachAlert`；粘贴 / 键盘提交的图片只回调宿主（没有 `PhotoViewer`）；没有 @提及 / 话题 / 表情联想列表（`MentionsContainerView`、`SuggestEmojiView`）；回复键盘已有宿主模型/回调；没有命令菜单和 WebView 容器；圆形视频需要宿主自己的相机实现；默认录音器输出 AAC 而不是 Telegram 的 Opus/OGG
 
 - 只支持主题自带的颜色/渐变壁纸和默认图案壁纸，不支持壁纸文件和视差（motion）效果；各强调色原本的不同图案都显示成同一个 `default_pattern`
 - Lottie 只带了库内引用到的 `R.raw` JSON（对话列表的归档 / 滑动动作图标、骰子 / 飞镖等），外加上游 APK 自带的 46 个大幅插画：11 只 Utya 小鸭子 `R.raw.utyan_*`、两步验证猴子 `tsv_setup_monkey_*` / `tsv_monkey_close`、设置和邮箱引导（`tsv_setup_*`、`email_*`）、钱包 `wallet_*`、`qr_login`、`filter_new` 等，以及一批白色线条图标（`passcode_lock`、`stats`、`fragment*`、`boosts` 等，上游画在彩色圆形上，可配合 `AlertDialog.Builder.setTopAnimationIsNew(true)` 使用），demo 的 "Lottie illustrations" 页分组展示全部动画。客户端里另一些鸭子（搜索无结果等空状态）和动态表情、贴纸是运行时从服务器贴纸包下载的，不在 APK 里；其它动画 JSON 由宿主放进自己的 `res/raw`，再 `setTopAnimation(R.raw.xxx, …)` / `new RLottieDrawable(R.raw.xxx, …)` 使用

@@ -5,6 +5,17 @@
 ## Unreleased
 
 ### 新增
+- 阶段 C：直接搬运 `org.telegram.ui.bots.BotKeyboardView`，用不可变 `ReplyKeyboard` 代替 TL 标记；原输入栏恢复回复键盘入口、表情/IME切换、单次使用和占位提示，所有按钮动作回调宿主。demo/sample 接入，无新权限、网络层或运行依赖。
+- 阶段 C：从上游 ChatMessageCell 搬运内联按钮布局/绘制/触摸，既有气泡共用 `InlineButton` 行模型、宿主点击/长按与 loading 快照；保留原尺寸、service 颜色和按压/加载动画，demo/sample 接入，无网络层或新依赖。
+- 阶段 C：扩展既有 `DocumentBubbleCell` 的上游文件缩略图分支，新增宿主 `documentThumbnail` 和带缩略图/说明的 `document(...)` 重载；保留原无图 API，支持原86dp预览、下载状态与宿主打开/菜单回调，demo/sample 均接入。
+- 阶段 C：`PollBubbleCell` 从上游投票分支裁剪单选、多选、票数/结果条形及过渡；`TextBubbleMessage.Poll` / `PollOption` 为宿主快照，提交和结果通过回调交宿主。demo/sample 支持附件创建后发送可投票气泡，无新增运行依赖或网络层。
+- 阶段 C：`LocationBubbleCell` / `TextBubbleMessage.Location` 从上游普通坐标/地点分支裁剪，宿主提供地图 Drawable，保留原地图尺寸/图钉/圆角/标题地址和消息头；`onLocationPressed` 默认兼容既有媒体回调。demo/sample 附件发送位置气泡，无地图 SDK、GPS 或网络依赖。
+- 阶段 C：`MusicBubbleCell` 从上游音乐分支裁剪，复用原播放/进度/菜单布局与动画；新增 `TextBubbleMessage.music(...)`、`musicTitle` / `musicPerformer` / `audioPaused`，宿主控制播放及下载，旧 API 兼容。demo 使用本地 MediaPlayer 实播、暂停/拖动/切曲；sample 接入 AAR 回调，无新增运行依赖。
+- 阶段 C：`ContactBubbleCell` / `TextBubbleMessage.Contact` 从上游联系人分支裁剪；保留头像、姓名/号码、名片侧线和底部动作，支持群聊/回复/转发。`MediaDelegate.onContactAction` 将查看、发送消息、添加交给宿主；demo/sample 附件联系人直接显示名片，无通讯录权限或新依赖，旧 API 兼容。
+- 阶段 C：`ForwardedFrom` 与 `onForwardPressed` 支持宿主提供的转发来源；直接搬运 `ForwardBackground`，从 `ChatMessageCell` / `AvatarSpan` 移植两行头、头像、颜色和几何。接入既有文字/语音/照片/文件/相册/GIF/贴纸/圆视频，纯 emoji 保留大号显示；贴纸和圆视频同时支持旁侧回复。demo/sample 均有示例，旧 API 兼容。
+- 阶段 C：既有气泡增加宿主 `Sender`、群聊姓名/42dp头像/48dp让位及纯 `MessageGrouping`；普通姓名头和贴纸/圆视频/纯表情旁侧头沿用上游几何与配色。`ChatAvatarDecoration` 使用现有 RecyclerView fork 支持滚动头像，旧宿主不启用时保留行内模式；demo 可切换，sample 接入群聊。
+- 阶段 C：`ServiceMessage` 为既有 `ChatActionCell` 提供加入/邀请/改名/置顶/自定义事件，移植上游文字分支与 Android 资源，保留原文字胶囊；新增用户/置顶目标回调。demo 可点击置顶跳转，host sample 可预览；不改变既有日期 API。
+- 阶段 C：直接搬运 `ChatUnreadCell` 及原分隔条/箭头资源，保留 40dp 行高和三个 unread 颜色 key；`updateColors()` 便于主题重用。demo 聊天增加未读锚点和菜单定位，外部宿主增加预览。
 - 阶段 B：新增 `ChatAttachAlert` 附件面板和 `Attachment` 模型，支持相册、系统文件选择、宿主联系人与位置视图、本地投票，以及说明文字和发送回调。相册按系统版本请求权限，文件 URI 的长期授权与内容读取由宿主处理；Activity 重建会取消待处理的选择，需要重新打开。预览为精简列表，不含图片编辑；顶部拖动未实现上游完整整页联动。demo 将媒体显示为 URI 文字摘要。
 - 阶段 A：宿主 `MediaSource` / `StickerSet` / `Sticker` / `Gif`，本地 WEBP/TGS/GIF 渲染和 WEBM 首帧回退，无新增运行依赖；加载取消、复用隔离、隐藏停止及 detach 释放。
 - `StickerBubbleCell` 透明贴纸/service 时间和 `GifBubbleCell` 自动播放，既有照片布局、状态与媒体回调兼容；新增模型类型不改变旧 API。
@@ -23,6 +34,8 @@
 - demo：点图片 / 视频打开查看器，可在聊天里所有已下载的图片和视频之间翻页；加了一条 6 秒的示例视频消息（`demo/res/raw/sample_video.mp4`，80 KB）。
 
 ### 修复
+- 首次聊天资源初始化不再把姓名/回复画笔重置为默认像素字号；立即将上游字号公式应用到最终画笔实例，首条消息与后续消息一致。
+- `ChatActionCell` 复用同文案时更新点击目标；清空文本不再保留旧布局，Telegram emoji 替换保留可点击 span。
 - 修复贴纸/GIF 在发送状态更新时被 RecyclerView 临时 detach/rebind 误暂停：恢复可见绘制时继续当前动画；保留显式暂停。设备回归覆盖完整 TGS 周期、重绑和 GIF 像素推进。
 - 贴纸页收藏/最近标签恢复上游 33×36dp、24dp 图标，包封面恢复 26dp，避免原始 38dp 收藏图标被裁切。
 - 将 demo 与 tgui 的 roadmap_strings.xml 合并回各自 strings.xml。

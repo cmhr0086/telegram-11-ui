@@ -26,7 +26,7 @@ import org.telegram.ui.Components.Sticker;
  * 8612-8619, 9311-9360), onLayout (11725-11753), drawTimeInternal (20476-20550).
  * Account/document loading, Premium effects and dice are removed. The existing
  * photo cell supplies media tap, long press, selection and visibility APIs.
- * Sticker replies/forward headers are not laid out in this first extraction.
+ * Replies and forwarding sources use ChatMessageCell's side service background.
  */
 public class StickerBubbleCell extends PhotoBubbleCell {
     private static final int STICKER_STATUS_OFFSET = 6;
@@ -91,6 +91,7 @@ public class StickerBubbleCell extends PhotoBubbleCell {
         photoWidth = Math.max(1, photoWidth);
         photoHeight = Math.max(1, photoHeight);
         backgroundWidth = photoWidth + AndroidUtilities.dp(12);
+        buildSideReply(width, sideAuthorBackgroundRight(true));
         totalHeight = photoHeight + AndroidUtilities.dp(14) - AndroidUtilities.dp(4);
         if (!reactionsLayoutInBubble.isEmpty) {
             reactionsLayoutInBubble.measure(maxWidth + AndroidUtilities.dp(36), message.isOut ? Gravity.RIGHT : Gravity.LEFT);
@@ -99,6 +100,7 @@ public class StickerBubbleCell extends PhotoBubbleCell {
             reactionsLayoutInBubble.positionOffsetY += AndroidUtilities.dp(4);
             totalHeight += reactionsLayoutInBubble.totalHeight;
         }
+        totalHeight = Math.max(totalHeight, sideHeaderMinimumHeight());
         measureTime();
     }
 
@@ -107,10 +109,10 @@ public class StickerBubbleCell extends PhotoBubbleCell {
         // then reattach its scrap without an onAttachedToWindow callback.
         // Recheck here so a visible sticker resumes without restarting its loop.
         updateAnimation();
-        int x = message.isOut ? getMeasuredWidth() - backgroundWidth - AndroidUtilities.dp(5) : AndroidUtilities.dp(13);
+        int x = message.isOut ? getMeasuredWidth() - backgroundWidth - AndroidUtilities.dp(5) : AndroidUtilities.dp(13) + incomingAvatarInset();
         int y = AndroidUtilities.dp(pinnedTop ? 4 : 5);
         photoRect.set(x, y, x + photoWidth, y + photoHeight);
-        bubbleBottom = getMeasuredHeight() - AndroidUtilities.dp(2);
+        bubbleBottom = getBubbleContentHeight() - AndroidUtilities.dp(2);
         if (photoVisible) {
             media.setBounds(x, y, x + photoWidth, y + photoHeight);
             media.draw(canvas);
@@ -122,13 +124,16 @@ public class StickerBubbleCell extends PhotoBubbleCell {
             drawReactions(canvas);
         }
         drawStickerTime(canvas);
+        drawSideForward(canvas, sideAuthorBackgroundRight(true));
+        drawSideReply(canvas, sideAuthorBackgroundRight(true));
+        if (!message.isOut) drawSideAuthor(canvas, sideAuthorBackgroundRight(true));
     }
 
     protected void drawStickerTime(Canvas canvas) {
         // Upstream sticker status is inset by six dp; its time pill has an
         // additional two dp at each side and a 12dp radius.
         float timeX = message.isOut ? getMeasuredWidth() - timeWidth - AndroidUtilities.dp(42)
-                : Math.max(AndroidUtilities.dp(26), backgroundWidth - AndroidUtilities.dp(4) - timeWidth);
+                : Math.max(AndroidUtilities.dp(26), backgroundWidth - AndroidUtilities.dp(4) - timeWidth) + incomingAvatarInset();
         timeX -= AndroidUtilities.dp(STICKER_STATUS_OFFSET);
         float x1 = timeX - AndroidUtilities.dp(4);
         float offsetX = AndroidUtilities.dp(2);

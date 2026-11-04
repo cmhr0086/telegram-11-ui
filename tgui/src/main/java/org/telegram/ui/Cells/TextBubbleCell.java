@@ -1,3 +1,8 @@
+/*
+ * Adapted from Telegram for Android release-11.4.2-5469, ChatMessageCell.
+ * Copyright Nikolai Kudashov, 2013-2018. Licensed under GNU GPL v. 2 or later.
+ * See LICENSE in this archive.
+ */
 package org.telegram.ui.Cells;
 
 import android.animation.ValueAnimator;
@@ -6,6 +11,8 @@ import android.graphics.Canvas;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Paint;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.text.Layout;
 import android.text.SpannableStringBuilder;
@@ -14,6 +21,8 @@ import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.text.style.ClickableSpan;
+import android.text.style.ReplacementSpan;
+import android.text.style.StyleSpan;
 import android.text.style.URLSpan;
 import android.text.util.Linkify;
 import android.os.SystemClock;
@@ -38,6 +47,9 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Components.AnimatedFloat;
 import org.telegram.ui.Components.AnimatedEmojiSpan;
+import org.telegram.ui.Components.AvatarDrawable;
+import org.telegram.ui.Components.ForwardBackground;
+import org.telegram.tgui.R;
 import org.telegram.ui.Components.ButtonBounce;
 import org.telegram.ui.Components.CheckBoxBase;
 import org.telegram.ui.Components.CubicBezierInterpolator;
@@ -66,6 +78,305 @@ public class TextBubbleCell extends View {
     protected TextBubbleMessage message;
     protected boolean pinnedTop;
     protected boolean pinnedBottom;
+    // ChatMessageCell release-11.4.2-5469: author layout and 42dp avatar column.
+    protected int authorHeight;
+    private StaticLayout authorLayout;
+    private StaticLayout sideAuthorLayout;
+    private StaticLayout sideDrawLayout;
+    private int sideDrawAvailable = -1, sideDrawTextWidth;
+    private boolean avatarDrawnByList;
+    private AvatarDrawable fallbackAvatar;
+    private final Path avatarClip = new Path();
+    private final Rect avatarOldBounds = new Rect();
+    private boolean layoutGroup;
+    private long layoutSenderId;
+    private String layoutSenderName;
+    private int layoutSenderColor;
+    private Drawable layoutSenderAvatar;
+    private long layoutForwardId;
+    private String layoutForwardName;
+    private int layoutForwardColor;
+    private Drawable layoutForwardAvatar;
+    protected int forwardHeight;
+    private int forwardWidth;
+    private final StaticLayout[] forwardLayouts = new StaticLayout[2];
+    private ForwardBackground forwardBackground;
+    private final RectF forwardTouchRect = new RectF();
+    private boolean forwardPressed;
+    private float forwardDownX, forwardDownY, forwardDrawX, forwardDrawY;
+    private Drawable forwardAvatar;
+    private final Rect forwardAvatarBounds = new Rect();
+    private final Paint forwardAvatarShadow = new Paint(Paint.ANTI_ALIAS_FLAG);
+    protected int incomingAvatarInset() {
+        return message != null && message.group && !message.isOut && message.sender != null ? AndroidUtilities.dp(48) : 0;
+    }
+    private void buildAuthorLayout(int width) {
+        authorHeight = 0; authorLayout = null; sideAuthorLayout = null;
+        if (message == null || !message.group || message.isOut || pinnedTop || message.sender == null
+                || TextUtils.isEmpty(message.sender.name) || message.type == TextBubbleMessage.TYPE_STICKER
+                || message.type == TextBubbleMessage.TYPE_ROUND_VIDEO) return;
+        int max = Math.max(AndroidUtilities.dp(1), width - incomingAvatarInset() - AndroidUtilities.dp(111));
+        CharSequence name = TextUtils.ellipsize(AndroidUtilities.replaceNewLines(message.sender.name), Theme.chat_namePaint, max, TextUtils.TruncateAt.END);
+        authorLayout = new StaticLayout(name, Theme.chat_namePaint, max + AndroidUtilities.dp(2), Layout.Alignment.ALIGN_NORMAL, 1f, 0f, false);
+        authorHeight = AndroidUtilities.dp(5) + (int) Theme.chat_namePaint.getTextSize();
+    }
+    private void buildSideAuthorLayout(int width) {
+        sideAuthorLayout = null;
+        sideDrawLayout = null; sideDrawAvailable = -1;
+        if (message == null || !message.group || message.isOut || pinnedTop || message.sender == null || TextUtils.isEmpty(message.sender.name)) return;
+        if (message.type != TextBubbleMessage.TYPE_STICKER && message.type != TextBubbleMessage.TYPE_ROUND_VIDEO && !emojiOnlyMode) return;
+        int max = Math.max(1, width - incomingAvatarInset() - AndroidUtilities.dp(48));
+        CharSequence name = TextUtils.ellipsize(AndroidUtilities.replaceNewLines(message.sender.name), Theme.chat_namePaint, max, TextUtils.TruncateAt.END);
+        sideAuthorLayout = new StaticLayout(name, Theme.chat_namePaint, max + AndroidUtilities.dp(2), Layout.Alignment.ALIGN_NORMAL, 1f, 0f, false);
+    }
+    private void buildForwardLayout(int width) {
+        buildForwardLayoutForWidth(Math.max(AndroidUtilities.dp(20), width - incomingAvatarInset() - AndroidUtilities.dp(111)));
+    }
+    private void buildForwardLayoutForWidth(int max) {
+        forwardLayouts[0] = forwardLayouts[1] = null; forwardAvatar = null;
+        forwardHeight = forwardWidth = 0; forwardTouchRect.setEmpty();
+        if (message == null || message.forwardedFrom == null || TextUtils.isEmpty(message.forwardedFrom.name)) return;
+        TextBubbleMessage.ForwardedFrom source = message.forwardedFrom;
+        max = Math.max(1, max);
+        CharSequence heading = TextUtils.ellipsize(getContext().getString(R.string.ForwardedFrom), Theme.chat_forwardNamePaint, max, TextUtils.TruncateAt.END);
+        CharSequence sourceName = AndroidUtilities.replaceNewLines(source.name);
+        SpannableStringBuilder second = new SpannableStringBuilder();
+        if (source.sourceId != 0) {
+            forwardAvatar = source.avatar;
+            if (forwardAvatar == null) {
+                AvatarDrawable fallback = new AvatarDrawable(resourcesProvider);
+                fallback.setInfo(source.sourceId, sourceName.toString(), null, null, source.colorId < 0 ? null : source.colorId);
+                forwardAvatar = fallback;
+            }
+            second.append("A ");
+            second.setSpan(new ForwardAvatarSpan(), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        int nameStart = second.length(); second.append(sourceName);
+        if (source.sourceId != 0) second.setSpan(new StyleSpan(Typeface.BOLD), nameStart, second.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        CharSequence withEmoji = Emoji.replaceEmoji(second, Theme.chat_forwardNamePaint.getFontMetricsInt(), AndroidUtilities.dp(14), false);
+        CharSequence line = TextUtils.ellipsize(withEmoji, Theme.chat_forwardNamePaint, max, TextUtils.TruncateAt.END);
+        forwardLayouts[0] = new StaticLayout(heading, Theme.chat_forwardNamePaint, max + AndroidUtilities.dp(2), Layout.Alignment.ALIGN_NORMAL, 1f, 0f, false);
+        forwardLayouts[1] = new StaticLayout(line, Theme.chat_forwardNamePaint, max + AndroidUtilities.dp(2), Layout.Alignment.ALIGN_NORMAL, 1f, 0f, false);
+        forwardWidth = (int) Math.ceil(Math.max(forwardLayouts[0].getLineWidth(0), forwardLayouts[1].getLineWidth(0)));
+        forwardHeight = AndroidUtilities.dp(8) + 2 * (int) Theme.chat_forwardNamePaint.getTextSize();
+        if (forwardBackground == null) forwardBackground = new ForwardBackground(this);
+        forwardBackground.set(forwardLayouts, !message.isOut && authorLayout == null && pinnedTop);
+    }
+    private final class ForwardAvatarSpan extends ReplacementSpan {
+        private int size() { return Math.max(1, (int) (1.23f * (int) Theme.chat_forwardNamePaint.getTextSize())); }
+        @Override public int getSize(Paint paint, CharSequence text, int start, int end, Paint.FontMetricsInt fm) { return size(); }
+        @Override public void draw(Canvas canvas, CharSequence text, int start, int end, float x, int top, int y, int bottom, Paint paint) {
+            if (forwardAvatar == null) return;
+            int size = size(), cy = (top + bottom) / 2 - AndroidUtilities.dp(.33f);
+            int left = Math.round(x), t = cy - size / 2;
+            forwardAvatarBounds.set(forwardAvatar.getBounds());
+            forwardAvatarShadow.setColor(0x33000000);
+            forwardAvatarShadow.setShadowLayer(AndroidUtilities.dp(1), 0, AndroidUtilities.dp(.66f), 0x33000000);
+            canvas.drawCircle(left + size / 2f, t + size / 2f, size / 2f, forwardAvatarShadow);
+            canvas.save(); avatarClip.reset(); avatarClip.addCircle(left + size / 2f, t + size / 2f, size / 2f, Path.Direction.CW);
+            try { canvas.clipPath(avatarClip); forwardAvatar.setBounds(left, t, left + size, t + size); forwardAvatar.draw(canvas); }
+            finally { forwardAvatar.setBounds(forwardAvatarBounds); canvas.restore(); }
+        }
+    }
+    protected boolean hasForwardLayout() { return forwardLayouts[0] != null; }
+    protected int forwardOffset() { return message != null && (message.type == TextBubbleMessage.TYPE_STICKER || message.type == TextBubbleMessage.TYPE_ROUND_VIDEO) ? 0 : forwardHeight; }
+    protected int forwardRequiredWidth() { return hasForwardLayout() ? forwardWidth + AndroidUtilities.dp(31) : 0; }
+    protected void drawForward(Canvas canvas, boolean mediaBackground) {
+        if (!hasForwardLayout() || currentBackgroundDrawable == null) return;
+        int left = currentBackgroundDrawable.getBounds().left;
+        float x = left + AndroidUtilities.dp(message.isOut || mediaBackground || pinnedBottom ? 10 : 16);
+        float y = AndroidUtilities.dp(7) + (authorLayout != null ? AndroidUtilities.dp(6) + Theme.chat_namePaint.getTextSize() : 0);
+        if (authorLayout == null && (message.type != TextBubbleMessage.TYPE_TEXT || !pinnedTop)) y += AndroidUtilities.dp(2);
+        drawForwardAt(canvas, x, y, false);
+    }
+    protected void drawSideForward(Canvas canvas, int logicalRight) {
+        if (!hasForwardLayout()) return;
+        drawForwardAt(canvas, message.isOut ? AndroidUtilities.dp(23) : logicalRight + AndroidUtilities.dp(17), AndroidUtilities.dp(12), true);
+    }
+    private int sideReplyX(int logicalRight) {
+        if (message.isOut) return AndroidUtilities.dp(23);
+        return logicalRight + AndroidUtilities.dp(message.type == TextBubbleMessage.TYPE_ROUND_VIDEO && !hasForwardLayout() ? 4 : 17);
+    }
+    private int sideAvailableWidth(int width, int x) {
+        int right = width;
+        if (message.isOut) right = width - backgroundWidth - AndroidUtilities.dp(message.type == TextBubbleMessage.TYPE_STICKER ? 5 : 12);
+        return Math.max(1, right - x - AndroidUtilities.dp(7));
+    }
+    protected void buildSideReply(int width, int logicalRight) {
+        int x = sideReplyX(logicalRight);
+        buildReplyLayout(sideAvailableWidth(width, x), false);
+    }
+    protected int sideHeaderMinimumHeight() {
+        if (!hasForwardLayout() && replyNameLayout == null) return 0;
+        float visualHeight = AndroidUtilities.dp(4) + 2 * Theme.chat_forwardNamePaint.getTextSize();
+        float bottom = AndroidUtilities.dp(12) + (hasForwardLayout() ? visualHeight + AndroidUtilities.dp(6) : 0);
+        if (replyNameLayout != null) bottom += AndroidUtilities.dp(9) + Theme.chat_replyNamePaint.getTextSize()
+                + Math.max(replyTextHeight - AndroidUtilities.dp(3.66f), Theme.chat_replyTextPaint.getTextSize()) + AndroidUtilities.dp(4);
+        if (message.group && !message.isOut && !pinnedTop && message.sender != null && !TextUtils.isEmpty(message.sender.name)) bottom += AndroidUtilities.dp(43);
+        return (int) Math.ceil(bottom);
+    }
+    protected void drawSideReply(Canvas canvas, int logicalRight) {
+        drawServiceReplyAt(canvas, sideReplyX(logicalRight));
+    }
+    private void drawServiceReplyAt(Canvas canvas, float x) {
+        if (message.replyTo == null || replyNameLayout == null) return;
+        float forwardVisualHeight = AndroidUtilities.dp(4) + 2 * Theme.chat_forwardNamePaint.getTextSize();
+        float y = AndroidUtilities.dp(12) + (hasForwardLayout() ? forwardVisualHeight + AndroidUtilities.dp(6.66f) : 0);
+        replyStartX = (int) x; replyStartY = (int) y;
+        replyHeight = AndroidUtilities.dp(9) + Theme.chat_replyNamePaint.getTextSize() + Math.max(replyTextHeight - AndroidUtilities.dp(3.66f), Theme.chat_replyTextPaint.getTextSize());
+        int rightBound = message.isOut && !emojiOnlyMode ? getWidth() - backgroundWidth - AndroidUtilities.dp(message.type == TextBubbleMessage.TYPE_STICKER ? 5 : 12) : getWidth();
+        float width = Math.max(0, Math.min(rightBound - x, Math.max(replyNameWidth, replyTextWidth) - AndroidUtilities.dp(4)));
+        replySelectorRect.set(Math.max(0, x - AndroidUtilities.dp(7)), y - AndroidUtilities.dp(3), x + width, y + replyHeight + AndroidUtilities.dp(3));
+        canvas.save(); canvas.clipRect(0, 0, rightBound, getHeight());
+        if (!hasForwardLayout()) {
+            applyServiceShaderMatrix();
+            Paint paint = resourcesProvider == null ? Theme.chat_actionBackgroundPaint : resourcesProvider.getPaint(Theme.key_paint_chatActionBackground);
+            if (paint == null) paint = Theme.chat_actionBackgroundPaint;
+            canvas.drawRoundRect(replySelectorRect, AndroidUtilities.dp(6), AndroidUtilities.dp(6), paint);
+        }
+        Theme.chat_replyNamePaint.setColor(getThemedColor(Theme.key_chat_stickerReplyNameText));
+        Theme.chat_replyTextPaint.setColor(getThemedColor(Theme.key_chat_stickerReplyMessageText));
+        Theme.chat_replyTextPaint.linkColor = Theme.chat_replyTextPaint.getColor();
+        Paint serviceLine = Theme.chat_replyLinePaint;
+        int oldLineColor = serviceLine.getColor();
+        serviceLine.setColor(getThemedColor(Theme.key_chat_stickerReplyLine));
+        canvas.drawRoundRect(replySelectorRect.left, replySelectorRect.top, replySelectorRect.left + AndroidUtilities.dp(3), replySelectorRect.bottom, AndroidUtilities.dp(1.5f), AndroidUtilities.dp(1.5f), serviceLine);
+        serviceLine.setColor(oldLineColor);
+        float imageSize = 0;
+        if (needReplyImage) {
+            imageSize = Math.min(replySelectorRect.height() - AndroidUtilities.dp(10), AndroidUtilities.dp(7) + Theme.chat_replyNamePaint.getTextSize() + Theme.chat_replyTextPaint.getTextSize());
+            drawReplyImage(canvas, message.replyTo.thumb, x + AndroidUtilities.dp(1), y, imageSize);
+        }
+        float tx = x + AndroidUtilities.dp(4) + (needReplyImage ? imageSize + AndroidUtilities.dp(3) : 0);
+        canvas.save(); canvas.translate(tx - replyNameOffset, y + AndroidUtilities.dp(1)); replyNameLayout.draw(canvas); canvas.restore();
+        if (replyTextLayout != null) {
+            canvas.save(); canvas.translate(tx - replyTextOffset, y + AndroidUtilities.dp(5) + Theme.chat_replyNamePaint.getTextSize()); replyTextLayout.draw(canvas); canvas.restore();
+        }
+        canvas.restore();
+    }
+    private void drawEmojiForward(Canvas canvas) {
+        if (!hasForwardLayout()) return;
+        drawForwardAt(canvas, emojiForwardX(), AndroidUtilities.dp(12), true);
+    }
+    private float emojiForwardX() {
+        float x = (message.isOut ? getMeasuredWidth() - backgroundWidth + AndroidUtilities.dp(11)
+                : incomingAvatarInset() + AndroidUtilities.dp(pinnedBottom ? 11 : 17)) - AndroidUtilities.dp(7);
+        int contentWidth = Math.max(forwardWidth, Math.max(replyNameWidth, replyTextWidth));
+        return Math.max(0, Math.min(x, getMeasuredWidth() - contentWidth - AndroidUtilities.dp(7)));
+    }
+    private void drawForwardAt(Canvas canvas, float x, float y, boolean service) {
+        int height = AndroidUtilities.dp(4) + (int) Theme.chat_forwardNamePaint.getTextSize() * 2;
+        forwardDrawX = x; forwardDrawY = y;
+        forwardTouchRect.set(x, y, x + forwardWidth, y + height);
+        int color;
+        if (service) color = getThemedColor(Theme.key_chat_stickerReplyNameText);
+        else if (message.isOut) color = getThemedColor(Theme.key_chat_outForwardedNameText);
+        else if (message.forwardedFrom.sourceId == 0) color = getThemedColor(Theme.key_chat_inForwardedNameText);
+        else {
+            int id = message.forwardedFrom.colorId;
+            color = getThemedColor(id < 0 ? AvatarDrawable.getNameColorNameForId(message.forwardedFrom.sourceId)
+                    : Theme.keys_avatar_nameInMessage[id % Theme.keys_avatar_nameInMessage.length]);
+        }
+        Theme.chat_forwardNamePaint.setColor(color);
+        forwardBackground.setColor(service ? Theme.multAlpha(getThemedColor(Theme.key_listSelector), 1.35f) : Theme.multAlpha(color, .15f));
+        canvas.save(); canvas.translate(x, y);
+        float scale = forwardBackground.bounce.getScale(.02f);
+        canvas.scale(scale, scale, forwardBackground.bounds.centerX(), forwardBackground.bounds.centerY());
+        if (service) {
+            applyServiceShaderMatrix();
+            Paint paint = resourcesProvider == null ? Theme.chat_actionBackgroundPaint : resourcesProvider.getPaint(Theme.key_paint_chatActionBackground);
+            if (paint == null) paint = Theme.chat_actionBackgroundPaint;
+            if (replyNameLayout != null && message.replyTo != null && (emojiOnlyMode || message.type == TextBubbleMessage.TYPE_STICKER || message.type == TextBubbleMessage.TYPE_ROUND_VIDEO)) {
+                float replyH = AndroidUtilities.dp(9) + Theme.chat_replyNamePaint.getTextSize() + Math.max(replyTextHeight - AndroidUtilities.dp(3.66f), Theme.chat_replyTextPaint.getTextSize());
+                int visibleRight = message.isOut && !emojiOnlyMode ? getWidth() - backgroundWidth - AndroidUtilities.dp(message.type == TextBubbleMessage.TYPE_STICKER ? 5 : 12) : getWidth();
+                float right = Math.min(visibleRight - x, Math.max(forwardWidth + AndroidUtilities.dp(7), Math.max(replyNameWidth, replyTextWidth) + AndroidUtilities.dp(3)));
+                canvas.drawRoundRect(-AndroidUtilities.dp(7), -AndroidUtilities.dp(6), right, height + AndroidUtilities.dp(9) + replyH, AndroidUtilities.dp(6), AndroidUtilities.dp(6), paint);
+                if (resourcesProvider == null ? Theme.hasGradientService() : resourcesProvider.hasGradientService()) canvas.drawRoundRect(-AndroidUtilities.dp(7), -AndroidUtilities.dp(6), right, height + AndroidUtilities.dp(9) + replyH, AndroidUtilities.dp(6), AndroidUtilities.dp(6), Theme.chat_actionBackgroundGradientDarkenPaint);
+            } else {
+                canvas.drawPath(forwardBackground.path, paint);
+                if (resourcesProvider == null ? Theme.hasGradientService() : resourcesProvider.hasGradientService()) canvas.drawPath(forwardBackground.path, Theme.chat_actionBackgroundGradientDarkenPaint);
+            }
+        }
+        forwardBackground.draw(canvas, false);
+        for (int i = 0; i < 2; i++) {
+            canvas.save(); canvas.translate(-forwardLayouts[i].getLineLeft(0), (height / 2f + AndroidUtilities.dp(1.33f)) * i);
+            forwardLayouts[i].draw(canvas); canvas.restore();
+        }
+        canvas.restore();
+    }
+    /** Upstream ChatMessageCell.drawNamesLayout without-background name pill. */
+    protected int sideAuthorBackgroundRight(boolean mediaBackground) {
+        // ChatMessageCell :17619-17620: incoming background left + background width.
+        return incomingAvatarInset() + AndroidUtilities.dp(mediaBackground ? 9 : 3) + backgroundWidth - AndroidUtilities.dp(mediaBackground ? 0 : 3);
+    }
+    protected void drawSideAuthor(Canvas canvas, float mediaRight) {
+        if (sideAuthorLayout == null) return;
+        float x = mediaRight + AndroidUtilities.dp(22);
+        int available = (int) (getWidth() - x - AndroidUtilities.dp(12));
+        if (available <= 0) return;
+        if (available != sideDrawAvailable) {
+            sideDrawAvailable = available;
+            CharSequence name = TextUtils.ellipsize(sideAuthorLayout.getText(), Theme.chat_namePaint, available, TextUtils.TruncateAt.END);
+            if (TextUtils.isEmpty(name)) { sideDrawLayout = null; return; }
+            sideDrawTextWidth = Math.max(1, (int) Math.ceil(Theme.chat_namePaint.measureText(name, 0, name.length())));
+            sideDrawLayout = new StaticLayout(name, Theme.chat_namePaint, sideDrawTextWidth + AndroidUtilities.dp(2), Layout.Alignment.ALIGN_NORMAL, 1f, 0f, false);
+        }
+        if (sideDrawLayout == null) return;
+        float y = getBubbleContentHeight() - AndroidUtilities.dp(38);
+        android.graphics.Paint paint = resourcesProvider == null ? Theme.chat_actionBackgroundPaint : resourcesProvider.getPaint(Theme.key_paint_chatActionBackground);
+        if (paint == null) paint = Theme.chat_actionBackgroundPaint;
+        applyServiceShaderMatrix();
+        canvas.drawRoundRect(x - AndroidUtilities.dp(12), y - AndroidUtilities.dp(5), x + AndroidUtilities.dp(12) + sideDrawTextWidth, y + AndroidUtilities.dp(22), AndroidUtilities.dp(6), AndroidUtilities.dp(6), paint);
+        if (resourcesProvider == null ? Theme.hasGradientService() : resourcesProvider.hasGradientService())
+            canvas.drawRoundRect(x - AndroidUtilities.dp(12), y - AndroidUtilities.dp(5), x + AndroidUtilities.dp(12) + sideDrawTextWidth, y + AndroidUtilities.dp(22), AndroidUtilities.dp(6), AndroidUtilities.dp(6), Theme.chat_actionBackgroundGradientDarkenPaint);
+        Theme.chat_namePaint.setColor(getThemedColor(Theme.key_chat_stickerNameText));
+        canvas.save(); canvas.translate(x - sideDrawLayout.getLineLeft(0), y); sideDrawLayout.draw(canvas); canvas.restore();
+    }
+    protected int authorWidth() {
+        return authorLayout == null || authorLayout.getLineCount() == 0 ? 0 : (int) Math.ceil(authorLayout.getLineWidth(0));
+    }
+    protected boolean hasAuthorLayout() { return authorLayout != null; }
+    protected int authorLeft(boolean mediaBackground) {
+        return currentBackgroundDrawable.getBounds().left + AndroidUtilities.dp(mediaBackground || message.isOut || pinnedBottom ? 11 : 17);
+    }
+    protected void drawAuthor(Canvas canvas) { drawAuthor(canvas, false); }
+    protected void drawAuthor(Canvas canvas, boolean mediaBackground) {
+        if (authorLayout == null || currentBackgroundDrawable == null) return;
+        int index = message.sender.colorId % Theme.keys_avatar_nameInMessage.length;
+        int key = message.sender.colorId < 0 ? AvatarDrawable.getNameColorNameForId(message.sender.id) : Theme.keys_avatar_nameInMessage[index];
+        Theme.chat_namePaint.setColor(getThemedColor(key));
+        int left = authorLeft(mediaBackground);
+        canvas.save(); canvas.translate(left - authorLayout.getLineLeft(0), AndroidUtilities.dp(pinnedTop ? 9 : 10));
+        authorLayout.draw(canvas); canvas.restore();
+    }
+    public void setAvatarDrawnByList(boolean value) { if (avatarDrawnByList != value) { avatarDrawnByList = value; invalidate(); } }
+    public boolean isAvatarDrawnByList() { return avatarDrawnByList; }
+    public boolean hasGroupAvatar() { return incomingAvatarInset() != 0; }
+    public boolean isPinnedTop() { return pinnedTop; }
+    public boolean isPinnedBottom() { return pinnedBottom; }
+    public float getAvatarColumnX() { return AndroidUtilities.dp(6) + checkBoxTranslation; }
+    private void drawAvatar(Canvas canvas) {
+        if (incomingAvatarInset() == 0 || pinnedBottom || avatarDrawnByList) return;
+        drawAvatarAt(canvas, AndroidUtilities.dp(6), getBubbleContentHeight() - AndroidUtilities.dp(3));
+    }
+    /** Draw a static host avatar at list-space coordinates, restoring drawable bounds. */
+    public void drawAvatarAt(Canvas canvas, float x, float bottom) {
+        if (!hasGroupAvatar()) return;
+        TextBubbleMessage.Sender sender = message.sender;
+        Drawable drawable = sender.avatar;
+        if (drawable == null) {
+            if (fallbackAvatar == null) fallbackAvatar = new AvatarDrawable(resourcesProvider);
+            fallbackAvatar.setInfo(sender.id, sender.name == null ? "" : sender.name.toString(), null);
+            drawable = fallbackAvatar;
+        }
+        int size = AndroidUtilities.dp(42), left = Math.round(x);
+        int top = Math.round(bottom) - size;
+        canvas.save();
+        avatarClip.reset(); avatarClip.addCircle(left + size / 2f, top + size / 2f, size / 2f, Path.Direction.CW);
+        avatarOldBounds.set(drawable.getBounds());
+        try { canvas.clipPath(avatarClip); drawable.setBounds(left, top, left + size, top + size); drawable.draw(canvas); }
+        finally { drawable.setBounds(avatarOldBounds); canvas.restore(); }
+    }
 
     private StaticLayout textLayout;
     private AnimatedEmojiSpan.EmojiGroupedSpans animatedEmojiSpans;
@@ -95,6 +406,11 @@ public class TextBubbleCell extends View {
     private float selectionProgress;
     private long lastSelectionAnimationTime;
     protected int bubbleBottom;
+    private final InlineKeyboardLayout inlineKeyboard = new InlineKeyboardLayout(this);
+    private int inlineKeyboardHeight;
+    /** Height of the message bubble excluding its inline keyboard. */
+    public int getBubbleContentHeight() { return Math.max(0, getMeasuredHeight() - inlineKeyboardHeight); }
+    public void getInlineButtonRect(int row, int column, android.graphics.RectF out) { inlineKeyboard.getRect(row, column, out); }
     private static android.graphics.Paint selectionPaint;
 
     protected int totalHeight;
@@ -104,6 +420,7 @@ public class TextBubbleCell extends View {
     private int textLeftOffset;
     private int timeX;
     private boolean emojiOnlyMode;
+    boolean isEmojiOnlyMode() { return emojiOnlyMode; }
     private TextPaint textPaint;
     protected final RectF timeRect = new RectF();
     /** The bubble drawable picked by the last {@link #drawBubbleBackground} (media cells hand it to RadialProgress2). */
@@ -296,6 +613,9 @@ public class TextBubbleCell extends View {
      * @param pinnedBottom next message is from the same side (no tail, small bottom corner)
      */
     public void setMessage(TextBubbleMessage message, boolean pinnedTop, boolean pinnedBottom) {
+        inlineKeyboard.cancel();
+        if (message == null || message.inlineKeyboard == null || message.inlineKeyboard.isEmpty()) inlineKeyboard.clear();
+        requestLayout();
         boolean sameMessage = this.message != null && message != null && lastMessageId == message.id;
         boolean animateStatus = sameMessage && lastState == TextBubbleMessage.STATE_SENDING && message.state != TextBubbleMessage.STATE_SENDING && isAttachedToWindow();
         boolean reactionsChanged = layoutForWidth > 0 && !TextUtils.equals(layoutForReactions, reactionsKey(message));
@@ -315,10 +635,32 @@ public class TextBubbleCell extends View {
         // Spans can change in place without changing the CharSequence identity or its length.
         boolean customEmoji = hasAnimatedEmoji(message == null ? null : message.text)
                 || hasAnimatedEmoji(textLayout == null ? null : textLayout.getText());
-        if (customEmoji || this.message != message || this.pinnedTop != pinnedTop || this.pinnedBottom != pinnedBottom || layoutForText != (message == null ? null : message.text) || reactionsChanged || layoutForReply != (message == null ? null : message.replyTo)) {
+        TextBubbleMessage.Sender sender = message == null ? null : message.sender;
+        String senderName = sender == null || sender.name == null ? null : sender.name.toString();
+        boolean senderChanged = layoutGroup != (message != null && message.group)
+                || layoutSenderId != (sender == null ? 0 : sender.id)
+                || !TextUtils.equals(layoutSenderName, senderName)
+                || layoutSenderColor != (sender == null ? 0 : sender.colorId)
+                || layoutSenderAvatar != (sender == null ? null : sender.avatar);
+        TextBubbleMessage.ForwardedFrom origin = message == null ? null : message.forwardedFrom;
+        String originName = origin == null || origin.name == null ? null : origin.name.toString();
+        boolean forwardChanged = layoutForwardId != (origin == null ? 0 : origin.sourceId)
+                || !TextUtils.equals(layoutForwardName, originName) || layoutForwardColor != (origin == null ? 0 : origin.colorId)
+                || layoutForwardAvatar != (origin == null ? null : origin.avatar);
+        if (forwardChanged || this.message != message) resetForwardPressed();
+        if (customEmoji || senderChanged || forwardChanged || this.message != message || this.pinnedTop != pinnedTop || this.pinnedBottom != pinnedBottom || layoutForText != (message == null ? null : message.text) || reactionsChanged || layoutForReply != (message == null ? null : message.replyTo)) {
             layoutForWidth = -1;
             requestLayout();
         }
+        layoutGroup = message != null && message.group;
+        layoutSenderId = sender == null ? 0 : sender.id;
+        layoutSenderName = senderName;
+        layoutSenderColor = sender == null ? 0 : sender.colorId;
+        layoutSenderAvatar = sender == null ? null : sender.avatar;
+        layoutForwardId = origin == null ? 0 : origin.sourceId;
+        layoutForwardName = originName;
+        layoutForwardColor = origin == null ? 0 : origin.colorId;
+        layoutForwardAvatar = origin == null ? null : origin.avatar;
         if (message == null) {
             AnimatedEmojiSpan.release(this, animatedEmojiSpans);
             animatedEmojiSpans = null;
@@ -367,6 +709,20 @@ public class TextBubbleCell extends View {
     public interface MediaDelegate {
         /** The play / download / open button (or the photo, or the file row) was tapped. */
         void onMediaPressed(TextBubbleCell cell, TextBubbleMessage message);
+        /** Host synchronously rebinds pending=true, then publishes a result or pending=false on failure. */
+        default void onPollVote(TextBubbleCell cell, TextBubbleMessage message, java.util.List<String> optionIds) { }
+        /** Result row pressed; the host can show voters for this option. */
+        default void onPollOptionPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.PollOption option) {
+            onPollResults(cell, message);
+        }
+        /** Host opens the voters/results screen for a public poll. */
+        default void onPollResults(TextBubbleCell cell, TextBubbleMessage message) { }
+        /** A static location map was tapped. */
+        default void onLocationPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Location location) {
+            onMediaPressed(cell, message);
+        }
+        /** Host action from a contact card; action is one of ContactBubbleCell.ACTION_*. */
+        default void onContactAction(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Contact contact, int action) { }
 
         /** Individual album tile; group selection, caption and time belong to the album row. */
         default void onAlbumMediaPressed(AlbumBubbleCell cell, TextBubbleMessage album, TextBubbleMessage item, int index) {
@@ -399,9 +755,19 @@ public class TextBubbleCell extends View {
             Theme.key_chat_mediaTimeBackground, Theme.key_chat_mediaTimeText, Theme.key_chat_mediaSentCheck, Theme.key_chat_mediaSentClock,
             Theme.key_chat_mediaLoaderPhoto, Theme.key_chat_mediaLoaderPhotoSelected, Theme.key_chat_mediaLoaderPhotoIcon, Theme.key_chat_mediaLoaderPhotoIconSelected,
             Theme.key_chat_mediaProgress,
+            Theme.key_chat_botButtonText, Theme.key_chat_serviceIcon, Theme.key_chat_serviceBackgroundSelector,
             Theme.key_chat_inFileNameText, Theme.key_chat_outFileNameText, Theme.key_chat_inFileInfoText, Theme.key_chat_outFileInfoText,
             Theme.key_chat_inFileInfoSelectedText, Theme.key_chat_outFileInfoSelectedText,
+            Theme.key_chat_inVenueInfoText, Theme.key_chat_outVenueInfoText,
+            Theme.key_chat_inVenueInfoSelectedText, Theme.key_chat_outVenueInfoSelectedText,
+            Theme.key_chat_inBubbleLocationPlaceholder, Theme.key_chat_outBubbleLocationPlaceholder,
+            Theme.key_chat_inLocationIcon, Theme.key_chat_outLocationIcon,
+            Theme.key_chat_inContactBackground, Theme.key_chat_outContactBackground,
+            Theme.key_chat_inContactIcon, Theme.key_chat_outContactIcon,
             Theme.key_chat_inMenu, Theme.key_chat_outMenu, Theme.key_chat_inMenuSelected, Theme.key_chat_outMenuSelected,
+            // poll choices and footer
+            Theme.key_chat_inAudioSeekbarFill, Theme.key_chat_outAudioSeekbarFill,
+            Theme.key_chat_inPreviewInstantText, Theme.key_chat_outPreviewInstantText, Theme.key_checkboxCheck,
             // reply quote, links and date separators (ChatActionCell)
             Theme.key_chat_inReplyLine, Theme.key_chat_outReplyLine, Theme.key_chat_inReplyNameText, Theme.key_chat_outReplyNameText,
             Theme.key_chat_inReplyMessageText, Theme.key_chat_outReplyMessageText,
@@ -428,6 +794,9 @@ public class TextBubbleCell extends View {
 
     /** Host callbacks for the reply quote and links (ChatMessageCellDelegate.didPressReplyMessage / didPressUrl). */
     public interface Delegate {
+        default void onInlineButtonPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.InlineButton button) { }
+        default void onInlineButtonLongPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.InlineButton button) { }
+        default void onForwardPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.ForwardedFrom source) { }
         /** The reply quote was tapped; {@code replyTo.messageId} names the original message. */
         default void onReplyPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.ReplyTo replyTo) {
         }
@@ -643,7 +1012,7 @@ public class TextBubbleCell extends View {
         } else {
             replyStartX = backgroundDrawableLeft + AndroidUtilities.dp(pinnedBottom ? 12 : 18);
         }
-        replyStartY = AndroidUtilities.dp(12);
+        replyStartY = AndroidUtilities.dp(12) + authorHeight + forwardOffset();
 
         if (replyPressedFloat == null) {
             replyPressedFloat = new AnimatedFloat(this);
@@ -755,7 +1124,7 @@ public class TextBubbleCell extends View {
 
     @Override
     protected boolean verifyDrawable(Drawable who) {
-        return super.verifyDrawable(who) || who == replySelector;
+        return super.verifyDrawable(who) || who == replySelector || inlineKeyboard != null && inlineKeyboard.ownsDrawable(who);
     }
 
     private void resetReplyPressed() {
@@ -788,6 +1157,7 @@ public class TextBubbleCell extends View {
                 return;
             }
             boolean wasReply = replyPressed;
+            resetForwardPressed();
             resetReplyPressed();
             onInteractiveLongPress(wasReply);
             invalidate();
@@ -898,6 +1268,45 @@ public class TextBubbleCell extends View {
         }
         return true;
     }
+    private void resetForwardPressed() {
+        if (!forwardPressed) return;
+        forwardPressed = false;
+        cancelCheckLongPress();
+        if (forwardBackground != null) forwardBackground.setPressed(false);
+        invalidate();
+    }
+    protected boolean checkForwardTouchEvent(MotionEvent event) {
+        if (!hasForwardLayout() || message == null || message.forwardedFrom == null) { resetForwardPressed(); return false; }
+        float x = event.getX(), y = event.getY();
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                if (!forwardTouchRect.contains(x, y)) return false;
+                forwardPressed = true; forwardDownX = x; forwardDownY = y;
+                forwardBackground.setPressed(true, x - forwardDrawX, y - forwardDrawY);
+                if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+                startCheckLongPress();
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                if (!forwardPressed) return false;
+                float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                if (!forwardTouchRect.contains(x, y) || Math.abs(x - forwardDownX) > slop || Math.abs(y - forwardDownY) > slop) {
+                    resetForwardPressed(); if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false); return false;
+                }
+                return true;
+            case MotionEvent.ACTION_UP:
+                if (!forwardPressed) return false;
+                TextBubbleMessage.ForwardedFrom origin = message.forwardedFrom;
+                resetForwardPressed();
+                if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
+                playSoundEffect(SoundEffectConstants.CLICK);
+                if (delegate != null) delegate.onForwardPressed(this, message, origin);
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                if (!forwardPressed) return false;
+                resetForwardPressed(); if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false); return true;
+            default: return forwardPressed;
+        }
+    }
 
     private String getUrl(ClickableSpan span) {
         if (span instanceof URLSpan) {
@@ -999,7 +1408,7 @@ public class TextBubbleCell extends View {
         if (message == null || isCheckBoxVisible()) {
             return super.onTouchEvent(event);
         }
-        if (checkReactionsTouchEvent(event) || checkReplyTouchEvent(event) || checkLinkTouchEvent(event)) {
+        if (checkForwardTouchEvent(event) || checkReactionsTouchEvent(event) || checkReplyTouchEvent(event) || checkLinkTouchEvent(event)) {
             return true;
         }
         return super.onTouchEvent(event);
@@ -1028,7 +1437,7 @@ public class TextBubbleCell extends View {
         setReactionsLayout();
         hasNewLineForTime = false;
 
-        int maxWidth = Math.min(width, Math.max(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y)) - AndroidUtilities.dp(80);
+        int maxWidth = Math.min(width, Math.max(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y)) - AndroidUtilities.dp(80) - incomingAvatarInset();
         if (AndroidUtilities.isTablet()) {
             maxWidth = Math.min(maxWidth, AndroidUtilities.getMinTabletSide() - AndroidUtilities.dp(80));
         }
@@ -1071,7 +1480,7 @@ public class TextBubbleCell extends View {
         int lastLineWidth = (int) Math.ceil(textLayout.getLineRight(lineCount - 1) - minLeft);
 
         int textHeight = textLayout.getLineBottom(lineCount - 1);
-        if (emojiOnlyMode && message.replyTo != null) {
+        if (emojiOnlyMode && message.replyTo != null && !hasForwardLayout()) {
             // a reply needs the bubble: draw the emoji at the regular size
             emojiOnlyMode = false;
             textPaint = Theme.chat_msgTextPaint;
@@ -1087,11 +1496,14 @@ public class TextBubbleCell extends View {
         }
         animatedEmojiSpans = AnimatedEmojiSpan.update(0, this, animatedEmojiSpans, textLayout);
         if (emojiOnlyMode) {
-            layoutForReply = null;
-            replyNameLayout = null;
-            replyTextLayout = null;
+            // TYPE_EMOJIS uses the upstream side header, not the ordinary bubble header.
+            authorHeight = 0;
+            authorLayout = null;
+            int emojiReplyOffset = 0;
+            if (message.replyTo != null && hasForwardLayout()) emojiReplyOffset = buildReplyLayout(maxWidth - AndroidUtilities.dp(31), true) + AndroidUtilities.dp(2);
+            else { layoutForReply = null; replyNameLayout = null; replyTextLayout = null; }
             backgroundWidth = maxChildWidth;
-            textY = AndroidUtilities.dp(4);
+            textY = AndroidUtilities.dp(4) + (hasForwardLayout() ? forwardHeight + AndroidUtilities.dp(8) : 0) + emojiReplyOffset;
             totalHeight = textY + textHeight + AndroidUtilities.dp(2 + 17 + 4);
             // TYPE_EMOJIS: the pills go under the emoji on service backgrounds, right-aligned for outgoing
             reactionsLayoutInBubble.measure(maxWidth, out ? android.view.Gravity.RIGHT : android.view.Gravity.LEFT);
@@ -1102,7 +1514,7 @@ public class TextBubbleCell extends View {
             }
             return;
         }
-        int namesOffset = buildReplyLayout(maxWidth - AndroidUtilities.dp(31) - AndroidUtilities.dp(out ? 20 : 10), true);
+        int namesOffset = authorHeight + forwardOffset() + buildReplyLayout(maxWidth - AndroidUtilities.dp(31) - AndroidUtilities.dp(out ? 20 : 10), true);
         if (pinnedTop) {
             namesOffset -= AndroidUtilities.dp(1);
         }
@@ -1136,6 +1548,8 @@ public class TextBubbleCell extends View {
             // upstream maxChildWidth = max(maxChildWidth, replyNameWidth / replyTextWidth)
             backgroundWidth = Math.max(backgroundWidth, Math.max(replyNameWidth, replyTextWidth) + AndroidUtilities.dp(31));
         }
+        if (authorLayout != null) backgroundWidth = Math.max(backgroundWidth, Math.min(maxWidth, authorWidth() + AndroidUtilities.dp(31)));
+        if (hasForwardLayout()) backgroundWidth = Math.max(backgroundWidth, Math.min(maxWidth, forwardRequiredWidth()));
         textY = AndroidUtilities.dp(10) + namesOffset;
     }
 
@@ -1186,18 +1600,43 @@ public class TextBubbleCell extends View {
             width = getParentWidth();
         }
         if (message == null) {
+            inlineKeyboardHeight = 0; inlineKeyboard.clear();
             setMeasuredDimension(width, 0);
             return;
         }
         if (layoutForWidth != width || layoutForText != message.text || !TextUtils.equals(layoutForReactions, reactionsKey(message)) || layoutForReply != message.replyTo) {
+            buildAuthorLayout(width);
+            buildForwardLayout(width);
             buildLayout(width);
+            if (!emojiOnlyMode) buildAuthorLayout(Math.min(width, backgroundWidth + AndroidUtilities.dp(80) + incomingAvatarInset()));
+            if (hasForwardLayout() && (message.type == TextBubbleMessage.TYPE_STICKER || message.type == TextBubbleMessage.TYPE_ROUND_VIDEO)) {
+                int x = message.isOut ? AndroidUtilities.dp(23) : sideAuthorBackgroundRight(true) + AndroidUtilities.dp(17);
+                int displayHeight = AndroidUtilities.displaySize.y > 0 ? AndroidUtilities.displaySize.y : width;
+                int upstreamMax = Math.min(width, displayHeight) - AndroidUtilities.dp(incomingAvatarInset() != 0 ? 42 : 0) - backgroundWidth - AndroidUtilities.dp(57);
+                int visibleMax = sideAvailableWidth(width, x);
+                // Upstream's formula can become negative in unusually narrow host views.
+                buildForwardLayoutForWidth(upstreamMax > 0 ? Math.min(upstreamMax, visibleMax) : visibleMax);
+            } else if (hasForwardLayout() && !emojiOnlyMode) {
+                buildForwardLayoutForWidth(Math.max(1, backgroundWidth - AndroidUtilities.dp(31)));
+            }
+            buildSideAuthorLayout(width);
         }
-        setMeasuredDimension(width, totalHeight);
+        if (incomingAvatarInset() != 0 && !pinnedBottom) totalHeight = Math.max(totalHeight, AndroidUtilities.dp(48));
+        inlineKeyboardHeight = inlineKeyboard.measure(width, totalHeight);
+        setMeasuredDimension(width, totalHeight + inlineKeyboardHeight);
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+        if (inlineKeyboard.dispatch(event)) return true;
+        return super.dispatchTouchEvent(event);
     }
 
     @Override
     protected void onDetachedFromWindow() {
+        inlineKeyboard.clear();
         AnimatedEmojiSpan.release(this, animatedEmojiSpans);
+        resetForwardPressed();
         animatedEmojiSpans = null;
         super.onDetachedFromWindow();
         cancelReactionsAnimation();
@@ -1260,6 +1699,7 @@ public class TextBubbleCell extends View {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        if (message != null && message.inlineKeyboard != null && !message.inlineKeyboard.isEmpty()) requestLayout();
         animatedEmojiSpans = AnimatedEmojiSpan.update(0, this, animatedEmojiSpans, textLayout);
         if (checkBox != null) {
             checkBox.onAttachedToWindow();
@@ -1328,13 +1768,15 @@ public class TextBubbleCell extends View {
             int color = getThemedColor(Theme.key_chat_selectedBackground);
             selectionPaint.setColor(color);
             selectionPaint.setAlpha((int) (android.graphics.Color.alpha(color) * rowAlpha));
-            canvas.drawRect(0, 0, getMeasuredWidth(), getMeasuredHeight(), selectionPaint);
+            canvas.drawRect(0, 0, getMeasuredWidth(), getBubbleContentHeight(), selectionPaint);
         }
         int restore = canvas.save();
         if (!message.isOut) {
             canvas.translate(checkBoxTranslation, 0);
         }
         drawContent(canvas);
+        drawAvatar(canvas);
+        inlineKeyboard.draw(canvas);
         canvas.restoreToCount(restore);
         if (checkBox != null && (checkBoxVisible || checkBoxAnimationInProgress)) {
             int size = AndroidUtilities.dp(21);
@@ -1346,15 +1788,20 @@ public class TextBubbleCell extends View {
     protected void drawContent(Canvas canvas) {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
-        final int layoutHeight = getMeasuredHeight();
+        final int layoutHeight = getBubbleContentHeight();
 
         if (emojiOnlyMode) {
             bubbleBottom = layoutHeight - AndroidUtilities.dp(4);
             drawEmojiOnly(canvas, out, layoutWidth, layoutHeight);
+            drawEmojiForward(canvas);
+            if (hasForwardLayout()) drawServiceReplyAt(canvas, emojiForwardX());
+            if (!out) drawSideAuthor(canvas, sideAuthorBackgroundRight(false));
             return;
         }
 
         int backgroundLeft = drawBubbleBackground(canvas);
+        drawAuthor(canvas);
+        drawForward(canvas, false);
         drawReply(canvas, false);
 
         // --- text
@@ -1385,7 +1832,7 @@ public class TextBubbleCell extends View {
     protected int drawBubbleBackground(Canvas canvas) {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
-        final int layoutHeight = getMeasuredHeight();
+        final int layoutHeight = getBubbleContentHeight();
         Theme.MessageDrawable drawable;
         if (drawSelectionBackground) {
             if (pinnedBottom) {
@@ -1406,7 +1853,7 @@ public class TextBubbleCell extends View {
                 backgroundRight -= AndroidUtilities.dp(6);
             }
         } else {
-            backgroundLeft = AndroidUtilities.dp(3);
+            backgroundLeft = AndroidUtilities.dp(3) + incomingAvatarInset();
             if (pinnedBottom) {
                 backgroundRight -= AndroidUtilities.dp(6);
                 backgroundLeft += AndroidUtilities.dp(6);
@@ -1467,13 +1914,17 @@ public class TextBubbleCell extends View {
     protected void drawTimeAndStatus(Canvas canvas) {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
-        final int layoutHeight = getMeasuredHeight();
-        // --- time
-        if (out) {
-            timeX = layoutWidth - timeWidth - AndroidUtilities.dp(38.5f);
-        } else {
-            timeX = backgroundWidth - AndroidUtilities.dp(9) - timeWidth;
-        }
+        int x = out ? layoutWidth - timeWidth - AndroidUtilities.dp(38.5f)
+                : backgroundWidth - AndroidUtilities.dp(9) - timeWidth + incomingAvatarInset();
+        drawTimeAndStatus(canvas, x);
+    }
+
+    /** Draw the normal time and status using the upstream layout's computed time X. */
+    protected void drawTimeAndStatus(Canvas canvas, int x) {
+        final boolean out = message.isOut;
+        final int layoutWidth = getMeasuredWidth();
+        final int layoutHeight = getBubbleContentHeight();
+        timeX = x;
         Theme.chat_timePaint.setColor(getThemedColor(out ? (drawSelectionBackground ? Theme.key_chat_outTimeSelectedText : Theme.key_chat_outTimeText) : (drawSelectionBackground ? Theme.key_chat_inTimeSelectedText : Theme.key_chat_inTimeText)));
         canvas.save();
         canvas.translate(timeX, layoutHeight - AndroidUtilities.dp(pinnedBottom || pinnedTop ? 7.5f : 6.5f) - timeLayout.getHeight());
@@ -1521,7 +1972,7 @@ public class TextBubbleCell extends View {
             contentRight = layoutWidth - AndroidUtilities.dp(11);
             contentLeft = contentRight - backgroundWidth;
         } else {
-            contentLeft = AndroidUtilities.dp(17);
+            contentLeft = AndroidUtilities.dp(17) + incomingAvatarInset();
             contentRight = contentLeft + Math.max(backgroundWidth, pillWidth);
         }
         canvas.save();

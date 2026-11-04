@@ -40,6 +40,7 @@ import org.telegram.ui.Components.StickersAlert;
 import org.telegram.ui.Components.Gif;
 import org.telegram.ui.Components.Attachment;
 import org.telegram.ui.Components.ChatAttachAlert;
+import org.telegram.ui.bots.ReplyKeyboard;
 import org.telegram.ui.TelegramUI;
 
 import java.text.SimpleDateFormat;
@@ -111,6 +112,46 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         messages.add(TextBubbleMessage.sticker(nextId++, false, "12:36", TextBubbleMessage.STATE_NONE, sticker));
         messages.add(TextBubbleMessage.gif(nextId++, true, "12:37", TextBubbleMessage.STATE_READ, localGifs.get(0),
                 app.getString(com.example.tguihost.R.string.local_gif_caption)));
+        messages.add(TextBubbleMessage.contact(nextId++, false, "12:38", TextBubbleMessage.STATE_NONE,
+                new TextBubbleMessage.Contact(1, app.getString(com.example.tguihost.R.string.attach_sample_contact_one),
+                        "+1 202 555 0101", null, true, true)));
+        messages.add(TextBubbleMessage.music(nextId++, true, "12:39", TextBubbleMessage.STATE_READ,
+                app.getString(com.example.tguihost.R.string.music_sample_title),
+                app.getString(com.example.tguihost.R.string.music_sample_artist), 12,
+                app.getString(com.example.tguihost.R.string.music_host)));
+        messages.add(TextBubbleMessage.location(nextId++, false, "12:40", TextBubbleMessage.STATE_NONE,
+                new TextBubbleMessage.Location(0, 0, app.getString(com.example.tguihost.R.string.location_sample_title),
+                        app.getString(com.example.tguihost.R.string.location_sample_address), sampleAttachmentMap(app))));
+        messages.add(TextBubbleMessage.location(nextId++, true, "12:40", TextBubbleMessage.STATE_READ,
+                new TextBubbleMessage.Location(0, 0, null, null, sampleAttachmentMap(app))));
+        messages.add(TextBubbleMessage.document(nextId++, false, "12:42", TextBubbleMessage.STATE_NONE,
+                "Host_map_preview.png", 786_432, sampleAttachmentMap(app), app.getString(com.example.tguihost.R.string.document_thumbnail_caption)));
+        TextBubbleMessage hostDownload = TextBubbleMessage.document(nextId++, true, "12:42", TextBubbleMessage.STATE_READ,
+                "A_long_file_name_for_a_host_thumbnail.jpg", 2_457_600, photos.get(0).photo, null);
+        hostDownload.mediaState = TextBubbleMessage.MEDIA_DOWNLOAD;
+        messages.add(hostDownload);
+        messages.add(TextBubbleMessage.document(nextId++, false, "12:42", TextBubbleMessage.STATE_NONE,
+                "No_thumbnail.txt", 12_288, null, app.getString(com.example.tguihost.R.string.document_plain_caption)));
+        TextBubbleMessage inlineSample = new TextBubbleMessage(nextId++, app.getString(com.example.tguihost.R.string.inline_sample_text), false, "12:43", TextBubbleMessage.STATE_NONE);
+        inlineSample.inlineKeyboard = java.util.Arrays.asList(
+                java.util.Arrays.asList(
+                        new TextBubbleMessage.InlineButton("callback", app.getString(com.example.tguihost.R.string.inline_callback), TextBubbleMessage.InlineButton.Type.CALLBACK, false),
+                        new TextBubbleMessage.InlineButton("url", app.getString(com.example.tguihost.R.string.inline_url), TextBubbleMessage.InlineButton.Type.URL, false)),
+                java.util.Arrays.asList(
+                        new TextBubbleMessage.InlineButton("switch", app.getString(com.example.tguihost.R.string.inline_switch), TextBubbleMessage.InlineButton.Type.SWITCH_INLINE, false),
+                        new TextBubbleMessage.InlineButton("copy", app.getString(com.example.tguihost.R.string.inline_copy), TextBubbleMessage.InlineButton.Type.COPY, false)));
+        messages.add(inlineSample);
+        for (TextBubbleMessage message : messages) bindGroupSender(message);
+        TextBubbleMessage.ForwardedFrom source = new TextBubbleMessage.ForwardedFrom(-100,
+                app.getString(com.example.tguihost.R.string.forward_source_name));
+        messages.get(0).forwardedFrom = source;
+        messages.add(TextBubbleMessage.poll(nextId++, false, "12:41", TextBubbleMessage.STATE_NONE, samplePoll(app, false, false)));
+        messages.add(TextBubbleMessage.poll(nextId++, true, "12:41", TextBubbleMessage.STATE_READ, samplePoll(app, true, false)));
+        messages.add(TextBubbleMessage.poll(nextId++, false, "12:41", TextBubbleMessage.STATE_NONE, samplePoll(app, false, true)));
+        for (TextBubbleMessage message : messages) {
+            if (message.type == TextBubbleMessage.TYPE_STICKER || message.type == TextBubbleMessage.TYPE_ALBUM
+                    || message.type == TextBubbleMessage.TYPE_ROUND_VIDEO) message.forwardedFrom = source;
+        }
         return super.onFragmentCreate();
     }
 
@@ -126,6 +167,12 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
 
     private void add(CharSequence text, boolean out, int state) {
         messages.add(new TextBubbleMessage(nextId++, text, out, timeFormat.format(new Date()), state));
+    }
+
+    private void bindGroupSender(TextBubbleMessage message) {
+        message.group = true;
+        if (message.date == 0) message.date = System.currentTimeMillis() / 1000;
+        message.sender = new TextBubbleMessage.Sender(message.isOut ? 99 : 1, message.isOut ? "Me" : title, null);
     }
 
     @Override
@@ -147,6 +194,38 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 } else if (id == 2) {
                     enterView.setFieldText(localEmoji());
                     enterView.getEditField().updateAnimatedEmoji(true);
+                } else if (id == 3) {
+                    org.telegram.ui.Cells.ChatUnreadCell unread = new org.telegram.ui.Cells.ChatUnreadCell(context, getResourceProvider());
+                    unread.setText(context.getString(R.string.UnreadMessages));
+                    org.telegram.ui.ActionBar.BottomSheet sheet = new org.telegram.ui.ActionBar.BottomSheet(context, false, getResourceProvider());
+                    sheet.setCustomView(unread);
+                    showDialog(sheet);
+                } else if (id == 4) {
+                    android.widget.LinearLayout events = new android.widget.LinearLayout(context);
+                    events.setOrientation(android.widget.LinearLayout.VERTICAL);
+                    org.telegram.ui.Cells.ServiceMessage.Person alice = new org.telegram.ui.Cells.ServiceMessage.Person(1L, "Alice");
+                    org.telegram.ui.Cells.ServiceMessage[] examples = {
+                        org.telegram.ui.Cells.ServiceMessage.join(1, alice, false),
+                        org.telegram.ui.Cells.ServiceMessage.invite(2, alice,
+                            new org.telegram.ui.Cells.ServiceMessage.Person(2L, "Bob"), false, false),
+                        org.telegram.ui.Cells.ServiceMessage.pin(3, alice, false, messages.get(0).id, messages.get(0).text)
+                    };
+                    for (org.telegram.ui.Cells.ServiceMessage event : examples) {
+                        org.telegram.ui.Cells.ChatActionCell cell = new org.telegram.ui.Cells.ChatActionCell(context, getResourceProvider());
+                        cell.setMessage(event);
+                        cell.setDelegate(new org.telegram.ui.Cells.ChatActionCell.Delegate() {
+                            @Override public void onUserPressed(Object userId) {
+                                android.widget.Toast.makeText(context, context.getString(com.example.tguihost.R.string.service_user_selected, userId), android.widget.Toast.LENGTH_SHORT).show();
+                            }
+                            @Override public void onPinnedMessagePressed(Object messageId) {
+                                android.widget.Toast.makeText(context, context.getString(com.example.tguihost.R.string.service_pin_selected, messageId), android.widget.Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                        events.addView(cell, new android.widget.LinearLayout.LayoutParams(-1, -2));
+                    }
+                    org.telegram.ui.ActionBar.BottomSheet sheet = new org.telegram.ui.ActionBar.BottomSheet(context, false, getResourceProvider());
+                    sheet.setCustomView(events);
+                    showDialog(sheet);
                 } else if (id == ACTION_DELETE) {
                     for (TextBubbleMessage m : new ArrayList<>(selected)) {
                         int index = messages.indexOf(m);
@@ -158,6 +237,8 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             }
         });
         actionBar.createMenu().addItem(MENU_NIGHT, R.drawable.msg_theme);
+        actionBar.createMenu().addItem(3, R.drawable.ic_ab_new).setContentDescription(context.getString(R.string.UnreadMessages));
+        actionBar.createMenu().addItem(4, R.drawable.msg_info).setContentDescription(context.getString(com.example.tguihost.R.string.service_messages));
         actionBar.createMenu().addItem(2, R.drawable.msg_emoji_smiles)
                 .setContentDescription(context.getString(com.example.tguihost.R.string.local_emoji_insert));
 
@@ -170,6 +251,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         layoutManager.setStackFromEnd(true);
         listView.setLayoutManager(layoutManager);
         listView.setItemAnimator(new ChatBubbleItemAnimator());
+        listView.addItemDecoration(new org.telegram.ui.Cells.ChatAvatarDecoration());
         listView.setClipToPadding(false);
         listView.setPadding(0, ActionBar.getCurrentActionBarHeight() + AndroidUtilities.statusBarHeight + AndroidUtilities.dp(4), 0, AndroidUtilities.dp(3));
         listView.setAdapter(new Adapter(context));
@@ -200,6 +282,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
 
         enterView = new ChatActivityEnterView(getParentActivity(), contentView, this, true, getResourceProvider());
         enterView.setDelegate(new ChatActivityEnterView.ChatActivityEnterViewDelegate() {
+            @Override public void onReplyKeyboardButtonPressed(ReplyKeyboard keyboard, ReplyKeyboard.Button button) { onReplyKeyboardButton(keyboard, button); }
             @Override
             public void onSendText(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate) {
                 android.text.SpannableStringBuilder styled = new android.text.SpannableStringBuilder(text.toString());
@@ -221,15 +304,48 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         enterView.setRecordButtonVisible(false);
         contentView.addView(enterView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
         contentView.setEnterView(enterView);
+        enterView.setReplyKeyboard(sampleReplyKeyboard(context, true, false), false);
 
         contentView.addView(actionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
         contentView.setActionBar(actionBar);
         return fragmentView;
     }
 
-    private void showAttachments() {
+    private static ReplyKeyboard sampleReplyKeyboard(Context context, boolean resize, boolean singleUse) {
+        ReplyKeyboard.Button greeting = new ReplyKeyboard.Button("greeting", context.getString(com.example.tguihost.R.string.reply_keyboard_greeting), ReplyKeyboard.Button.Type.TEXT);
+        List<List<ReplyKeyboard.Button>> rows = singleUse ? java.util.Collections.singletonList(java.util.Collections.singletonList(greeting)) : java.util.Arrays.asList(
+                java.util.Arrays.asList(greeting, new ReplyKeyboard.Button("thanks", context.getString(com.example.tguihost.R.string.reply_keyboard_thanks), ReplyKeyboard.Button.Type.TEXT)),
+                java.util.Arrays.asList(new ReplyKeyboard.Button("contact", context.getString(com.example.tguihost.R.string.reply_keyboard_contact), ReplyKeyboard.Button.Type.REQUEST_CONTACT),
+                        new ReplyKeyboard.Button("location", context.getString(com.example.tguihost.R.string.reply_keyboard_location), ReplyKeyboard.Button.Type.REQUEST_LOCATION)),
+                java.util.Arrays.asList(new ReplyKeyboard.Button("poll", context.getString(com.example.tguihost.R.string.reply_keyboard_poll), ReplyKeyboard.Button.Type.POLL),
+                        new ReplyKeyboard.Button("app", context.getString(com.example.tguihost.R.string.reply_keyboard_app), ReplyKeyboard.Button.Type.WEB_VIEW)));
+        return new ReplyKeyboard("sample-reply", rows, resize, singleUse, context.getString(com.example.tguihost.R.string.reply_keyboard_placeholder));
+    }
+
+    private void onReplyKeyboardButton(ReplyKeyboard keyboard, ReplyKeyboard.Button button) {
         if (getParentActivity() == null) return;
-        new ChatAttachAlert(getParentActivity(), new ChatAttachAlert.Delegate() {
+        if (button.type == ReplyKeyboard.Button.Type.TEXT) {
+            send(button.text);
+        } else if (button.type == ReplyKeyboard.Button.Type.REQUEST_CONTACT) {
+            new org.telegram.ui.ActionBar.AlertDialog.Builder(getParentActivity(), getResourceProvider())
+                    .setTitle(getParentActivity().getString(com.example.tguihost.R.string.reply_keyboard_contact))
+                    .setMessage(getParentActivity().getString(com.example.tguihost.R.string.reply_keyboard_contact_confirm))
+                    .setPositiveButton(getParentActivity().getString(org.telegram.tgui.R.string.Send), (dialog, which) -> {
+                        append(TextBubbleMessage.contact(nextId++, true, timeFormat.format(new Date()), TextBubbleMessage.STATE_SENT, new TextBubbleMessage.Contact(99, getParentActivity().getString(com.example.tguihost.R.string.reply_keyboard_sample_contact), "+1 202 555 0199", null)));
+                    }).setNegativeButton(getParentActivity().getString(org.telegram.tgui.R.string.Cancel), null).show();
+        } else if (button.type == ReplyKeyboard.Button.Type.REQUEST_LOCATION || button.type == ReplyKeyboard.Button.Type.POLL) {
+            enterView.hidePopup(false);
+            showAttachments(button.type == ReplyKeyboard.Button.Type.POLL ? ChatAttachAlert.TAB_POLL : ChatAttachAlert.TAB_LOCATION);
+        } else {
+            Toast.makeText(getParentActivity(), getParentActivity().getString(com.example.tguihost.R.string.reply_keyboard_action, button.id), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void showAttachments() { showAttachments(ChatAttachAlert.TAB_GALLERY); }
+
+    private void showAttachments(int initialTab) {
+        if (getParentActivity() == null) return;
+        ChatAttachAlert sheet = new ChatAttachAlert(getParentActivity(), new ChatAttachAlert.Delegate() {
             @Override public List<Attachment.Contact> getContacts() {
                 ArrayList<Attachment.Contact> contacts = new ArrayList<>();
                 contacts.add(new Attachment.Contact(1, getParentActivity().getString(com.example.tguihost.R.string.attach_sample_contact_one), "+1 202 555 0101", null));
@@ -242,7 +358,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 map.setBackground(sampleAttachmentMap(context)); map.setText(com.example.tguihost.R.string.attach_sample_map);
                 map.setShadowLayer(3, 1, 1, android.graphics.Color.BLACK);
                 map.setOnClickListener(v -> callback.onLocationSelected(new Attachment.Location(0, 0,
-                        context.getString(com.example.tguihost.R.string.attach_sample_location), null)));
+                        context.getString(com.example.tguihost.R.string.attach_sample_location), sampleAttachmentMap(context))));
                 return map;
             }
             @Override public void onSend(List<Attachment> selection, CharSequence caption) {
@@ -250,6 +366,20 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 for (Attachment item : selection) {
                     if (item.type == Attachment.Type.FILE) {
                         append(TextBubbleMessage.document(nextId++, true, time, TextBubbleMessage.STATE_SENT, item.name, item.size));
+                    } else if (item.type == Attachment.Type.CONTACT) {
+                        append(TextBubbleMessage.contact(nextId++, true, time, TextBubbleMessage.STATE_SENT,
+                                new TextBubbleMessage.Contact(item.contact.id, item.contact.name, item.contact.phone, item.contact.avatar)));
+                    } else if (item.type == Attachment.Type.POLL) {
+                        ArrayList<TextBubbleMessage.PollOption> options = new ArrayList<>();
+                        for (int i = 0; i < item.poll.options.size(); i++) {
+                            options.add(new TextBubbleMessage.PollOption(Integer.toString(i), item.poll.options.get(i), 0, false));
+                        }
+                        append(TextBubbleMessage.poll(nextId++, true, time, TextBubbleMessage.STATE_SENT,
+                                new TextBubbleMessage.Poll(item.poll.question, options, 0, item.poll.anonymous, item.poll.multipleChoice, false, false)));
+                    } else if (item.type == Attachment.Type.LOCATION) {
+                        append(TextBubbleMessage.location(nextId++, true, time, TextBubbleMessage.STATE_SENT,
+                                new TextBubbleMessage.Location(item.location.latitude, item.location.longitude,
+                                        item.location.title, null, item.location.mapImage)));
                     } else {
                         String description;
                         switch (item.type) {
@@ -268,7 +398,40 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 }
                 if (!android.text.TextUtils.isEmpty(caption)) append(new TextBubbleMessage(nextId++, caption, true, time, TextBubbleMessage.STATE_SENT));
             }
-        }, getResourceProvider()).show();
+        }, getResourceProvider());
+        sheet.selectTab(initialTab);
+        sheet.show();
+    }
+
+    private static TextBubbleMessage.Poll samplePoll(Context context, boolean multiple, boolean closed) {
+        ArrayList<TextBubbleMessage.PollOption> options = new ArrayList<>();
+        int[] labels = {com.example.tguihost.R.string.poll_option_walk, com.example.tguihost.R.string.poll_option_coffee, com.example.tguihost.R.string.poll_option_read};
+        for (int i = 0; i < labels.length; i++) {
+            options.add(new TextBubbleMessage.PollOption(Integer.toString(i), context.getString(labels[i]), closed ? new int[]{4, 3, 2}[i] : 0, closed && i == 0));
+        }
+        return new TextBubbleMessage.Poll(context.getString(multiple ? com.example.tguihost.R.string.poll_question_multiple : com.example.tguihost.R.string.poll_question),
+                options, closed ? 9 : 0, !multiple, multiple, closed, false);
+    }
+
+    private static TextBubbleMessage.Poll localPollResult(TextBubbleMessage.Poll poll, List<String> ids) {
+        ArrayList<TextBubbleMessage.PollOption> options = new ArrayList<>();
+        for (TextBubbleMessage.PollOption option : poll.options) {
+            boolean chosen = ids.contains(option.id);
+            options.add(new TextBubbleMessage.PollOption(option.id, option.text, option.voters + (chosen ? 1 : 0), chosen));
+        }
+        return new TextBubbleMessage.Poll(poll.question, options, poll.totalVoters + 1, poll.anonymous, poll.multiple, poll.closed, false);
+    }
+
+    private void showPollResults(TextBubbleMessage message) {
+        if (getParentActivity() == null || message.poll == null) return;
+        StringBuilder lines = new StringBuilder();
+        for (TextBubbleMessage.PollOption option : message.poll.options) {
+            if (lines.length() > 0) lines.append('\n');
+            lines.append(getParentActivity().getString(com.example.tguihost.R.string.poll_result_line, option.text, option.voters));
+        }
+        new org.telegram.ui.ActionBar.AlertDialog.Builder(getParentActivity(), getResourceProvider())
+                .setTitle(message.poll.question).setMessage(lines)
+                .setPositiveButton(getParentActivity().getString(org.telegram.tgui.R.string.OK), null).show();
     }
 
     private static android.graphics.drawable.Drawable sampleAttachmentMap(Context context) {
@@ -278,7 +441,6 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         paint.setColor(0xffe7e3cf); paint.setStrokeWidth(18);
         canvas.drawLine(0, 70, 480, 155, paint); canvas.drawLine(105, 0, 195, 240, paint);
         canvas.drawLine(330, 0, 270, 240, paint);
-        paint.setColor(0xffc65050); canvas.drawCircle(240, 120, 14, paint);
         return new android.graphics.drawable.BitmapDrawable(context.getResources(), bitmap);
     }
 
@@ -288,6 +450,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
     }
 
     private void append(TextBubbleMessage m) {
+        bindGroupSender(m);
         messages.add(m);
         int position = messages.size() - 1;
         listView.getAdapter().notifyItemInserted(position);
@@ -497,10 +660,50 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             else if (viewType == TextBubbleMessage.TYPE_STICKER) cell = new org.telegram.ui.Cells.StickerBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_GIF) cell = new org.telegram.ui.Cells.GifBubbleCell(context, getResourceProvider());
             else if (viewType == TextBubbleMessage.TYPE_DOCUMENT) cell = new org.telegram.ui.Cells.DocumentBubbleCell(context, getResourceProvider());
+            else if (viewType == TextBubbleMessage.TYPE_MUSIC) cell = new org.telegram.ui.Cells.MusicBubbleCell(context, getResourceProvider());
+            else if (viewType == TextBubbleMessage.TYPE_POLL) cell = new org.telegram.ui.Cells.PollBubbleCell(context, getResourceProvider());
+            else if (viewType == TextBubbleMessage.TYPE_LOCATION) cell = new org.telegram.ui.Cells.LocationBubbleCell(context, getResourceProvider());
+            else if (viewType == TextBubbleMessage.TYPE_CONTACT) cell = new org.telegram.ui.Cells.ContactBubbleCell(context, getResourceProvider());
             else cell = new TextBubbleCell(context, getResourceProvider());
             cell.setMediaDelegate(new TextBubbleCell.MediaDelegate() {
+                @Override public void onPollVote(TextBubbleCell cell, TextBubbleMessage message, List<String> optionIds) {
+                    if (actionBar.isActionModeShowed() || message.poll == null || message.poll.pending) return;
+                    message.poll = localPollResult(message.poll, optionIds);
+                    int position = messages.indexOf(message);
+                    if (position >= 0) notifyItemChanged(position);
+                }
+                @Override public void onPollOptionPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.PollOption option) {
+                    if (actionBar.isActionModeShowed() || getParentActivity() == null) return;
+                    Toast.makeText(getParentActivity(), getParentActivity().getString(com.example.tguihost.R.string.poll_result_line, option.text, option.voters), Toast.LENGTH_SHORT).show();
+                }
+                @Override public void onPollResults(TextBubbleCell cell, TextBubbleMessage message) {
+                    if (!actionBar.isActionModeShowed()) showPollResults(message);
+                }
+                @Override public void onLocationPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Location location) {
+                    if (actionBar.isActionModeShowed()) { toggle(message); return; }
+                    Toast.makeText(context, context.getString(com.example.tguihost.R.string.location_action,
+                            location.latitude, location.longitude), Toast.LENGTH_SHORT).show();
+                }
+                @Override public void onContactAction(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.Contact contact, int action) {
+                    if (actionBar.isActionModeShowed()) { toggle(message); return; }
+                    int label = action == org.telegram.ui.Cells.ContactBubbleCell.ACTION_MESSAGE ? org.telegram.tgui.R.string.SharedContactMessage
+                            : action == org.telegram.ui.Cells.ContactBubbleCell.ACTION_ADD ? org.telegram.tgui.R.string.SharedContactAdd : org.telegram.tgui.R.string.ViewContact;
+                    Toast.makeText(context, context.getString(com.example.tguihost.R.string.contact_action,
+                            context.getString(label), contact.name, contact.id), Toast.LENGTH_SHORT).show();
+                }
                 @Override public void onMediaPressed(TextBubbleCell source, TextBubbleMessage item) {
-                    if (item.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
+                    if (item.type == TextBubbleMessage.TYPE_DOCUMENT) {
+                        if (actionBar.isActionModeShowed()) { toggle(item); return; }
+                        if (item.mediaState == TextBubbleMessage.MEDIA_READY) {
+                            Toast.makeText(context, context.getString(com.example.tguihost.R.string.document_open_action, item.fileName), Toast.LENGTH_SHORT).show();
+                        } else {
+                            item.mediaState = item.mediaState == TextBubbleMessage.MEDIA_DOWNLOAD ? TextBubbleMessage.MEDIA_LOADING : TextBubbleMessage.MEDIA_DOWNLOAD;
+                            item.mediaProgress = item.mediaState == TextBubbleMessage.MEDIA_LOADING ? .45f : 0;
+                            ((org.telegram.ui.Cells.DocumentBubbleCell) source).updateButtonState(true);
+                        }
+                    } else if (item.type == TextBubbleMessage.TYPE_MUSIC) {
+                        Toast.makeText(context, com.example.tguihost.R.string.music_host, Toast.LENGTH_SHORT).show();
+                    } else if (item.type == TextBubbleMessage.TYPE_ROUND_VIDEO) {
                         Toast.makeText(context, com.example.tguihost.R.string.round_video_host, Toast.LENGTH_SHORT).show();
                     } else if (item.type == TextBubbleMessage.TYPE_STICKER) {
                         showStickerSet(localPack);
@@ -508,12 +711,33 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                         showMenu(source, item, source.getWidth() / 2f, source.getHeight() / 2f);
                     }
                 }
+                @Override public void onSeek(TextBubbleCell source, TextBubbleMessage item, float progress) {
+                    if (item.type == TextBubbleMessage.TYPE_MUSIC) {
+                        Toast.makeText(context, context.getString(com.example.tguihost.R.string.music_seek, progress), Toast.LENGTH_SHORT).show();
+                    }
+                }
+                @Override public void onMenuPressed(TextBubbleCell source, TextBubbleMessage item, float x, float y) {
+                    showMenu(source, item, x, y);
+                }
                 @Override public void onAlbumMediaPressed(org.telegram.ui.Cells.AlbumBubbleCell source,
                         TextBubbleMessage album, TextBubbleMessage item, int index) {
                     Toast.makeText(context, context.getString(com.example.tguihost.R.string.album_item, index + 1), Toast.LENGTH_SHORT).show();
                 }
             });
             cell.setDelegate(new TextBubbleCell.Delegate() {
+                @Override public void onInlineButtonPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.InlineButton button) {
+                    Toast.makeText(context, context.getString(com.example.tguihost.R.string.inline_action, button.id), Toast.LENGTH_SHORT).show();
+                    if (button.type == TextBubbleMessage.InlineButton.Type.SWITCH_INLINE) enterView.setFieldText(context.getString(com.example.tguihost.R.string.inline_query));
+                    else if (button.type == TextBubbleMessage.InlineButton.Type.COPY) AndroidUtilities.addToClipboard(context.getString(com.example.tguihost.R.string.inline_copy_value));
+                }
+                @Override public void onInlineButtonLongPressed(TextBubbleCell cell, TextBubbleMessage message, TextBubbleMessage.InlineButton button) {
+                    Toast.makeText(context, context.getString(com.example.tguihost.R.string.inline_long_action, button.id), Toast.LENGTH_SHORT).show();
+                }
+
+                @Override public void onForwardPressed(TextBubbleCell sourceCell, TextBubbleMessage item, TextBubbleMessage.ForwardedFrom source) {
+                    Toast.makeText(context, context.getString(com.example.tguihost.R.string.forward_source_selected,
+                            source.name, source.sourceId), Toast.LENGTH_SHORT).show();
+                }
                 @Override public void onBubbleLongPressed(TextBubbleCell source, TextBubbleMessage item) {
                     if (!actionBar.isActionModeShowed()) showActionMode();
                     toggle(item);
@@ -526,9 +750,10 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         @Override
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
             TextBubbleMessage m = messages.get(position);
-            boolean pinnedTop = position > 0 && messages.get(position - 1).isOut == m.isOut;
-            boolean pinnedBottom = position < messages.size() - 1 && messages.get(position + 1).isOut == m.isOut;
+            boolean pinnedTop = position > 0 && org.telegram.ui.Cells.MessageGrouping.canMerge(messages.get(position - 1), m);
+            boolean pinnedBottom = position < messages.size() - 1 && org.telegram.ui.Cells.MessageGrouping.canMerge(m, messages.get(position + 1));
             TextBubbleCell cell = (TextBubbleCell) holder.itemView;
+            cell.setAvatarDrawnByList(true);
             cell.setMessage(m, pinnedTop, pinnedBottom);
             cell.setCheckBoxVisible(actionBar.isActionModeShowed(), false);
             cell.setChecked(selected.contains(m), false);
