@@ -43,6 +43,7 @@ import org.telegram.ui.Components.DialogsViewPager;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RLottieDrawable;
 import org.telegram.ui.Components.RecyclerListView;
+import org.telegram.ui.Components.UndoView;
 import org.telegram.ui.TelegramUI;
 
 import java.util.ArrayList;
@@ -72,6 +73,7 @@ public class DemoDialogsFragment extends BaseFragment {
 
     /** One folder page (upstream DialogsActivity.ViewPage). */
     private static class Page {
+        int tabId;
         DialogsListView listView;
         Adapter adapter;
         final ArrayList<DialogItem> dialogs = new ArrayList<>();
@@ -97,11 +99,23 @@ public class DemoDialogsFragment extends BaseFragment {
     private int swipeIndex;
     private int archivedCount = 4;
     private DialogsSearchController searchController;
+    private UndoView undoView;
     private DemoSearch demoSearch;
     private final ArrayList<DialogItem> recentSearches = new ArrayList<>();
 
     @Override
+    public boolean onFragmentCreate() {
+        // Keep committed/undone operations when createView is called again for a theme change.
+        SharedConfig.archiveHidden = true;
+        fillDialogs();
+        return super.onFragmentCreate();
+    }
+
+    @Override
     public View createView(Context context) {
+        if (undoView != null) {
+            undoView.hide(true, 0);
+        }
         actionBar.setBackButtonDrawable(menuDrawable = new MenuDrawable());
         actionBar.setBackButtonContentDescription("Open navigation menu");
         actionBar.setAllowOverlayTitle(true);
@@ -141,9 +155,8 @@ public class DemoDialogsFragment extends BaseFragment {
         actionMode.addOverflowItem(ACTION_READ, R.drawable.msg_markread, "Mark as read");
 
         // upstream: the archive starts pinned; the demo starts with it hidden to show the pull-down
-        SharedConfig.archiveHidden = true;
-        fillDialogs();
         createFilterTabs(context);
+        currentTab = filterTabsView.getCurrentTabId();
         actionMode.setFilterTabsView(filterTabsView);
         createDrawer(context);
 
@@ -198,6 +211,16 @@ public class DemoDialogsFragment extends BaseFragment {
         swipeMenuItem.addSubItem(MENU_LINES, R.drawable.msg_list, "Two / three lines");
         swipeMenuItem.addSubItem(MENU_NIGHT, R.drawable.msg_theme, "Day / night");
         updateSwipeMenuText();
+        undoView = new UndoView(context) {
+            @Override
+            protected void onVisibilityChanged(View changedView, int visibility) {
+                super.onVisibilityChanged(changedView, visibility);
+                if (changedView == this && floatingButton != null) {
+                    floatingButton.hide(visibility == VISIBLE, true);
+                }
+            }
+        };
+        frameLayout.addView(undoView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM, 8, 0, 8, 8));
         return fragmentView;
     }
 
@@ -444,6 +467,7 @@ public class DemoDialogsFragment extends BaseFragment {
 
     /** Upstream switchToCurrentSelectedMode: fills a page with a folder's chats, scrolled to the top. */
     private void fillPage(Page page, int tab) {
+        page.tabId = tab;
         page.dialogs.clear();
         for (DialogItem d : allDialogs) {
             if (matches(tab, d) && (tab == 0 || !d.isFolder)) {
@@ -533,6 +557,9 @@ public class DemoDialogsFragment extends BaseFragment {
 
     @Override
     public void onPause() {
+        if (undoView != null) {
+            undoView.hide(true, 0);
+        }
         super.onPause();
         if (getParentLayout() != null && getParentLayout().getDrawerLayoutContainer() != null) {
             getParentLayout().getDrawerLayoutContainer().setAllowOpenDrawer(false, false);
@@ -616,16 +643,12 @@ public class DemoDialogsFragment extends BaseFragment {
         }
         if (id == ACTION_DELETE) {
             clearSelection();
-            for (DialogItem d : items) {
-                removeDialog(d, false);
-            }
+            removeDialogs(items, false);
             return;
         }
         if (id == ACTION_ARCHIVE) {
             clearSelection();
-            for (DialogItem d : items) {
-                removeDialog(d, true);
-            }
+            removeDialogs(items, true);
             return;
         }
         for (DialogItem d : items) {
@@ -689,27 +712,94 @@ public class DemoDialogsFragment extends BaseFragment {
     }
 
     private void removeDialog(DialogItem d, boolean archive) {
-        int position = dialogs.indexOf(d);
-        if (position < 0) {
+        ArrayList<DialogItem> items = new ArrayList<>();
+        items.add(d);
+        removeDialogs(items, archive);
+    }
+
+    private void removeDialogs(ArrayList<DialogItem> items, boolean archive) {
+        undoView.hide(true, 0); // A second operation commits the previous pending operation.
+        ArrayList<DialogItem> removed = new ArrayList<>();
+        ArrayList<Integer> positions = new ArrayList<>();
+        for (int i = 0; i < allDialogs.size(); i++) {
+            DialogItem item = allDialogs.get(i);
+            if (!item.isFolder && items.contains(item)) {
+                removed.add(item);
+                positions.add(i);
+            }
+        }
+        if (removed.isEmpty()) {
             return;
         }
-        listView.getDialogsItemAnimator().prepareForRemove();
-        dialogs.remove(position);
-        allDialogs.remove(d);
-        adapter.notifyItemRemoved(position);
-        syncAll();
+        final int previousArchivedCount = archivedCount;
+        DialogItem archiveFolder = null;
+        for (DialogItem item : allDialogs) {
+            if (item.isFolder) {
+                archiveFolder = item;
+                break;
+            }
+        }
+        final DialogItem folder = archiveFolder;
+        final CharSequence previousPreview = folder == null ? null : folder.message;
+        allDialogs.removeAll(removed);
         if (archive) {
-            archivedCount++;
-            if (!dialogs.isEmpty() && dialogs.get(0).isFolder) {
-                DialogItem folder = dialogs.get(0);
-                folder.message = d.title + ", " + folder.message;
-                RecyclerView.ViewHolder holder = listView.findViewHolderForAdapterPosition(0);
-                if (holder != null && holder.itemView instanceof DialogCell) {
-                    ((DialogCell) holder.itemView).setDialog(folder, true);
-                    ((DialogCell) holder.itemView).animateArchiveAvatar();
+            archivedCount += removed.size();
+            if (folder != null) {
+                for (DialogItem item : removed) {
+                    folder.message = item.title + ", " + folder.message;
                 }
             }
         }
+        refreshDialogPages();
+        int action = archive
+                ? (removed.size() == 1 ? UndoView.ACTION_ARCHIVE : UndoView.ACTION_ARCHIVE_FEW)
+                : (removed.size() == 1 ? UndoView.ACTION_DELETE : UndoView.ACTION_DELETE_FEW);
+        undoView.showWithAction(action, null,
+                () -> Toast.makeText(getParentActivity(), org.telegram.uidemo.R.string.undo_demo_applied, Toast.LENGTH_SHORT).show(),
+                () -> {
+                    for (int i = 0; i < removed.size(); i++) {
+                        if (!allDialogs.contains(removed.get(i))) {
+                            allDialogs.add(Math.min(positions.get(i), allDialogs.size()), removed.get(i));
+                        }
+                    }
+                    archivedCount = previousArchivedCount;
+                    if (folder != null) {
+                        folder.message = previousPreview;
+                    }
+                    refreshDialogPages();
+                });
+    }
+
+    /** Keep both folder pages consistent while retaining insertion/removal animations and scroll. */
+    private void refreshDialogPages() {
+        for (Page page : pages) {
+            ArrayList<DialogItem> expected = new ArrayList<>();
+            for (DialogItem item : allDialogs) {
+                if (matches(page.tabId, item) && (page.tabId == 0 || !item.isFolder)) {
+                    expected.add(item);
+                }
+            }
+            page.listView.getDialogsItemAnimator().prepareForRemove();
+            for (int i = page.dialogs.size() - 1; i >= 0; i--) {
+                if (!expected.contains(page.dialogs.get(i))) {
+                    page.dialogs.remove(i);
+                    page.adapter.notifyItemRemoved(i);
+                }
+            }
+            for (int i = 0; i < expected.size(); i++) {
+                int position = page.dialogs.indexOf(expected.get(i));
+                if (position < 0) {
+                    page.dialogs.add(i, expected.get(i));
+                    page.adapter.notifyItemInserted(i);
+                } else if (position != i) {
+                    page.dialogs.remove(position);
+                    page.dialogs.add(i, expected.get(i));
+                    page.adapter.notifyItemMoved(position, i);
+                }
+            }
+            page.adapter.notifyItemRangeChanged(0, page.dialogs.size());
+        }
+        filterTabsView.checkTabsCounter();
     }
 
     private DialogItem findDialog(long id) {
@@ -954,6 +1044,12 @@ public class DemoDialogsFragment extends BaseFragment {
     public ArrayList<ThemeDescription> getThemeDescriptions() {
         // upstream DialogsActivity.getThemeDescriptions (DialogCell part)
         ArrayList<ThemeDescription> arrayList = new ArrayList<>();
+        ThemeDescription.ThemeDescriptionDelegate undoColors = () -> {
+            if (undoView != null) undoView.updateColors();
+        };
+        arrayList.add(new ThemeDescription(null, 0, null, null, null, undoColors, Theme.key_undo_background));
+        arrayList.add(new ThemeDescription(null, 0, null, null, null, undoColors, Theme.key_undo_infoColor));
+        arrayList.add(new ThemeDescription(null, 0, null, null, null, undoColors, Theme.key_undo_cancelColor));
         arrayList.add(new ThemeDescription(fragmentView, ThemeDescription.FLAG_BACKGROUND, null, null, null, null, Theme.key_windowBackgroundWhite));
         arrayList.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_BACKGROUND, null, null, null, null, Theme.key_actionBarDefault));
         arrayList.add(new ThemeDescription(actionBar, ThemeDescription.FLAG_AB_ITEMSCOLOR, null, null, null, null, Theme.key_actionBarDefaultIcon));

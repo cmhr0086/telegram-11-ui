@@ -9,3 +9,6 @@
 
 # libtguilottie JNI symbols are bound by class + method name.
 -keepclasseswithmembernames class org.telegram.ui.Components.RLottieDrawable { native <methods>; }
+
+# The platform recreates this headless permission/result bridge by name after configuration changes.
+-keep class org.telegram.ui.Components.AttachmentAccess$Bridge { public <init>(); }

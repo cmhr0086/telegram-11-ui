@@ -1,3 +1,10 @@
+/*
+ * This is the source code of Telegram for Android v. 5.x.x.
+ * It is licensed under GNU GPL v. 2 or later.
+ * You should have received a copy of the license in this archive (see LICENSE).
+ *
+ * Copyright Nikolai Kudashov, 2013-2018.
+ */
 package org.telegram.ui.Cells;
 
 import static org.telegram.messenger.AndroidUtilities.dp;
@@ -8,13 +15,20 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.text.Layout;
+import android.text.Spannable;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ClickableSpan;
 import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.view.View;
+import android.view.MotionEvent;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 
 import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.Emoji;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.tgui.R;
 import org.telegram.ui.ActionBar.Theme;
@@ -35,6 +49,15 @@ public class ChatActionCell extends View {
 
     private final Theme.ResourcesProvider resourcesProvider;
 
+    public interface Delegate {
+        default void onUserPressed(Object id) { }
+        default void onPinnedMessagePressed(Object id) { }
+    }
+
+    private Delegate delegate;
+    private ClickableSpan pressedSpan;
+    private float downX, downY;
+    private ServiceMessage message;
     private CharSequence customText;
     private long customDate;
     private StaticLayout textLayout;
@@ -98,24 +121,175 @@ public class ChatActionCell extends View {
 
     /** upstream setCustomDate: the pill shows {@link #formatDate} of {@code date} (unix seconds). */
     public void setCustomDate(long date) {
-        if (customDate == date && customText != null) {
-            return;
-        }
+        message = null;
         customDate = date;
         setCustomText(formatDate(date));
     }
 
     public void setCustomText(CharSequence text) {
-        if (TextUtils.equals(text, customText)) {
+        message = null;
+        pressedSpan = null;
+        if (!(text instanceof Spanned) && !(customText instanceof Spanned) && TextUtils.equals(text, customText)) {
             return;
         }
-        customText = text;
-        if (getMeasuredWidth() != 0) {
+        customText = text == null ? null : Emoji.replaceEmoji(text,
+                ((TextPaint) getThemedPaint(Theme.key_paint_chatActionText)).getFontMetricsInt(), true);
+        if (customText == null) {
+            textLayout = null;
+            textWidth = textHeight = textX = textY = textXLeft = 0;
+            invalidatePath = true;
+            invalidate();
+        }
+        if (getMeasuredWidth() != 0 && customText != null) {
             createLayout(customText, getMeasuredWidth());
             invalidate();
         }
         previousWidth = 0;
         requestLayout();
+    }
+
+    public void setDelegate(Delegate delegate) { this.delegate = delegate; }
+
+    /** Bind a host event without changing the existing date-separator API. */
+    public void setMessage(ServiceMessage message) {
+        CharSequence rendered = renderMessage(message);
+        setCustomText(rendered);
+        this.message = message;
+    }
+
+    private CharSequence renderMessage(ServiceMessage item) {
+        if (item == null) return "";
+        if (item.kind == ServiceMessage.Kind.CUSTOM) return item.text == null ? "" : item.text;
+        if (item.kind == ServiceMessage.Kind.PIN) return renderPin(item);
+        int template;
+        switch (item.kind) {
+            case JOIN:
+                template = item.megagroup
+                        ? (item.actorIsSelf ? R.string.tgui_service_join_mega_self : R.string.tgui_service_join_mega)
+                        : (item.actorIsSelf ? R.string.tgui_service_join_self : R.string.tgui_service_join);
+                break;
+            case INVITE: template = item.actorIsSelf ? R.string.tgui_service_invite_self : item.targetIsSelf ? R.string.tgui_service_invite_you : R.string.tgui_service_invite; break;
+            case TITLE: template = item.actorIsSelf ? R.string.tgui_service_title_self : R.string.tgui_service_title; break;
+            default: return "";
+        }
+        SpannableStringBuilder result = new SpannableStringBuilder(getContext().getString(template));
+        CharSequence first = personText(item.actor);
+        CharSequence second = "";
+        if (item.kind == ServiceMessage.Kind.INVITE) second = personText(item.target);
+        else if (item.kind == ServiceMessage.Kind.TITLE) second = item.text == null ? "" : item.text;
+        int firstAt = TextUtils.indexOf(result, "un1");
+        int secondAt = TextUtils.indexOf(result, "un2");
+        if (firstAt > secondAt) {
+            replaceAt(result, firstAt, first); replaceAt(result, secondAt, second);
+        } else {
+            replaceAt(result, secondAt, second); replaceAt(result, firstAt, first);
+        }
+        return result;
+    }
+
+    private CharSequence renderPin(ServiceMessage item) {
+        int resource;
+        switch (item.pinnedKind) {
+            case PHOTO: resource = R.string.tgui_service_pin_photo; break;
+            case VIDEO: resource = R.string.tgui_service_pin_video; break;
+            case VOICE: resource = R.string.tgui_service_pin_voice; break;
+            case MUSIC: resource = R.string.tgui_service_pin_music; break;
+            case FILE: resource = R.string.tgui_service_pin_file; break;
+            case CONTACT: resource = R.string.tgui_service_pin_contact; break;
+            case LOCATION: resource = R.string.tgui_service_pin_location; break;
+            case POLL: resource = R.string.tgui_service_pin_poll; break;
+            case STICKER: resource = R.string.tgui_service_pin_sticker; break;
+            case GIF: resource = R.string.tgui_service_pin_gif; break;
+            default: resource = TextUtils.isEmpty(item.text) ? R.string.tgui_service_pin_none : R.string.tgui_service_pin_text;
+        }
+        SpannableStringBuilder result = new SpannableStringBuilder(getContext().getString(resource));
+        int actorAt = TextUtils.indexOf(result, "un1");
+        int previewAt = TextUtils.indexOf(result, "%1$s");
+        CharSequence actor = personText(item.actor);
+        CharSequence preview = item.text;
+        if (preview != null && preview.length() > 20) preview = preview.subSequence(0, 20).toString() + "...";
+        if (previewAt > actorAt) {
+            if (previewAt >= 0) result.replace(previewAt, previewAt + 4, preview);
+            replaceAt(result, actorAt, actor);
+        } else {
+            replaceAt(result, actorAt, actor);
+            if (previewAt >= 0) result.replace(previewAt, previewAt + 4, preview);
+            if (actorAt >= 0 && previewAt >= 0) actorAt += preview.length() - 4;
+        }
+        if (item.pinnedId != null) {
+            int start = actorAt < 0 ? 0 : actorAt + actor.length();
+            addPinLink(result, start, result.length(), item.pinnedId);
+            if (actorAt > 0) addPinLink(result, 0, actorAt, item.pinnedId);
+        }
+        return result;
+    }
+
+    private void addPinLink(SpannableStringBuilder text, int start, int end, Object id) {
+        while (start < end && Character.isWhitespace(text.charAt(start))) start++;
+        while (end > start && Character.isWhitespace(text.charAt(end - 1))) end--;
+        if (start < end) text.setSpan(new ClickableSpan() {
+            @Override public void onClick(View widget) { if (delegate != null) delegate.onPinnedMessagePressed(id); }
+            @Override public void updateDrawState(TextPaint paint) { paint.setTypeface(org.telegram.messenger.AndroidUtilities.bold()); }
+        }, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+    }
+
+    private CharSequence personText(ServiceMessage.Person person) {
+        if (person == null) return "";
+        SpannableStringBuilder text = new SpannableStringBuilder(person.name);
+        if (person.id != null && text.length() > 0) text.setSpan(new ClickableSpan() {
+            @Override public void onClick(View widget) { if (delegate != null) delegate.onUserPressed(person.id); }
+            @Override public void updateDrawState(TextPaint paint) { paint.setTypeface(org.telegram.messenger.AndroidUtilities.bold()); }
+        }, 0, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return text;
+    }
+
+    private static void replaceAt(SpannableStringBuilder text, int at, CharSequence value) {
+        if (at >= 0) text.replace(at, at + 3, value);
+    }
+
+    private ClickableSpan spanAt(float x, float y) {
+        if (textLayout == null || !(customText instanceof Spanned)) return null;
+        float lx = x - textXLeft, ly = y - textY;
+        if (ly < 0 || ly >= textLayout.getHeight()) return null;
+        int line = textLayout.getLineForVertical((int) ly);
+        if (lx < textLayout.getLineLeft(line) || lx > textLayout.getLineRight(line)) return null;
+        int offset = textLayout.getOffsetForHorizontal(line, lx);
+        ClickableSpan[] links = ((Spanned) customText).getSpans(offset, offset, ClickableSpan.class);
+        for (ClickableSpan link : links) {
+            Spanned text = (Spanned) customText;
+            if (offset >= text.getSpanStart(link) && offset < text.getSpanEnd(link)) return link;
+        }
+        return null;
+    }
+
+    @Override public boolean onTouchEvent(MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                pressedSpan = spanAt(event.getX(), event.getY());
+                downX = event.getX(); downY = event.getY();
+                return pressedSpan != null || super.onTouchEvent(event);
+            case MotionEvent.ACTION_MOVE:
+                if (pressedSpan == null) return super.onTouchEvent(event);
+                int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                if (Math.abs(event.getX() - downX) > slop || Math.abs(event.getY() - downY) > slop || spanAt(event.getX(), event.getY()) != pressedSpan) pressedSpan = null;
+                return true;
+            case MotionEvent.ACTION_UP:
+                ClickableSpan link = pressedSpan;
+                pressedSpan = null;
+                if (link != null && spanAt(event.getX(), event.getY()) == link) { link.onClick(this); performClick(); return true; }
+                return super.onTouchEvent(event);
+            case MotionEvent.ACTION_CANCEL:
+                pressedSpan = null;
+                break;
+        }
+        return super.onTouchEvent(event);
+    }
+
+    @Override public boolean performClick() { super.performClick(); return true; }
+
+    @Override protected void onDetachedFromWindow() {
+        pressedSpan = null;
+        super.onDetachedFromWindow();
     }
 
     public CharSequence getCustomText() {

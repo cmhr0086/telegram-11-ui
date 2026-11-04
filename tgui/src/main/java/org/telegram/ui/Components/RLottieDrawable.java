@@ -245,8 +245,14 @@ public class RLottieDrawable extends BitmapDrawable implements Animatable, Bitma
     protected void decodeFrameFinishedInternal() {
         if (destroyWhenDone) {
             checkRunningTasks();
-            if (loadFrameTask == null && cacheGenerateTask == null && nativePtr != 0) {
-                recycleNativePtr(true);
+            if (loadFrameTask == null && cacheGenerateTask == null && !generatingCache) {
+                if (nativePtr != 0 || secondNativePtr != 0) {
+                    recycleNativePtr(true);
+                }
+                if (bitmapsCache != null) {
+                    bitmapsCache.recycle();
+                    bitmapsCache = null;
+                }
             }
         }
         if ((nativePtr == 0 || fallbackCache) && secondNativePtr == 0 && bitmapsCache == null) {
@@ -324,6 +330,12 @@ public class RLottieDrawable extends BitmapDrawable implements Animatable, Bitma
         @Override
         public void run() {
             if (isRecycled) {
+                // Recycling can happen while this frame is still queued. Complete the task
+                // on the UI thread so destroyWhenDone can release the native pointers.
+                if (frameWaitSync != null) {
+                    frameWaitSync.countDown();
+                }
+                uiHandler.post(uiRunnableNoFrame);
                 return;
             }
             if (!canLoadFrames() || isDice == 2 && secondNativePtr == 0) {

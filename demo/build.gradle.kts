@@ -12,6 +12,7 @@ android {
         targetSdk = 36
         versionCode = 3
         versionName = "1.2"
+        testInstrumentationRunner = "org.telegram.uidemo.RoadmapInstrumentation"
     }
 
     compileOptions {

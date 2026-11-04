@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Text branches adapted from upstream MessageObject and its English resources. -->
+    <string name="tgui_service_join">un1 returned to the group</string>
+    <string name="tgui_service_join_mega">un1 joined the group</string>
+    <string name="tgui_service_join_mega_self">You joined this group</string>
+    <string name="tgui_service_join_self">You returned to the group</string>
+    <string name="tgui_service_invite">un1 added un2</string>
+    <string name="tgui_service_invite_self">You added un2</string>
+    <string name="tgui_service_invite_you">un1 added you</string>
+    <string name="tgui_service_title">un1 changed the group name to un2</string>
+    <string name="tgui_service_title_self">You changed the group name to un2</string>
+    <string name="tgui_service_pin_text">un1 pinned \"%1$s\"</string>
+    <string name="tgui_service_pin_none">un1 pinned a message</string>
+    <string name="tgui_service_pin_photo">un1 pinned a photo</string>
+    <string name="tgui_service_pin_video">un1 pinned a video</string>
+    <string name="tgui_service_pin_voice">un1 pinned a voice message</string>
+    <string name="tgui_service_pin_music">un1 pinned an audio file</string>
+    <string name="tgui_service_pin_file">un1 pinned a file</string>
+    <string name="tgui_service_pin_contact">un1 pinned a contact</string>
+    <string name="tgui_service_pin_location">un1 pinned a map</string>
+    <string name="tgui_service_pin_poll">un1 pinned a poll</string>
+    <string name="tgui_service_pin_sticker">un1 pinned a sticker</string>
+    <string name="tgui_service_pin_gif">un1 pinned a GIF</string>
+</resources>

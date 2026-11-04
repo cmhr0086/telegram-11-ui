@@ -239,7 +239,7 @@ public class MediaDataController {
 
                 int start = messageEntity.offset;
                 int end = messageEntity.offset + messageEntity.length;
-                if (start < end && end <= spannable.length()) {
+                if (start >= 0 && start < end && end <= spannable.length()) {
                     AnimatedEmojiSpan span;
                     if (entity.document != null) {
                         span = new AnimatedEmojiSpan(entity.document, fontMetricsInt);

@@ -26,6 +26,7 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.media.MediaPlayer;
+import android.media.PlaybackParams;
 import android.net.Uri;
 import android.os.Build;
 import android.text.TextUtils;
@@ -38,6 +39,7 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.VelocityTracker;
 import android.view.View;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowManager;
@@ -52,11 +54,17 @@ import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLog;
 import org.telegram.tgui.R;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.ActionBarMenuItem;
+import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
+import org.telegram.ui.ActionBar.ActionBarMenuSlider;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.SpeedIconDrawable;
+import org.telegram.ui.Components.GroupedPhotosListView;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.EnumSet;
 
 import static org.telegram.messenger.AndroidUtilities.dp;
 
@@ -94,6 +102,8 @@ public class MediaViewer {
         public CharSequence date;
         /** Free for the host (e.g. the message). */
         public Object tag;
+        /** Stable host album ID. Zero is an ungrouped item; groups must be contiguous. */
+        public long groupId;
 
         public static Item photo(Drawable photo, CharSequence sender, CharSequence date, CharSequence caption) {
             Item item = new Item();
@@ -125,8 +135,23 @@ public class MediaViewer {
         }
     }
 
+    /** Host-executed media actions; the viewer never exports or deletes files itself. */
+    public enum Action { SHARE, SAVE, DELETE }
+
     /** The host side (upstream PhotoViewerProvider). */
     public interface Provider {
+        /** Opt in per item. Evaluated when its page is displayed, the menu opens, and a row is clicked. */
+        default boolean canPerformAction(Action action, int index, Item item) { return false; }
+        /** Receives the original item/index captured at menu opening. Confirmation and IO belong to the host. */
+        default void onAction(Action action, int index, Item item) { }
+        /** A viewer-local preference changed (paused videos apply the cached speed when resumed). */
+        default void onPlaybackSpeedChanged(float speed) { }
+        default void onMutedChanged(boolean muted) { }
+        /** The decoder rejected this speed; getPlaybackSpeed() now reports the restored effective value. */
+        default void onPlaybackSpeedError(float requestedSpeed) { }
+
+        /** Show the complete supplied gallery as one thumbnail group (e.g. a host album picker). */
+        default boolean forceAllInGroup() { return false; }
         /**
          * Where item {@code index} is on screen (getLocationOnScreen coordinates) and its corner
          * radii (8 values like Path.addRoundRect, may be left untouched); false if it is not visible,
@@ -156,6 +181,28 @@ public class MediaViewer {
     private Dialog dialog;
     private ContainerView containerView;
     private FrameLayout actionBar;
+    private ActionBarMenuItem actionsMenu;
+    private ActionBarMenuItem playbackMenu;
+    private SpeedIconDrawable playbackSpeedIcon;
+    private ActionBarMenuSlider.SpeedSlider speedSlider;
+    private SpeedButtonsLayout speedButtons;
+    private ActionBarMenuSubItem muteMenuItem;
+    private ViewTreeObserver.OnPreDrawListener pendingPlaybackMenuOpen;
+    private long playbackMenuGeneration;
+    private float playbackSpeed = 1f, appliedPlaybackSpeed = 1f;
+    private boolean muted;
+    private ActionSnapshot actionSnapshot;
+    private ViewTreeObserver.OnPreDrawListener pendingActionMenuOpen;
+    private long actionGeneration;
+    private static final class ActionSnapshot {
+        final int index;
+        final Item item;
+        final long generation;
+        final EnumSet<Action> allowed = EnumSet.noneOf(Action.class);
+        ActionSnapshot(int index, Item item, long generation) {
+            this.index = index; this.item = item; this.generation = generation;
+        }
+    }
     private TextView titleView, subtitleView;
     private LinearLayout bottomLayout;
     private TextView captionView;
@@ -163,6 +210,9 @@ public class MediaViewer {
     private PlayPauseView playPauseView;
     private VideoSeekBarView seekBarView;
     private TextView videoTimeView;
+    private GroupedPhotosListView groupedPhotosListView;
+    private int groupStart = -1, groupEnd = -1;
+    private boolean selectingFromThumbnails;
 
     private int currentIndex;
     private int hiddenIndex = -1;
@@ -250,6 +300,266 @@ public class MediaViewer {
 
     public int getCurrentIndex() {
         return currentIndex;
+    }
+
+    public GroupedPhotosListView getGroupedPhotosListView() { return groupedPhotosListView; }
+
+    /** Changes page on the UI thread, preserving source visibility and releasing the old player. */
+    public void setCurrentIndex(int index) {
+        if (!isShowing() || closing || transitionProgress < 1f || index < 0 || index >= items.size() || index == currentIndex) return;
+        cancelMoveZoomAnimation();
+        switchToIndex(index);
+    }
+
+    /** Opens a fresh permission snapshot for the current page. No actions are enabled by default. */
+    public void openActionsMenu() {
+        if (!isShowing() || closing || transitionProgress < 1f || actionsMenu == null) return;
+        dismissActionsMenu();
+        final ActionSnapshot snapshot = new ActionSnapshot(currentIndex, currentItem(), actionGeneration);
+        for (Action action : Action.values()) {
+            boolean allowed = provider.canPerformAction(action, snapshot.index, snapshot.item);
+            if (!isCurrentActionPage(snapshot)) return;
+            if (allowed) snapshot.allowed.add(action);
+        }
+        setActionsButtonVisible(!snapshot.allowed.isEmpty());
+        if (snapshot.allowed.isEmpty()) return;
+        actionSnapshot = snapshot;
+        actionsMenu.removeAllSubItems();
+        // PhotoViewer 5613, 5633, 5639: original icons/text/48dp sub-items and fixed viewer palette.
+        if (snapshot.allowed.contains(Action.SAVE)) addActionRow(snapshot, Action.SAVE, R.drawable.msg_gallery, R.string.SaveToGallery);
+        if (snapshot.allowed.contains(Action.SHARE)) addActionRow(snapshot, Action.SHARE, R.drawable.msg_shareout, R.string.ShareFile);
+        if (snapshot.allowed.contains(Action.DELETE)) addActionRow(snapshot, Action.DELETE, R.drawable.msg_delete, R.string.Delete);
+        actionsMenu.redrawPopup(0xf9222222);
+        // A previously hidden button first needs its normal 48dp action-bar layout.
+        pendingActionMenuOpen = new ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                containerView.getViewTreeObserver().removeOnPreDrawListener(this);
+                if (pendingActionMenuOpen == this) pendingActionMenuOpen = null;
+                if (!isCurrentActionSnapshot(snapshot) || !actionsMenu.isAttachedToWindow()) return true;
+                actionsMenu.toggleSubMenu();
+                actionsMenu.setOnMenuDismiss(byClick -> {
+                    if (actionSnapshot == snapshot) actionSnapshot = null;
+                });
+                return true;
+            }
+        };
+        containerView.getViewTreeObserver().addOnPreDrawListener(pendingActionMenuOpen);
+        containerView.invalidate();
+    }
+
+    private void addActionRow(ActionSnapshot snapshot, Action action, int icon, int title) {
+        ActionBarMenuSubItem row = actionsMenu.addSubItem(action.ordinal() + 1, icon, null,
+                activity.getString(title), false, false);
+        row.setColors(0xfffafafa, 0xfffafafa);
+        // Capture this opening's snapshot on each row; stale detached rows cannot execute a new page's action.
+        row.setOnClickListener(view -> {
+            if (!isCurrentActionSnapshot(snapshot) || !actionsMenu.isSubMenuShowing() || !snapshot.allowed.contains(action)) return;
+            boolean allowed = provider.canPerformAction(action, snapshot.index, snapshot.item);
+            if (!isCurrentActionSnapshot(snapshot)) return;
+            dismissActionsMenu(true); // invalidate before calling host code, which may close/reopen/change page
+            if (allowed) provider.onAction(action, snapshot.index, snapshot.item);
+        });
+    }
+
+    private boolean isCurrentActionPage(ActionSnapshot snapshot) {
+        return isShowing() && !closing && transitionProgress >= 1f && actionGeneration == snapshot.generation
+                && currentIndex == snapshot.index && currentItem() == snapshot.item;
+    }
+    private boolean isCurrentActionSnapshot(ActionSnapshot snapshot) {
+        return actionSnapshot == snapshot && isCurrentActionPage(snapshot);
+    }
+    private void dismissActionsMenu() { dismissActionsMenu(false); }
+    private void dismissActionsMenu(boolean animated) {
+        dismissPlaybackMenu(false);
+        actionSnapshot = null; actionGeneration++;
+        if (pendingActionMenuOpen != null) {
+            if (containerView != null && containerView.getViewTreeObserver().isAlive()) containerView.getViewTreeObserver().removeOnPreDrawListener(pendingActionMenuOpen);
+            pendingActionMenuOpen = null;
+        }
+        if (actionsMenu != null && actionsMenu.isSubMenuShowing()) {
+            // Keep the upstream row-dismiss animation; retire page/menu sessions immediately.
+            if (!animated) actionsMenu.setPopupAnimationEnabled(false);
+            actionsMenu.closeSubMenu();
+            if (!animated) actionsMenu.setPopupAnimationEnabled(true);
+        }
+    }
+    private void updateActionsButton() {
+        if (actionsMenu == null || closing) return;
+        int index = currentIndex;
+        Item item = currentItem();
+        long generation = actionGeneration;
+        boolean available = false;
+        for (Action action : Action.values()) {
+            available |= provider.canPerformAction(action, index, item);
+            if (closing || !isShowing() || currentIndex != index || currentItem() != item || generation != actionGeneration) return;
+        }
+        setActionsButtonVisible(available);
+    }
+    private void setActionsButtonVisible(boolean visible) {
+        actionsMenu.setVisibility(visible ? View.VISIBLE : View.GONE);
+        View titles = (View) titleView.getParent();
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) titles.getLayoutParams();
+        boolean video = currentItem().video != null;
+        if (playbackMenu != null) {
+            playbackMenu.setVisibility(video ? View.VISIBLE : View.GONE);
+            FrameLayout.LayoutParams menuParams = (FrameLayout.LayoutParams) playbackMenu.getLayoutParams();
+            menuParams.rightMargin = dp(visible ? 48 : 0); playbackMenu.setLayoutParams(menuParams);
+        }
+        int margin = dp(16 + (visible ? 48 : 0) + (video ? 48 : 0));
+        if (params.rightMargin != margin) { params.rightMargin = margin; titles.setLayoutParams(params); }
+    }
+
+    public boolean isPlaybackSpeedSupported() { return Build.VERSION.SDK_INT >= 23; }
+    public float getPlaybackSpeed() { return playbackSpeed; }
+    public boolean isMuted() { return muted; }
+
+    /** Accepts finite 0.2–3x speeds on API 23+. Paused/preparing players only cache the preference. */
+    public boolean setPlaybackSpeed(float speed) {
+        if (closing || !isShowing() || !isPlaybackSpeedSupported() || Float.isNaN(speed) || Float.isInfinite(speed) || speed < .2f || speed > 3f) return false;
+        if (playbackSpeed == speed) return true;
+        float previous = playbackSpeed;
+        playbackSpeed = speed;
+        MediaPlayer current = player;
+        if (current != null && playerPrepared && playWhenReady && !playerFinished) {
+            if (!applyPlaybackSpeed(current)) return false;
+            if (closing || current != player) return false;
+        }
+        updatePlaybackMenuState(true);
+        if (previous != playbackSpeed) provider.onPlaybackSpeedChanged(playbackSpeed);
+        return true;
+    }
+
+    public void setMuted(boolean value) {
+        if (closing || !isShowing() || muted == value) return;
+        MediaPlayer current = player;
+        try { if (current != null) current.setVolume(value ? 0f : 1f, value ? 0f : 1f); }
+        catch (RuntimeException error) { FileLog.e(error); return; }
+        muted = value; updatePlaybackMenuState(true);
+        provider.onMutedChanged(value);
+    }
+
+    /** Uses the original PhotoViewer speed slider/buttons; the mute row controls viewing only. */
+    public void openPlaybackMenu() {
+        if (closing || !isShowing() || transitionProgress < 1f || currentItem().video == null) return;
+        dismissActionsMenu();
+        final long generation = playbackMenuGeneration;
+        final int index = currentIndex;
+        final Item item = currentItem();
+        playbackMenu.removeAllSubItems();
+        speedSlider = null; speedButtons = null;
+        if (isPlaybackSpeedSupported()) {
+            speedSlider = new ActionBarMenuSlider.SpeedSlider(activity, null) {
+                @Override public boolean performAccessibilityAction(int action, android.os.Bundle arguments) {
+                    boolean handled = super.performAccessibilityAction(action, arguments);
+                    if (handled && validPlaybackMenu(generation, index, item)) {
+                        setPlaybackSpeed(getSpeed());
+                        if (validPlaybackMenu(generation, index, item)) updatePlaybackMenuState(true);
+                    }
+                    return handled;
+                }
+            };
+            speedSlider.setStops(new float[] { .5f, 1f, 1.5f, 2f, 2.5f });
+            speedSlider.setMinimumWidth(dp(196)); speedSlider.setDrawShadow(false);
+            speedSlider.setBackgroundColor(0xff222222); speedSlider.setTextColor(0xffffffff);
+            speedSlider.setLabel(activity.getString(R.string.VideoPlayerSpeed));
+            speedSlider.setOnValueChange((value, isFinal) -> {
+                if (!validPlaybackMenu(generation, index, item)) return;
+                setPlaybackSpeed(ActionBarMenuSlider.SpeedSlider.MIN_SPEED +
+                        (ActionBarMenuSlider.SpeedSlider.MAX_SPEED - ActionBarMenuSlider.SpeedSlider.MIN_SPEED) * value);
+                if (validPlaybackMenu(generation, index, item)) updatePlaybackMenuState(isFinal);
+            });
+            playbackMenu.getPopupLayout().addView(speedSlider, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 44));
+            playbackMenu.addColoredGap().setColor(0xff181818);
+            speedButtons = new SpeedButtonsLayout(activity, (speed, isFinal, closeMenu) -> {
+                if (!validPlaybackMenu(generation, index, item)) return;
+                setPlaybackSpeed(speed);
+                if (validPlaybackMenu(generation, index, item) && closeMenu) dismissPlaybackMenu(true);
+            });
+            playbackMenu.getPopupLayout().addView(speedButtons, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        }
+        muteMenuItem = playbackMenu.addSubItem(101, muted ? R.drawable.video_send_unmute : R.drawable.video_send_mute,
+                null, activity.getString(muted ? R.string.Unmute : R.string.Mute), false, false);
+        muteMenuItem.setColors(0xfffafafa, 0xfffafafa);
+        muteMenuItem.setOnClickListener(view -> {
+            if (!validPlaybackMenu(generation, index, item)) return;
+            setMuted(!muted);
+            if (validPlaybackMenu(generation, index, item)) dismissPlaybackMenu(true);
+        });
+        updatePlaybackMenuState(true);
+        playbackMenu.redrawPopup(0xf9222222);
+        pendingPlaybackMenuOpen = new ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                containerView.getViewTreeObserver().removeOnPreDrawListener(this);
+                if (pendingPlaybackMenuOpen == this) pendingPlaybackMenuOpen = null;
+                if (!validPlaybackPage(generation, index, item) || !playbackMenu.isAttachedToWindow()) return true;
+                playbackMenu.toggleSubMenu();
+                playbackMenu.setOnMenuDismiss(byClick -> { if (generation == playbackMenuGeneration) playbackMenuGeneration++; });
+                return true;
+            }
+        };
+        containerView.getViewTreeObserver().addOnPreDrawListener(pendingPlaybackMenuOpen);
+        containerView.invalidate();
+    }
+    private boolean validPlaybackPage(long generation, int index, Item item) {
+        return !closing && isShowing() && transitionProgress >= 1f && playbackMenuGeneration == generation
+                && currentIndex == index && currentItem() == item;
+    }
+    private boolean validPlaybackMenu(long generation, int index, Item item) {
+        return validPlaybackPage(generation, index, item) && playbackMenu.isSubMenuShowing();
+    }
+    private void dismissPlaybackMenu(boolean animated) {
+        playbackMenuGeneration++;
+        if (pendingPlaybackMenuOpen != null) {
+            if (containerView != null && containerView.getViewTreeObserver().isAlive()) containerView.getViewTreeObserver().removeOnPreDrawListener(pendingPlaybackMenuOpen);
+            pendingPlaybackMenuOpen = null;
+        }
+        if (playbackMenu != null && playbackMenu.isSubMenuShowing()) {
+            if (!animated) playbackMenu.setPopupAnimationEnabled(false);
+            playbackMenu.closeSubMenu();
+            if (!animated) playbackMenu.setPopupAnimationEnabled(true);
+        }
+    }
+    private void updatePlaybackMenuState(boolean isFinal) {
+        if (playbackSpeedIcon != null) playbackSpeedIcon.setValue(playbackSpeed, false);
+        if (speedSlider != null) speedSlider.setSpeed(playbackSpeed, false);
+        if (speedButtons != null) speedButtons.update(playbackSpeed, isFinal);
+        if (muteMenuItem != null) muteMenuItem.setTextAndIcon(activity.getString(muted ? R.string.Unmute : R.string.Mute),
+                muted ? R.drawable.video_send_unmute : R.drawable.video_send_mute);
+    }
+    private boolean applyPlaybackSpeed(MediaPlayer current) {
+        if (Build.VERSION.SDK_INT < 23 || current != player || !playerPrepared || closing) return Build.VERSION.SDK_INT < 23;
+        float requested = playbackSpeed, previous = appliedPlaybackSpeed;
+        try {
+            current.setPlaybackParams(new PlaybackParams().setPitch(1f).setSpeed(requested));
+            appliedPlaybackSpeed = requested;
+            return true;
+        } catch (RuntimeException error) {
+            FileLog.e(error);
+            playbackSpeed = previous;
+            try { current.setPlaybackParams(new PlaybackParams().setPitch(1f).setSpeed(previous)); }
+            catch (RuntimeException restoreError) { FileLog.e(restoreError); if (current == player) { releasePlayer(); playPauseView.setPlaying(false); } }
+            updatePlaybackMenuState(true);
+            provider.onPlaybackSpeedError(requested);
+            // The host may close or replace this player from the error callback.
+            if (!closing && current == player && playbackSpeed == previous && appliedPlaybackSpeed == previous && requested != previous) provider.onPlaybackSpeedChanged(previous);
+            return false;
+        }
+    }
+    private boolean startPlayer(MediaPlayer current) {
+        if (current != player || !playerPrepared || closing) return false;
+        playWhenReady = true;
+        try {
+            current.setVolume(muted ? 0f : 1f, muted ? 0f : 1f);
+            if (Build.VERSION.SDK_INT >= 23) applyPlaybackSpeed(current);
+            // Error callbacks may close/change page or intentionally pause this same player.
+            if (current != player || closing || !playWhenReady) return false;
+            current.start();
+            return true;
+        } catch (RuntimeException error) {
+            FileLog.e(error);
+            if (current == player) { releasePlayer(); playPauseView.setPlaying(false); }
+            return false;
+        }
     }
 
     // ---------------------------------------------------------------- window
@@ -352,6 +662,26 @@ public class MediaViewer {
         subtitleView.setEllipsize(TextUtils.TruncateAt.END);
         titles.addView(subtitleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 1, 0, 0));
         actionBar.addView(titles, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.LEFT | Gravity.TOP, 72, 0, 16, 0));
+        // PhotoViewer 5572: keep the transplanted menu item inside this viewer's existing top bar.
+        actionsMenu = new ActionBarMenuItem(activity, null, Theme.ACTION_BAR_WHITE_SELECTOR_COLOR, Color.WHITE);
+        actionsMenu.setIcon(R.drawable.media_more);
+        actionsMenu.setContentDescription(activity.getString(R.string.AccDescrMoreOptions));
+        actionsMenu.setShowSubmenuByMove(false);
+        actionsMenu.setLongClickEnabled(false);
+        actionsMenu.setOnClickListener(view -> {
+            if (actionsMenu.isSubMenuShowing()) dismissActionsMenu(true);
+            else openActionsMenu();
+        });
+        actionsMenu.setVisibility(View.GONE);
+        actionBar.addView(actionsMenu, LayoutHelper.createFrame(48, LayoutHelper.MATCH_PARENT, Gravity.RIGHT | Gravity.TOP));
+        playbackSpeedIcon = new SpeedIconDrawable(); playbackSpeedIcon.setColor(Color.WHITE); playbackSpeedIcon.setValue(1f, false);
+        playbackMenu = new ActionBarMenuItem(activity, null, Theme.ACTION_BAR_WHITE_SELECTOR_COLOR, Color.WHITE);
+        playbackMenu.setIcon(playbackSpeedIcon);
+        playbackMenu.setContentDescription(activity.getString(R.string.VideoPlayerSpeed));
+        playbackMenu.setShowSubmenuByMove(false); playbackMenu.setLongClickEnabled(false);
+        playbackMenu.setOnClickListener(view -> { if (playbackMenu.isSubMenuShowing()) dismissPlaybackMenu(true); else openPlaybackMenu(); });
+        playbackMenu.setVisibility(View.GONE);
+        actionBar.addView(playbackMenu, LayoutHelper.createFrame(48, LayoutHelper.MATCH_PARENT, Gravity.RIGHT | Gravity.TOP));
         containerView.addView(actionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
 
         // bottomLayout: caption above the video controls, one 0x7f000000 panel down to the navigation bar
@@ -366,6 +696,22 @@ public class MediaViewer {
         captionView.setEllipsize(TextUtils.TruncateAt.END);
         captionView.setPadding(dp(16), dp(8), dp(16), dp(8));
         bottomLayout.addView(captionView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        // PhotoViewer 5681: top padding 10dp, 68dp strip above the existing bottom controls.
+        groupedPhotosListView = new GroupedPhotosListView(activity, dp(10));
+        groupedPhotosListView.setDrawBackground(false); // bottomLayout already supplies 0x7f000000.
+        groupedPhotosListView.setDelegate(new GroupedPhotosListView.Delegate() {
+            @Override public void onIndexSelected(int index) {
+                if (closing || transitionProgress < 1f) return;
+                selectingFromThumbnails = groupedPhotosListView.isScrolling();
+                try { setCurrentIndex(index); } finally { selectingFromThumbnails = false; }
+            }
+            @Override public void onHideAnimationEnd() { updateThumbnailVisibility(); }
+            @Override public void onStopScrolling() {
+                if (!closing && currentItem().video != null && !playerPrepared) preparePlayer(true);
+            }
+        });
+        bottomLayout.addView(groupedPhotosListView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 68));
 
         videoControls = new FrameLayout(activity);
         videoControls.setClickable(true);
@@ -415,6 +761,7 @@ public class MediaViewer {
     }
 
     private void updatePage() {
+        dismissActionsMenu();
         Item item = currentItem();
         titleView.setText(item.sender);
         CharSequence subtitle = item.date;
@@ -431,7 +778,8 @@ public class MediaViewer {
             captionView.setVisibility(View.VISIBLE);
         }
         videoControls.setVisibility(item.video != null ? View.VISIBLE : View.GONE);
-        bottomHasContent = captionView.getVisibility() == View.VISIBLE || item.video != null;
+        updateThumbnailGroup();
+        updateThumbnailVisibility();
         applyBarsAlpha();
         if (!closing) {
             if (hiddenIndex != currentIndex) {
@@ -447,10 +795,49 @@ public class MediaViewer {
         playerFinished = false;
         updateVideoProgress();
         playPauseView.setPlaying(false);
-        if (item.video != null && transitionProgress >= 1f) {
+        if (item.video != null && transitionProgress >= 1f && !selectingFromThumbnails) {
             preparePlayer(true);
         }
         containerView.invalidate();
+        updateActionsButton();
+    }
+
+    private void updateThumbnailGroup() {
+        int start = currentIndex, end = currentIndex;
+        long group = currentItem().groupId;
+        if (provider.forceAllInGroup()) {
+            start = 0; end = items.size() - 1;
+        } else if (group != 0 && groupStart >= 0 && currentIndex >= groupStart && currentIndex <= groupEnd
+                && items.get(groupStart).groupId == group && items.get(groupEnd).groupId == group) {
+            start = groupStart; end = groupEnd;
+        } else if (group != 0) {
+            // Upstream only examines adjacent members, at most ten on either side.
+            int min = Math.max(0, currentIndex - 10), max = Math.min(items.size() - 1, currentIndex + 9);
+            while (start > min && items.get(start - 1).groupId == group) start--;
+            while (end < max && items.get(end + 1).groupId == group) end++;
+        }
+        if (start == end) {
+            if (groupStart != -1) groupedPhotosListView.setItems(java.util.Collections.emptyList(), -1);
+            groupStart = groupEnd = -1;
+        } else if (start != groupStart || end != groupEnd) {
+            ArrayList<GroupedPhotosListView.Entry> thumbnails = new ArrayList<>();
+            for (int i = start; i <= end; i++) {
+                Item item = items.get(i);
+                thumbnails.add(new GroupedPhotosListView.Entry(i, item.photo, item.mediaWidth(), item.mediaHeight()));
+            }
+            groupStart = start; groupEnd = end;
+            groupedPhotosListView.setItems(thumbnails, currentIndex);
+        } else {
+            groupedPhotosListView.setCurrentIndex(currentIndex);
+        }
+    }
+
+    private void updateThumbnailVisibility() {
+        boolean portrait = containerView.getHeight() == 0 || containerView.getHeight() > containerView.getWidth();
+        boolean visible = groupedPhotosListView.getCount() > 1 && (AndroidUtilities.isTablet() || portrait);
+        groupedPhotosListView.setVisibility(visible ? View.VISIBLE : View.GONE);
+        bottomHasContent = captionView.getVisibility() == View.VISIBLE || currentItem().video != null || visible;
+        applyBarsAlpha();
     }
 
     private void switchToIndex(int index) {
@@ -568,6 +955,7 @@ public class MediaViewer {
             return;
         }
         closing = true;
+        dismissActionsMenu();
         cancelMoveZoomAnimation();
         if (transitionAnimator != null) {
             transitionAnimator.cancel();
@@ -612,6 +1000,8 @@ public class MediaViewer {
     }
 
     private void finish() {
+        dismissActionsMenu();
+        groupedPhotosListView.destroy();
         if (hiddenIndex >= 0) {
             provider.setSourceVisible(hiddenIndex, true);
             hiddenIndex = -1;
@@ -632,6 +1022,7 @@ public class MediaViewer {
     // ---------------------------------------------------------------- bars
 
     private void toggleBars() {
+        dismissActionsMenu();
         barsVisible = !barsVisible;
         if (barsAnimator != null) {
             barsAnimator.cancel();
@@ -749,6 +1140,11 @@ public class MediaViewer {
     }
 
     private void onTransformChanged() {
+        if (groupedPhotosListView != null && !zooming && !zoomAnimation && scale >= 1f) {
+            float progress = translationX > maxX + dp(5) ? (translationX - maxX) / containerWidth()
+                    : translationX < minX - dp(5) ? (translationX - minX) / containerWidth() : 0;
+            groupedPhotosListView.setMoveProgress(Math.max(-1f, Math.min(1f, progress)));
+        }
         updateTextureTransform();
         applyBarsAlpha();
         containerView.invalidate();
@@ -996,11 +1392,17 @@ public class MediaViewer {
         if (drawable == null) {
             return;
         }
-        drawable.setBounds((int) rect.left, (int) rect.top, (int) Math.ceil(rect.right), (int) Math.ceil(rect.bottom));
-        if (drawable instanceof BitmapDrawable) {
-            ((BitmapDrawable) drawable).setFilterBitmap(true);
+        android.graphics.Rect oldBounds = new android.graphics.Rect(drawable.getBounds());
+        BitmapDrawable bitmap = drawable instanceof BitmapDrawable ? (BitmapDrawable) drawable : null;
+        boolean oldFilter = bitmap != null && bitmap.getPaint().isFilterBitmap();
+        try {
+            drawable.setBounds((int) rect.left, (int) rect.top, (int) Math.ceil(rect.right), (int) Math.ceil(rect.bottom));
+            if (bitmap != null) bitmap.setFilterBitmap(true);
+            drawable.draw(canvas);
+        } finally {
+            drawable.setBounds(oldBounds);
+            if (bitmap != null) bitmap.setFilterBitmap(oldFilter);
         }
-        drawable.draw(canvas);
     }
 
     /** openPhoto / closePhoto frame: clip and image interpolate between the source rect and the screen rect. */
@@ -1071,6 +1473,7 @@ public class MediaViewer {
         @Override
         protected void onSizeChanged(int w, int h, int oldw, int oldh) {
             super.onSizeChanged(w, h, oldw, oldh);
+            updateThumbnailVisibility();
             if (oldw != 0 && (w != oldw || h != oldh)) {
                 cancelMoveZoomAnimation();
                 scale = 1f;
@@ -1114,10 +1517,12 @@ public class MediaViewer {
         }
         playWhenReady = autoplay;
         playerPrepared = false;
-        textureView = new TextureView(activity);
+        final TextureView createdTexture = new TextureView(activity);
+        textureView = createdTexture;
         textureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override
             public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
+                if (textureView != createdTexture || closing) return;
                 if (player != null) {
                     surface = new Surface(texture);
                     player.setSurface(surface);
@@ -1130,6 +1535,7 @@ public class MediaViewer {
 
             @Override
             public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
+                if (textureView != createdTexture) return true;
                 if (player != null) {
                     try {
                         player.setSurface(null);
@@ -1145,6 +1551,7 @@ public class MediaViewer {
 
             @Override
             public void onSurfaceTextureUpdated(SurfaceTexture texture) {
+                if (textureView != createdTexture || closing) return;
                 if (videoWidth == 0 && player != null && playerPrepared) {
                     videoWidth = Math.max(1, player.getVideoWidth());
                     videoHeight = Math.max(1, player.getVideoHeight());
@@ -1156,9 +1563,11 @@ public class MediaViewer {
         containerView.addView(textureView, 0, new FrameLayout.LayoutParams(1, 1));
         player = new MediaPlayer();
         try {
+            appliedPlaybackSpeed = 1f;
+            player.setVolume(muted ? 0f : 1f, muted ? 0f : 1f);
             player.setDataSource(activity, item.video);
             player.setOnPreparedListener(mp -> {
-                if (mp != player) {
+                if (mp != player || closing) {
                     return;
                 }
                 playerPrepared = true;
@@ -1169,7 +1578,8 @@ public class MediaViewer {
                 }
                 layoutTexture();
                 if (playWhenReady) {
-                    mp.start();
+                    if (!startPlayer(mp)) return;
+                    if (mp != player || closing) return;
                     playPauseView.setPlaying(true);
                     AndroidUtilities.runOnUIThread(progressUpdater);
                 }
@@ -1177,7 +1587,7 @@ public class MediaViewer {
                 containerView.invalidate();
             });
             player.setOnCompletionListener(mp -> {
-                if (mp != player) {
+                if (mp != player || closing) {
                     return;
                 }
                 playWhenReady = false;
@@ -1187,6 +1597,7 @@ public class MediaViewer {
                 containerView.invalidate();
             });
             player.setOnErrorListener((mp, what, extra) -> {
+                if (mp != player || closing) return true;
                 FileLog.e("MediaViewer: video error " + what + " / " + extra);
                 releasePlayer();
                 containerView.invalidate();
@@ -1252,7 +1663,9 @@ public class MediaViewer {
                 player.seekTo(0);
                 playerFinished = false;
             }
-            player.start();
+            MediaPlayer current = player;
+            if (!startPlayer(current)) return;
+            if (current != player || closing) return;
             playWhenReady = true;
             AndroidUtilities.runOnUIThread(progressUpdater);
         }

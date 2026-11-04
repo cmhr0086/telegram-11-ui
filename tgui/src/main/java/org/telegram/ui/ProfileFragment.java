@@ -55,6 +55,8 @@ import org.telegram.ui.ActionBar.SimpleTextView;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Cells.NotificationsCheckCell;
+import org.telegram.ui.Cells.HeaderCell;
+import org.telegram.ui.Cells.UserCell;
 import org.telegram.ui.Cells.ShadowSectionCell;
 import org.telegram.ui.Cells.TextCell;
 import org.telegram.ui.Cells.TextDetailCell;
@@ -83,6 +85,11 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
 
     /** Who the page is about. Change fields and call {@link #updateProfile()}. */
     public static class Profile {
+        public enum Kind { USER, GROUP, CHANNEL }
+        public Kind kind = Kind.USER;
+        /** Host counts; ignored when status is supplied. No member loading is performed. */
+        public int memberCount;
+        public int onlineCount;
         public long id;
         public String name;
         public CharSequence status;
@@ -94,6 +101,22 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
         public boolean muted;
 
         public Profile(long id, String name) {
+            this.id = id;
+            this.name = name;
+        }
+    }
+
+    /** A host-owned member snapshot; status and role are already localized by the host. */
+    public static class Member {
+        public long id;
+        public CharSequence name;
+        public CharSequence status;
+        public boolean online;
+        /** Static host-owned avatar; shared instances are allowed. Rebind after changing its content. */
+        public Drawable photo;
+        public CharSequence role;
+
+        public Member(long id, CharSequence name) {
             this.id = id;
             this.name = name;
         }
@@ -113,6 +136,8 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
         public static final int TYPE_DESTRUCTIVE = 4;
         /** ShadowSectionCell between sections. */
         public static final int TYPE_SHADOW = 5;
+        public static final int TYPE_HEADER = 6;
+        public static final int TYPE_MEMBER = 7;
 
         public interface OnClickListener {
             void onClick(ProfileFragment fragment, Row row, View view);
@@ -124,6 +149,9 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
         public CharSequence value;
         public int icon;
         public boolean checked;
+        public Member member;
+        /** Upstream: 9dp below a members header, 6dp when preceded by an Add member row. */
+        public int memberAvatarPadding = 9;
         public OnClickListener onClickListener;
 
         public Row(int type, int id) {
@@ -165,6 +193,18 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
             Row row = new Row(TYPE_DESTRUCTIVE, id);
             row.icon = icon;
             row.text = text;
+            return row;
+        }
+
+        public static Row header(int id, CharSequence text) {
+            Row row = new Row(TYPE_HEADER, id);
+            row.text = text;
+            return row;
+        }
+
+        public static Row member(int id, Member member) {
+            Row row = new Row(TYPE_MEMBER, id);
+            row.member = member;
             return row;
         }
 
@@ -583,8 +623,8 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
         }
 
         writeButton = new ImageView(context);
-        writeButton.setImageResource(R.drawable.profile_newmsg);
-        writeButton.setContentDescription("Send message");
+        writeButton.setImageResource(isChatProfile() ? R.drawable.profile_discuss : R.drawable.profile_newmsg);
+        writeButton.setContentDescription(context.getString(R.string.AccDescrOpenChat));
         writeButton.setScaleType(ImageView.ScaleType.CENTER);
         writeButtonSetBackground();
         contentView.addView(writeButton, LayoutHelper.createFrame(60, 60, Gravity.RIGHT | Gravity.TOP, 0, 0, 16, 0));
@@ -621,8 +661,9 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
         avatarDrawable.setInfo(profile.id, profile.name, null);
         avatarImage.setImage(profile.photo, avatarDrawable);
         nameTextView[1].setText(profile.name);
-        onlineTextView[1].setText(profile.status);
-        onlineTextView[1].setTag(profile.online ? Theme.key_profile_status : Theme.key_avatar_subtitleInProfileBlue);
+        onlineTextView[1].setText(getProfileStatus());
+        writeButton.setImageResource(isChatProfile() ? R.drawable.profile_discuss : R.drawable.profile_newmsg);
+        onlineTextView[1].setTag(!isChatProfile() && profile.online ? Theme.key_profile_status : Theme.key_avatar_subtitleInProfileBlue);
         if (profile.verified) {
             nameTextView[1].setRightDrawable2(getVerifiedCrossfadeDrawable());
         } else if (profile.muted) {
@@ -637,6 +678,24 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
             collapseAvatar();
         }
         needLayout(false);
+    }
+
+    private boolean isChatProfile() {
+        return profile.kind == Profile.Kind.GROUP || profile.kind == Profile.Kind.CHANNEL;
+    }
+
+    private CharSequence getProfileStatus() {
+        if (profile.status != null || !isChatProfile()) return profile.status;
+        int count = Math.max(0, profile.memberCount);
+        android.content.res.Resources resources = getParentActivity().getResources();
+        if (profile.kind == Profile.Kind.CHANNEL) {
+            return resources.getQuantityString(R.plurals.tgui_profile_subscribers, count, count);
+        }
+        String members = resources.getQuantityString(R.plurals.tgui_profile_members, count, count);
+        int online = Math.min(count, Math.max(0, profile.onlineCount));
+        if (online > 1) return resources.getString(R.string.tgui_profile_members_online, members,
+                resources.getQuantityString(R.plurals.tgui_profile_online, online, online));
+        return members;
     }
 
     private boolean canExpandAvatar() {
@@ -1102,6 +1161,9 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
     public ArrayList<ThemeDescription> getThemeDescriptions() {
         ArrayList<ThemeDescription> arrayList = new ArrayList<>();
         ThemeDescription.ThemeDescriptionDelegate themeDelegate = this::updateColors;
+        int[] memberKeys = {Theme.key_windowBackgroundWhiteBlueHeader, Theme.key_windowBackgroundWhiteBlackText,
+                Theme.key_windowBackgroundWhiteGrayText, Theme.key_windowBackgroundWhiteBlueText, Theme.key_profile_creatorIcon};
+        for (int key : memberKeys) arrayList.add(new ThemeDescription(null, 0, null, null, null, themeDelegate, key));
         arrayList.add(new ThemeDescription(null, 0, null, null, null, themeDelegate, Theme.key_windowBackgroundGray));
         arrayList.add(new ThemeDescription(null, 0, null, null, null, themeDelegate, Theme.key_avatar_backgroundActionBarBlue));
         arrayList.add(new ThemeDescription(null, 0, null, null, null, themeDelegate, Theme.key_profile_title));
@@ -1110,7 +1172,7 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
         arrayList.add(new ThemeDescription(null, 0, null, null, null, themeDelegate, Theme.key_actionBarDefaultIcon));
 
         arrayList.add(new ThemeDescription(listView, ThemeDescription.FLAG_SELECTOR, null, null, null, null, Theme.key_listSelector));
-        arrayList.add(new ThemeDescription(listView, ThemeDescription.FLAG_CELLBACKGROUNDCOLOR, new Class[]{TextCell.class, TextDetailCell.class, NotificationsCheckCell.class}, null, null, null, Theme.key_windowBackgroundWhite));
+        arrayList.add(new ThemeDescription(listView, ThemeDescription.FLAG_CELLBACKGROUNDCOLOR, new Class[]{TextCell.class, TextDetailCell.class, NotificationsCheckCell.class, HeaderCell.class, UserCell.class}, null, null, null, Theme.key_windowBackgroundWhite));
         arrayList.add(new ThemeDescription(listView, 0, new Class[]{View.class}, Theme.dividerPaint, null, null, Theme.key_divider));
         arrayList.add(new ThemeDescription(listView, ThemeDescription.FLAG_BACKGROUNDFILTER, new Class[]{ShadowSectionCell.class}, null, null, null, Theme.key_windowBackgroundGrayShadow));
         arrayList.add(new ThemeDescription(listView, 0, new Class[]{TextDetailCell.class}, new String[]{"textView"}, null, null, null, Theme.key_windowBackgroundWhiteBlackText));
@@ -1142,7 +1204,7 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
                 return false;
             }
             Row row = rows.get(position);
-            return row.type != Row.TYPE_SHADOW && (row.onClickListener != null || row.type == Row.TYPE_NOTIFICATIONS);
+            return row.type != Row.TYPE_SHADOW && row.type != Row.TYPE_HEADER && (row.onClickListener != null || row.type == Row.TYPE_NOTIFICATIONS);
         }
 
         @Override
@@ -1164,7 +1226,20 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
                     view = new TextDetailCell(context, getResourceProvider(), false);
                     break;
                 case Row.TYPE_BIO:
-                    view = new TextDetailCell(context, getResourceProvider(), true);
+                    view = new TextDetailCell(context, getResourceProvider(), true) {
+                        @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+                            android.text.Layout textLayout = textView.getLayout();
+                            int extra = textLayout == null || textLayout.getLineCount() < 2 ? 0
+                                    : textLayout.getLineTop(textLayout.getLineCount() - 1);
+                            FrameLayout.LayoutParams label = (FrameLayout.LayoutParams) valueTextView.getLayoutParams();
+                            int top = AndroidUtilities.dp(32) + extra;
+                            if (label.topMargin != top) {
+                                label.topMargin = top;
+                                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+                            }
+                        }
+                    };
                     break;
                 case Row.TYPE_NOTIFICATIONS:
                     view = new NotificationsCheckCell(context, 23, 70, false, getResourceProvider());
@@ -1172,6 +1247,12 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
                 case Row.TYPE_TEXT:
                 case Row.TYPE_DESTRUCTIVE:
                     view = new TextCell(context, getResourceProvider());
+                    break;
+                case Row.TYPE_HEADER:
+                    view = new HeaderCell(context, 23, getResourceProvider());
+                    break;
+                case Row.TYPE_MEMBER:
+                    view = new UserCell(context, 9, getResourceProvider());
                     break;
                 case Row.TYPE_SHADOW:
                     view = new ShadowSectionCell(context);
@@ -1213,7 +1294,7 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
                     break;
             }
             if (viewType != Row.TYPE_SHADOW && viewType != TYPE_BOTTOM_PADDING) {
-                view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite, getResourceProvider()));
             }
             view.setLayoutParams(new RecyclerView.LayoutParams(RecyclerView.LayoutParams.MATCH_PARENT, RecyclerView.LayoutParams.WRAP_CONTENT));
             return new RecyclerListView.Holder(view);
@@ -1225,12 +1306,24 @@ public class ProfileFragment extends BaseFragment implements NotificationCenter.
                 return;
             }
             Row row = rows.get(position);
-            boolean divider = position + 1 < rows.size() && rows.get(position + 1).type != Row.TYPE_SHADOW;
+            boolean divider = position + 1 < rows.size() && rows.get(position + 1).type != Row.TYPE_SHADOW && rows.get(position + 1).type != Row.TYPE_HEADER;
             View view = holder.itemView;
             if (row.type != Row.TYPE_SHADOW) {
-                view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite, getResourceProvider()));
             }
             switch (row.type) {
+                case Row.TYPE_HEADER: {
+                    HeaderCell cell = (HeaderCell) view;
+                    cell.setText(row.text == null ? "" : row.text);
+                    cell.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader, getResourceProvider()));
+                    break;
+                }
+                case Row.TYPE_MEMBER: {
+                    UserCell cell = (UserCell) view;
+                    cell.setAvatarPadding(row.memberAvatarPadding);
+                    cell.setData(row.member, position + 1 < rows.size() && rows.get(position + 1).type == Row.TYPE_MEMBER);
+                    break;
+                }
                 case Row.TYPE_DETAIL:
                 case Row.TYPE_BIO: {
                     TextDetailCell cell = (TextDetailCell) view;

@@ -1,3 +1,8 @@
+/*
+ * Adapted from Telegram for Android release-11.4.2-5469.
+ * Copyright Nikolai Kudashov, 2013-2018. Licensed under GNU GPL v. 2 or later.
+ * See LICENSE in this archive.
+ */
 package org.telegram.ui.Cells;
 
 import android.content.Context;
@@ -51,23 +56,20 @@ import org.telegram.ui.Components.RadialProgress2;
 public class PhotoBubbleCell extends TextBubbleCell {
 
     private final RadialProgress2 radialProgress;
-    private final RectF photoRect = new RectF();
-    private final Path photoPath = new Path();
-    private final float[] radii = new float[8];
-    private final Matrix shaderMatrix = new Matrix();
-    private Paint photoPaint;
-    private Bitmap shaderBitmap;
-    private BitmapShader shader;
+    protected final RectF photoRect = new RectF();
+    protected final float[] radii = new float[8];
+    private final PhotoRenderer photoRenderer = new PhotoRenderer();
 
-    private int photoWidth, photoHeight;
-    private int photoY;
-    private boolean mediaBackground;
+    protected int photoWidth, photoHeight;
+    protected int photoY;
+    protected boolean mediaBackground;
     private StaticLayout captionLayout;
     private int captionHeight;
-    private int namesOffset;
+    protected int namesOffset;
     private int buttonState = -1;
     private boolean photoPressed;
     private boolean photoTouch;
+    private boolean photoInterceptHeld;
     private float photoTouchX, photoTouchY;
     private Runnable photoLongPress;
     private boolean photoVisible = true;
@@ -87,6 +89,8 @@ public class PhotoBubbleCell extends TextBubbleCell {
 
     @Override
     public void setMessage(TextBubbleMessage message, boolean pinnedTop, boolean pinnedBottom) {
+        resetPhotoTouch();
+        releasePhotoIntercept();
         boolean changed = this.message != message;
         if (changed) {
             photoVisible = true;
@@ -139,23 +143,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
             imageH = message.photo.getIntrinsicHeight();
         }
 
-        // setMessageContent: photoWidth / photoHeight limits
-        int maxPhotoWidth;
-        boolean useFullWidth = false;
-        if (AndroidUtilities.isTablet()) {
-            maxPhotoWidth = (int) (AndroidUtilities.getMinTabletSide() * 0.7f);
-        } else if (imageW > 0 && imageW >= imageH) {
-            maxPhotoWidth = Math.min(width, AndroidUtilities.displaySize.y) - AndroidUtilities.dp(64);
-            useFullWidth = true;
-        } else {
-            maxPhotoWidth = (int) (Math.min(width, AndroidUtilities.displaySize.y) * 0.7f);
-        }
-        int maxPhotoHeight = maxPhotoWidth + AndroidUtilities.dp(100);
-        if (!useFullWidth) {
-            maxPhotoWidth = Math.min(maxPhotoWidth, AndroidUtilities.getPhotoSize());
-            maxPhotoHeight = Math.min(maxPhotoHeight, AndroidUtilities.getPhotoSize());
-        }
-        int[] size = getMessageSize(imageW, imageH, maxPhotoWidth, maxPhotoHeight);
+        int[] size = measurePhoto(Math.max(1, width - incomingAvatarInset()), imageW, imageH);
         int w = size[0];
         int h = size[1];
 
@@ -180,7 +168,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         int widthForCaption;
         boolean fixPhotoWidth = false;
         // MessageObject.getMaxMessageTextWidth without avatars
-        int minCaptionWidth = Math.min(width, AndroidUtilities.displaySize.y) - AndroidUtilities.dp(80);
+        int minCaptionWidth = Math.min(width - incomingAvatarInset(), AndroidUtilities.displaySize.y) - AndroidUtilities.dp(80);
         if (caption != null && photoWidth < minCaptionWidth) {
             widthForCaption = minCaptionWidth;
             fixPhotoWidth = true;
@@ -235,8 +223,10 @@ public class PhotoBubbleCell extends TextBubbleCell {
             additionHeight += reactionsLayoutInBubble.totalHeight;
         }
 
-        // totalHeight / photoImage y (no name / forward header)
-        namesOffset = buildReplyLayout(backgroundWidth - AndroidUtilities.dp(mediaBackground ? 22 : 31) - AndroidUtilities.dp(out ? 30 : 20), false);
+        // totalHeight / photoImage y includes the author, forwarding and reply headers.
+        namesOffset = authorHeight + forwardOffset() + buildReplyLayout(backgroundWidth - AndroidUtilities.dp(mediaBackground ? 22 : 31) - AndroidUtilities.dp(out ? 30 : 20), false);
+        if (hasForwardLayout()) namesOffset += AndroidUtilities.dp(5);
+        else if (hasAuthorLayout() && replyNameLayout == null) namesOffset += AndroidUtilities.dp(7);
         totalHeight = photoHeight + AndroidUtilities.dp(14) + namesOffset + additionHeight;
         if (pinnedTop) {
             namesOffset -= AndroidUtilities.dp(1);
@@ -256,7 +246,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         if (captionLayout != null || !reactionsLayoutInBubble.isEmpty) {
             bl = br = minRad;
         }
-        if (replyNameLayout != null) {
+        if (replyNameLayout != null || hasAuthorLayout() || hasForwardLayout()) {
             tl = tr = minRad;
         }
         if (pinnedTop) {
@@ -280,6 +270,27 @@ public class PhotoBubbleCell extends TextBubbleCell {
         radii[2] = radii[3] = tr;
         radii[4] = radii[5] = br;
         radii[6] = radii[7] = bl;
+    }
+
+    /** Host override can measure a composite image while retaining caption/time layout. */
+    protected int[] measurePhoto(int width, int imageW, int imageH) {
+        // setMessageContent: photoWidth / photoHeight limits
+        int maxPhotoWidth;
+        boolean useFullWidth = false;
+        if (AndroidUtilities.isTablet()) {
+            maxPhotoWidth = (int) (AndroidUtilities.getMinTabletSide() * 0.7f);
+        } else if (imageW > 0 && imageW >= imageH) {
+            maxPhotoWidth = Math.min(width, AndroidUtilities.displaySize.y) - AndroidUtilities.dp(64);
+            useFullWidth = true;
+        } else {
+            maxPhotoWidth = (int) (Math.min(width, AndroidUtilities.displaySize.y) * 0.7f);
+        }
+        int maxPhotoHeight = maxPhotoWidth + AndroidUtilities.dp(100);
+        if (!useFullWidth) {
+            maxPhotoWidth = Math.min(maxPhotoWidth, AndroidUtilities.getPhotoSize());
+            maxPhotoHeight = Math.min(maxPhotoHeight, AndroidUtilities.getPhotoSize());
+        }
+        return getMessageSize(imageW, imageH, maxPhotoWidth, maxPhotoHeight);
     }
 
     /** Upstream ChatMessageCell.getMessageSize(imageW, imageH, photoWidth, photoHeight). */
@@ -319,14 +330,14 @@ public class PhotoBubbleCell extends TextBubbleCell {
         // drawBackground with mediaBackground: always the tail-less media drawable, 9dp from the side
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
-        final int layoutHeight = getMeasuredHeight();
+        final int layoutHeight = getBubbleContentHeight();
         Theme.MessageDrawable drawable;
         if (drawSelectionBackground) {
             drawable = out ? Theme.chat_msgOutMediaSelectedDrawable : Theme.chat_msgInMediaSelectedDrawable;
         } else {
             drawable = out ? Theme.chat_msgOutMediaDrawable : Theme.chat_msgInMediaDrawable;
         }
-        int backgroundLeft = out ? layoutWidth - backgroundWidth - AndroidUtilities.dp(9) : AndroidUtilities.dp(9);
+        int backgroundLeft = out ? layoutWidth - backgroundWidth - AndroidUtilities.dp(9) : AndroidUtilities.dp(9) + incomingAvatarInset();
         int offsetBottom;
         if (pinnedBottom && pinnedTop) {
             offsetBottom = 0;
@@ -362,6 +373,8 @@ public class PhotoBubbleCell extends TextBubbleCell {
         final boolean out = message.isOut;
         final int layoutWidth = getMeasuredWidth();
         int backgroundLeft = drawBubbleBackground(canvas);
+        drawAuthor(canvas, mediaBackground);
+        drawForward(canvas, mediaBackground);
         drawReply(canvas, mediaBackground);
 
         // onLayout: photo x
@@ -369,7 +382,7 @@ public class PhotoBubbleCell extends TextBubbleCell {
         if (out) {
             x = mediaBackground ? layoutWidth - backgroundWidth - AndroidUtilities.dp(3) : layoutWidth - backgroundWidth + AndroidUtilities.dp(6);
         } else {
-            x = AndroidUtilities.dp(15);
+            x = AndroidUtilities.dp(15) + incomingAvatarInset();
         }
         x -= AndroidUtilities.dp(2);
         int y = photoY + namesOffset;
@@ -381,6 +394,11 @@ public class PhotoBubbleCell extends TextBubbleCell {
         }
         drawPhoto(canvas);
 
+        drawPhotoOverlays(canvas, x, y);
+        drawCaptionAndTime(canvas, out, layoutWidth, backgroundLeft, x, y);
+    }
+
+    protected void drawPhotoOverlays(Canvas canvas, int x, int y) {
         // the 48dp loader in the photo's center
         int buttonX = (int) (x + (photoWidth - AndroidUtilities.dp(48)) / 2.0f);
         int buttonY = (int) (y + (photoHeight - AndroidUtilities.dp(48)) / 2.0f);
@@ -405,7 +423,6 @@ public class PhotoBubbleCell extends TextBubbleCell {
             videoInfoLayout.draw(canvas);
             canvas.restore();
         }
-        drawCaptionAndTime(canvas, out, layoutWidth, backgroundLeft, x, y);
     }
 
     private void drawCaptionAndTime(Canvas canvas, boolean out, int layoutWidth, int backgroundLeft, int x, int y) {
@@ -424,56 +441,67 @@ public class PhotoBubbleCell extends TextBubbleCell {
             drawTimeAndStatus(canvas);
         } else {
             // drawTimeInternal on media: pill bottom = photo bottom - 6dp, right edge 5dp inside the photo
-            int right = out ? layoutWidth - AndroidUtilities.dp(18) : backgroundWidth;
+            int right = out ? layoutWidth - AndroidUtilities.dp(18) : backgroundWidth + incomingAvatarInset();
             drawTimePill(canvas, right, (int) photoRect.bottom - AndroidUtilities.dp(6), AndroidUtilities.dp(8));
         }
     }
 
-    private void drawPhoto(Canvas canvas) {
-        photoPath.rewind();
-        photoPath.addRoundRect(photoRect, radii, Path.Direction.CW);
-        Drawable photo = message.photo;
-        if (photo == null) {
-            // ImageReceiver placeholder before the image arrives
-            Theme.chat_docBackPaint.setColor(getThemedColor(message.isOut ? Theme.key_chat_outLoaderSelected : Theme.key_chat_inMediaIcon));
-            Theme.chat_docBackPaint.setAlpha(60);
-            canvas.drawPath(photoPath, Theme.chat_docBackPaint);
-            Theme.chat_docBackPaint.setAlpha(255);
-            return;
-        }
-        int dw = photo.getIntrinsicWidth();
-        int dh = photo.getIntrinsicHeight();
-        if (dw <= 0 || dh <= 0) {
-            dw = (int) photoRect.width();
-            dh = (int) photoRect.height();
-        }
-        // center-crop (ImageReceiver's default scale type)
-        float scale = Math.max(photoRect.width() / dw, photoRect.height() / dh);
-        float sw = dw * scale, sh = dh * scale;
-        float left = photoRect.centerX() - sw / 2f;
-        float top = photoRect.centerY() - sh / 2f;
-        if (photo instanceof BitmapDrawable && ((BitmapDrawable) photo).getBitmap() != null) {
-            Bitmap bitmap = ((BitmapDrawable) photo).getBitmap();
-            if (shaderBitmap != bitmap) {
-                shaderBitmap = bitmap;
-                shader = new BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-                if (photoPaint == null) {
-                    photoPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-                }
-                photoPaint.setShader(shader);
+    protected void drawPhoto(Canvas canvas) {
+        photoRenderer.draw(canvas, message.photo, photoRect, radii, getThemedColor(message.isOut ? Theme.key_chat_outLoaderSelected : Theme.key_chat_inMediaIcon));
+    }
+
+    /** Per-image renderer caches the shader for center-cropped bitmap drawables. */
+    protected static class PhotoRenderer {
+        private final Path photoPath = new Path();
+        private final Matrix shaderMatrix = new Matrix();
+        private Paint photoPaint;
+        private Bitmap shaderBitmap;
+        private BitmapShader shader;
+        void draw(Canvas canvas, Drawable photo, RectF photoRect, float[] radii, int placeholderColor) {
+            photoPath.rewind();
+            photoPath.addRoundRect(photoRect, radii, Path.Direction.CW);
+            if (photo == null) {
+                // ImageReceiver placeholder before the image arrives
+                Theme.chat_docBackPaint.setColor(placeholderColor);
+                Theme.chat_docBackPaint.setAlpha(60);
+                canvas.drawPath(photoPath, Theme.chat_docBackPaint);
+                Theme.chat_docBackPaint.setAlpha(255);
+                return;
             }
-            float bitmapScale = Math.max(photoRect.width() / bitmap.getWidth(), photoRect.height() / bitmap.getHeight());
-            shaderMatrix.reset();
-            shaderMatrix.setScale(bitmapScale, bitmapScale);
-            shaderMatrix.postTranslate(photoRect.centerX() - bitmap.getWidth() * bitmapScale / 2f, photoRect.centerY() - bitmap.getHeight() * bitmapScale / 2f);
-            shader.setLocalMatrix(shaderMatrix);
-            canvas.drawPath(photoPath, photoPaint);
-        } else {
-            canvas.save();
-            canvas.clipPath(photoPath);
-            photo.setBounds((int) left, (int) top, (int) (left + sw), (int) (top + sh));
-            photo.draw(canvas);
-            canvas.restore();
+            int dw = photo.getIntrinsicWidth();
+            int dh = photo.getIntrinsicHeight();
+            if (dw <= 0 || dh <= 0) {
+                dw = (int) photoRect.width();
+                dh = (int) photoRect.height();
+            }
+            // center-crop (ImageReceiver's default scale type)
+            float scale = Math.max(photoRect.width() / dw, photoRect.height() / dh);
+            float sw = dw * scale, sh = dh * scale;
+            float left = photoRect.centerX() - sw / 2f;
+            float top = photoRect.centerY() - sh / 2f;
+            if (photo instanceof BitmapDrawable && ((BitmapDrawable) photo).getBitmap() != null) {
+                Bitmap bitmap = ((BitmapDrawable) photo).getBitmap();
+                if (shaderBitmap != bitmap) {
+                    shaderBitmap = bitmap;
+                    shader = new BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+                    if (photoPaint == null) {
+                        photoPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+                    }
+                    photoPaint.setShader(shader);
+                }
+                float bitmapScale = Math.max(photoRect.width() / bitmap.getWidth(), photoRect.height() / bitmap.getHeight());
+                shaderMatrix.reset();
+                shaderMatrix.setScale(bitmapScale, bitmapScale);
+                shaderMatrix.postTranslate(photoRect.centerX() - bitmap.getWidth() * bitmapScale / 2f, photoRect.centerY() - bitmap.getHeight() * bitmapScale / 2f);
+                shader.setLocalMatrix(shaderMatrix);
+                canvas.drawPath(photoPath, photoPaint);
+            } else {
+                canvas.save();
+                canvas.clipPath(photoPath);
+                photo.setBounds((int) left, (int) top, (int) (left + sw), (int) (top + sh));
+                photo.draw(canvas);
+                canvas.restore();
+            }
         }
     }
 
@@ -509,8 +537,11 @@ public class PhotoBubbleCell extends TextBubbleCell {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (message != null && !isCheckBoxVisible() && checkForwardTouchEvent(event)) return true;
+        if (message != null && message.type == TextBubbleMessage.TYPE_STICKER && !isCheckBoxVisible() && checkReplyTouchEvent(event)) return true;
         if (message == null || isCheckBoxVisible() || mediaDelegate == null) {
             resetPhotoTouch();
+            releasePhotoIntercept();
             return super.onTouchEvent(event);
         }
         // checkPhotoImageMotionEvent: the photo takes the tap (viewer, or download / cancel) and the long
@@ -528,10 +559,12 @@ public class PhotoBubbleCell extends TextBubbleCell {
                 photoPressed = buttonState != TextBubbleMessage.MEDIA_READY;
                 if (getParent() != null) {
                     getParent().requestDisallowInterceptTouchEvent(true);
+                    photoInterceptHeld = true;
                 }
                 photoLongPress = () -> {
                     photoLongPress = null;
                     resetPhotoTouch();
+                    releasePhotoIntercept();
                     onInteractiveLongPress(false);
                     invalidate();
                 };
@@ -542,19 +575,19 @@ public class PhotoBubbleCell extends TextBubbleCell {
         } else if (photoTouch) {
             if (action == MotionEvent.ACTION_UP) {
                 resetPhotoTouch();
+                releasePhotoIntercept();
                 playSoundEffect(SoundEffectConstants.CLICK);
-                mediaDelegate.onMediaPressed(this, message);
+                onPhotoPressed(x, y);
                 invalidate();
             } else if (action == MotionEvent.ACTION_CANCEL) {
                 resetPhotoTouch();
+                releasePhotoIntercept();
                 invalidate();
             } else if (action == MotionEvent.ACTION_MOVE) {
                 float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
                 if (!area || Math.abs(x - photoTouchX) > slop || Math.abs(y - photoTouchY) > slop) {
                     resetPhotoTouch();
-                    if (getParent() != null) {
-                        getParent().requestDisallowInterceptTouchEvent(false);
-                    }
+                    releasePhotoIntercept();
                     invalidate();
                     return false;
                 }
@@ -564,12 +597,23 @@ public class PhotoBubbleCell extends TextBubbleCell {
         return super.onTouchEvent(event);
     }
 
-    private void resetPhotoTouch() {
+    protected void onPhotoPressed(float x, float y) {
+        mediaDelegate.onMediaPressed(this, message);
+    }
+
+    protected void resetPhotoTouch() {
         photoTouch = false;
         photoPressed = false;
         if (photoLongPress != null) {
             removeCallbacks(photoLongPress);
             photoLongPress = null;
+        }
+    }
+
+    protected void releasePhotoIntercept() {
+        if (photoInterceptHeld) {
+            photoInterceptHeld = false;
+            if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
         }
     }
 
@@ -584,5 +628,6 @@ public class PhotoBubbleCell extends TextBubbleCell {
         super.onDetachedFromWindow();
         radialProgress.onDetachedFromWindow();
         resetPhotoTouch();
+        releasePhotoIntercept();
     }
 }
