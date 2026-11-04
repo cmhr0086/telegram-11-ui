@@ -66,4 +66,22 @@
     <string name="reply_keyboard_contact_confirm">Send the fictional contact from this demo?</string>
     <string name="reply_keyboard_sample_contact">Demo user</string>
     <string name="reply_keyboard_action">Host keyboard action: %1$s</string>
+    <string name="mention_menu">Mention a member</string>
+    <string name="mention_alice">Alice</string>
+    <string name="mention_bob">Bob</string>
+    <string name="mention_carol">Carol (no username)</string>
+    <string name="mention_david">David</string>
+    <string name="mention_eve">Eve</string>
+    <string name="suggest_emoji_menu">Emoji suggestions</string>
+    <string name="suggest_emoji_keyword">smile</string>
+    <string name="suggest_emoji_keyword_example">Keyword suggestions</string>
+    <string name="suggest_emoji_animated_example">Animated alternatives</string>
+    <string name="suggest_emoji_host_action">Host preview callback: %1$s</string>
+    <string name="bot_command_start">Start a conversation 👋</string>
+    <string name="bot_command_help">Show help</string>
+    <string name="bot_command_settings">Conversation settings</string>
+    <string name="bot_command_weather">Weather for a location supplied by the host</string>
+    <string name="bot_command_about">About this local demo</string>
+    <string name="bot_command_feedback">Send feedback</string>
+    <string name="send_preview_effect_sent">Host received effect %1$d</string>
 </resources>

@@ -162,6 +162,8 @@ import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.ActionBar.SimpleTextView;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
+import org.telegram.ui.MessageSendPreview;
+import org.telegram.ui.Cells.TextBubbleMessage;
 
 
 
@@ -240,6 +242,11 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     public interface ChatActivityEnterViewDelegate {
         /** All reply-keyboard actions are owned by the host. */
         default void onReplyKeyboardButtonPressed(org.telegram.ui.bots.ReplyKeyboard keyboard, org.telegram.ui.bots.ReplyKeyboard.Button button) { }
+
+        /** Called after the command menu and draft have been cleared; the host owns sending. */
+        default void onBotCommandSelected(org.telegram.ui.bots.BotCommand command) {
+            onSendText(command.command, new ArrayList<>(), true, 0);
+        }
 
 
         default void onEditTextScroll() {};
@@ -379,6 +386,15 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
          */
         default void onSendText(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate) {
 
+        }
+
+        /** Effect IDs belong to the host; the default preserves the existing send callback. */
+        default void onSendTextWithEffect(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate, long effectId) {
+            onSendText(text, entities, notify, scheduleDate);
+        }
+
+        default void onSendVoiceWithEffect(MediaController.RecordedAudio audio, boolean notify, int scheduleDate, long effectId) {
+            onSendVoice(audio, notify, scheduleDate);
         }
 
         /** tgui: a voice message recorded by {@link MediaController.Recorder} was sent (from the preview or directly). */
@@ -666,9 +682,39 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     private ImageView expandStickersButton;
     private boolean emojiViewFrozen;
     private EmojiView emojiView;
+    private MentionsController mentionsController;
+    private EmojiSuggestionsController emojiSuggestionsController;
+
+    void attachEmojiSuggestionsController(EmojiSuggestionsController controller) {
+        if (emojiSuggestionsController != null && emojiSuggestionsController != controller) emojiSuggestionsController.destroy();
+        emojiSuggestionsController = controller;
+    }
+    void detachEmojiSuggestionsController(EmojiSuggestionsController controller) {
+        if (emojiSuggestionsController == controller) emojiSuggestionsController = null;
+    }
+    boolean hasMentionsController() { return mentionsController != null; }
+
+    void attachMentionsController(MentionsController controller) {
+        if (mentionsController != null && mentionsController != controller) mentionsController.destroy();
+        mentionsController = controller;
+        if (emojiSuggestionsController != null) emojiSuggestionsController.scheduleRefresh();
+    }
+    void detachMentionsController(MentionsController controller) {
+        if (mentionsController == controller) mentionsController = null;
+        if (emojiSuggestionsController != null) emojiSuggestionsController.scheduleRefresh();
+    }
+    boolean canShowMentionSuggestions() {
+        return !destroyed && !botCommandsMenuIsShowing() && messageEditText != null && messageEditText.hasFocus() && !recordingAudioVideo && recordInterfaceState == 0
+                && audioToSend == null && videoToSendMessageObject == null && getVisibility() == VISIBLE;
+    }
+
     private org.telegram.ui.bots.BotKeyboardView botKeyboardView;
     private org.telegram.ui.bots.ReplyKeyboard replyKeyboard;
     private ImageView botButton;
+    private org.telegram.ui.bots.BotCommandsMenuView botCommandsMenuButton;
+    private org.telegram.ui.bots.BotCommandsMenuContainer botCommandsMenuContainer;
+    private org.telegram.ui.bots.BotCommandsMenuView.BotCommandsAdapter botCommandsAdapter;
+    private java.util.List<org.telegram.ui.bots.BotCommand> botCommands = java.util.Collections.emptyList();
     private ReplaceableIconDrawable botButtonDrawable;
     private boolean botKeyboardViewVisible;
     private AnimatorSet panelAnimation;
@@ -987,6 +1033,8 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 onFinishInitCameraRunnable.run();
                 if (!recordingAudioVideo) {
                     recordingAudioVideo = true;
+                    if (mentionsController != null) mentionsController.refresh();
+                    if (emojiSuggestionsController != null) emojiSuggestionsController.refresh();
                     updateRecordInterface(RECORD_STATE_ENTER, true);
                     if (recordCircle != null) {
                         recordCircle.showWaves(false, false);
@@ -1005,6 +1053,8 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 startedDraggingX = -1;
                 MediaController.getInstance().startRecording(recordingGuid);
                 recordingAudioVideo = true;
+                if (mentionsController != null) mentionsController.refresh();
+                if (emojiSuggestionsController != null) emojiSuggestionsController.refresh();
                 updateRecordInterface(RECORD_STATE_ENTER, true);
                 if (recordTimerView != null) {
                     recordTimerView.start(0);
@@ -3681,12 +3731,113 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     }
 
     private ActionBarMenuSubItem actionScheduleButton;
-    // tgui: upstream 11.x opens MessageSendPreview (a full message preview with effects) here and
-    // only uses this popup for forwards/stories; MessageSendPreview needs ChatActivity, so the popup is used always.
+    private boolean sendPreviewEnabled = true;
+    private MessageSendPreview messageSendPreview;
+    private List<MessageEffect> messageEffects = java.util.Collections.emptyList();
+    private long previewDraftVersion;
+
+    /** Disable to retain the legacy long-press schedule/silent popup. */
+    public void setSendPreviewEnabled(boolean enabled) {
+        sendPreviewEnabled = enabled;
+        if (!enabled) dismissMessageSendPreview();
+    }
+
+    public MessageSendPreview getMessageSendPreview() { return messageSendPreview; }
+
+    public void setMessageEffects(List<MessageEffect> effects) {
+        ArrayList<MessageEffect> snapshot = new ArrayList<>();
+        java.util.HashSet<Long> ids = new java.util.HashSet<>();
+        if (effects != null) for (MessageEffect effect : effects) {
+            if (effect == null || !ids.add(effect.id)) throw new IllegalArgumentException("Effects require unique non-null IDs");
+            snapshot.add(effect);
+        }
+        messageEffects = java.util.Collections.unmodifiableList(snapshot);
+        if (messageSendPreview != null) messageSendPreview.setEffects(messageEffects);
+    }
+
+    private void dismissMessageSendPreview() {
+        MessageSendPreview old = messageSendPreview;
+        messageSendPreview = null;
+        if (old != null) old.dismissImmediately();
+    }
+
+    /** Opens the upstream preview for a text or recorded-voice draft. Data never leaves the host. */
+    public boolean showMessageSendPreview() {
+        if (!sendPreviewEnabled || destroyed || isPaused || !isAttachedToWindow() || editingMessageObject != null
+                || recordingAudioVideo || videoToSendMessageObject != null || isInScheduleMode()
+                || slowModeTimer > 0 || (delegate != null && delegate.hasForwardingMessages())) return false;
+        if (messageSendPreview != null && messageSendPreview.isShowing()) return true;
+        CharSequence text = messageEditText == null ? "" : messageEditText.getTextToUse();
+        if (audioToSend == null && TextUtils.isEmpty(AndroidUtilities.getTrimmedString(text))) return false;
+        dismissMessageSendPreview();
+        dismissBotCommandsMenu();
+        final long version = previewDraftVersion;
+        final MediaController.RecordedAudio audio = audioToSend;
+        final Object reply = replyingMessageObject;
+        final MessageSendPreview preview = new MessageSendPreview(parentActivity, resourcesProvider);
+        TextBubbleMessage message = audio == null
+                ? new TextBubbleMessage(0, new SpannableStringBuilder(text), true, "", TextBubbleMessage.STATE_NONE)
+                : TextBubbleMessage.voice(0, true, "", TextBubbleMessage.STATE_NONE, Math.max(1, Math.round(audio.durationMs / 1000f)), audio.waveform);
+        preview.setMessages(java.util.Collections.singletonList(message));
+        preview.setEffects(messageEffects);
+        preview.setEffectId(effectId);
+        messageSendPreview = preview;
+        preview.setOnDismissListener(dialog -> { if (messageSendPreview == preview) messageSendPreview = null; });
+        preview.setSendButton(sendButton, true, v -> sendFromPreview(preview, version, audio, reply, true, 0));
+        boolean self = delegate != null && delegate.isSelfChat();
+        boolean schedule = canSchedule() && !voiceOnce;
+        boolean online = schedule && !self && dialog_id > 0 && delegate != null && delegate.canSendWhenOnline();
+        boolean silent = !self;
+        if (schedule || silent) {
+            ActionBarPopupWindow.ActionBarPopupWindowLayout options = new ActionBarPopupWindow.ActionBarPopupWindowLayout(parentActivity, resourcesProvider);
+            options.setAnimationEnabled(false);
+            if (schedule) {
+                ActionBarMenuSubItem item = previewOption(options, getContext().getString(self ? R.string.SetReminder : R.string.ScheduleMessage), R.drawable.msg_calendar2, true, !online && !silent);
+                item.setOnClickListener(v -> {
+                    if (messageSendPreview != preview || !preview.isInteractive()) return;
+                    AlertsCreator.createScheduleDatePickerDialog(parentActivity, dialog_id,
+                            (notify, date) -> sendFromPreview(preview, version, audio, reply, notify, date), resourcesProvider);
+                });
+            }
+            if (online) previewOption(options, getContext().getString(R.string.SendWhenOnline), R.drawable.msg_online, false, !silent)
+                    .setOnClickListener(v -> sendFromPreview(preview, version, audio, reply, true, 0x7FFFFFFE));
+            if (silent) previewOption(options, getContext().getString(R.string.SendWithoutSound), R.drawable.input_notify_off, !schedule, true)
+                    .setOnClickListener(v -> sendFromPreview(preview, version, audio, reply, false, 0));
+            options.setupRadialSelectors(getThemedColor(Theme.key_dialogButtonSelector));
+            preview.setOptionsView(options);
+        }
+        preview.show();
+        if (delegate != null) delegate.onSendLongClick();
+        return true;
+    }
+
+    private ActionBarMenuSubItem previewOption(ActionBarPopupWindow.ActionBarPopupWindowLayout options, String text, int icon, boolean first, boolean last) {
+        ActionBarMenuSubItem item = new ActionBarMenuSubItem(getContext(), first, last, resourcesProvider);
+        item.setTextAndIcon(text, icon);
+        item.setMinimumWidth(dp(196));
+        options.addView(item, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+        return item;
+    }
+
+    private void sendFromPreview(MessageSendPreview preview, long version, MediaController.RecordedAudio audio, Object reply, boolean notify, int date) {
+        if (messageSendPreview != preview || !preview.isInteractive() || destroyed || isPaused) return;
+        if (version != previewDraftVersion || audioToSend != audio || replyingMessageObject != reply || editingMessageObject != null) {
+            dismissMessageSendPreview();
+            return;
+        }
+        long chosenEffect = preview.getSelectedEffect();
+        // Claim this preview before callbacks, so double taps and host reentry cannot send twice.
+        messageSendPreview = null;
+        preview.dismiss(true);
+        setEffectId(chosenEffect);
+        sendMessageInternal(notify, date, true);
+    }
+
     private boolean onSendLongClick(View view) {
         if (isInScheduleMode()) {
             return false;
         }
+        if (showMessageSendPreview()) return true;
 
         boolean self = delegate != null && delegate.isSelfChat();
 
@@ -3940,8 +4091,17 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         }
 
         @Override
+        protected void onFocusChanged(boolean focused, int direction, android.graphics.Rect previous) {
+            super.onFocusChanged(focused, direction, previous);
+            if (mentionsController != null) mentionsController.refresh();
+            if (emojiSuggestionsController != null) emojiSuggestionsController.refresh();
+        }
+
+        @Override
         protected void onSelectionChanged(int selStart, int selEnd) {
             super.onSelectionChanged(selStart, selEnd);
+            if (mentionsController != null) mentionsController.scheduleRefresh();
+            if (emojiSuggestionsController != null) emojiSuggestionsController.scheduleRefresh();
             if (delegate != null) {
                 delegate.onTextSelectionChanged(selStart, selEnd);
             }
@@ -4245,6 +4405,10 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
             @Override
             public void onTextChanged(CharSequence charSequence, int start, int before, int count) {
+                previewDraftVersion++;
+                dismissMessageSendPreview();
+                dismissBotCommandsMenu();
+                checkBotCommandsMenu(true);
                 if (ignorePrevTextChange) {
                     return;
                 }
@@ -4782,6 +4946,15 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     }
 
     public void onDestroy() {
+        dismissMessageSendPreview();
+        if (botCommandsMenuContainer != null) {
+            botCommandsMenuContainer.destroy();
+            if (botCommandsMenuContainer.getParent() instanceof ViewGroup) ((ViewGroup) botCommandsMenuContainer.getParent()).removeView(botCommandsMenuContainer);
+        }
+        botCommands = java.util.Collections.emptyList();
+        if (botCommandsMenuButton != null) botCommandsMenuButton.setVisibility(GONE);
+        if (emojiSuggestionsController != null) emojiSuggestionsController.destroy();
+        if (mentionsController != null) mentionsController.destroy();
         destroyed = true;
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.recordStarted);
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.recordPaused);
@@ -4932,7 +5105,10 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     private Runnable hideKeyboardRunnable;
 
     public void onPause() {
+        dismissMessageSendPreview();
         isPaused = true;
+        if (botCommandsMenuContainer != null) botCommandsMenuContainer.dismissImmediately();
+        checkBotCommandsMenu(false);
         if (keyboardVisible) {
             showKeyboardOnResume = true;
         }
@@ -4946,6 +5122,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
     public void onResume() {
         isPaused = false;
+        checkBotCommandsMenu(false);
         if (hideKeyboardRunnable != null) {
             AndroidUtilities.cancelRunOnUIThread(hideKeyboardRunnable);
             hideKeyboardRunnable = null;
@@ -5404,9 +5581,10 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             MediaController.getInstance().cleanRecording(false);
             // tgui: upstream builds a voice TL_message and sends it with SendMessagesHelper
             MediaController.RecordedAudio audio = audioToSend;
+            long sentEffectId = effectId;
             sendButton.setEffect(effectId = 0);
             if (delegate != null) {
-                delegate.onSendVoice(audio, notify, scheduleDate);
+                delegate.onSendVoiceWithEffect(audio, notify, scheduleDate, sentEffectId);
                 delegate.onMessageSend(null, notify, scheduleDate);
             }
             hideRecordedAudioPanel(true);
@@ -5554,10 +5732,11 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 }
                 CharSequence[] message = new CharSequence[]{ part };
                 ArrayList<TLRPC.MessageEntity> entities = MediaDataController.getInstance(currentAccount).getEntities(message, supportsNewEntities);
+                long sentEffectId = effectId;
                 sendButton.setEffect(effectId = 0);
                 // tgui: upstream builds SendMessageParams (reply, web page preview, effects, quick replies) for SendMessagesHelper
                 if (delegate != null) {
-                    delegate.onSendText(message[0], entities, notify, scheduleDate);
+                    delegate.onSendTextWithEffect(message[0], entities, notify, scheduleDate, sentEffectId);
                 }
                 start = end + 1;
             } while (end != text.length());
@@ -6373,6 +6552,8 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             recordCircle.voiceEnterTransitionInProgress = false;
         }
         if (recordingAudioVideo) {
+            if (botCommandsMenuContainer != null) botCommandsMenuContainer.dismissImmediately();
+            checkBotCommandsMenu(false);
             if (botKeyboardViewVisible) showPopup(0, 1, false);
             if (recordInterfaceState == 1) {
                 lastRecordState = recordState;
@@ -7231,6 +7412,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         boolean hadEditingMessage = editingMessageObject != null;
         editingMessageObject = messageObject;
         editingCaption = caption;
+        checkBotCommandsMenu(false);
         if (messageObject != null && botKeyboardViewVisible) showPopup(0, 1, false);
         updateReplyKeyboardButton();
         CharSequence textToSetWithKeyboard;
@@ -7523,13 +7705,20 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 Theme.key_chat_emojiPanelBackground, Theme.key_chat_emojiPanelNewTrending, Theme.key_chat_messageLinkOut, Theme.key_chat_TextSelectionCursor,
                 Theme.key_chat_botKeyboardButtonText, Theme.key_chat_botKeyboardButtonBackground, Theme.key_chat_botKeyboardButtonBackgroundPressed,
                 Theme.key_chat_inTextSelectionHighlight, Theme.key_listSelector, Theme.key_windowBackgroundWhiteGrayText,
+                Theme.key_windowBackgroundWhiteBlackText, Theme.key_windowBackgroundWhiteGrayText3, Theme.key_windowBackgroundWhiteLinkText, Theme.key_avatar_text,
                 // upstream ChatActivity.getThemeDescriptions(): the emoji panel
+                Theme.key_chat_stickersHintPanel,
+                Theme.key_sheet_scrollUp,
                 Theme.key_chat_emojiPanelShadowLine, Theme.key_chat_emojiPanelEmptyText, Theme.key_chat_emojiPanelIcon, Theme.key_chat_emojiPanelIconSelected,
                 Theme.key_chat_emojiPanelStickerPackSelector, Theme.key_chat_emojiPanelBackspace, Theme.key_chat_emojiBottomPanelIcon,
                 Theme.key_chat_emojiPanelStickerSetName, Theme.key_chat_emojiPanelStickerSetNameIcon
         };
         for (int key : keys) {
             descriptions.add(new ThemeDescription(null, 0, null, null, null, delegate, key));
+        }
+        if (mentionsController != null) {
+            for (int key : Theme.keys_avatar_background) descriptions.add(new ThemeDescription(null, 0, null, null, null, delegate, key));
+            for (int key : Theme.keys_avatar_background2) descriptions.add(new ThemeDescription(null, 0, null, null, null, delegate, key));
         }
         // upstream ChatActivity.getThemeDescriptions() entries for the input (fields resolved by name)
         descriptions.add(new ThemeDescription(this, 0, null, getThemedPaint(Theme.key_paint_chatComposeBackground), null, null, Theme.key_chat_messagePanelBackground));
@@ -7571,6 +7760,11 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     }
 
     public void updateColors() {
+        if (botCommandsMenuButton != null) botCommandsMenuButton.updateColors();
+        if (botCommandsMenuContainer != null) botCommandsMenuContainer.updateColors();
+        if (botCommandsAdapter != null) botCommandsAdapter.notifyDataSetChanged();
+        if (mentionsController != null) mentionsController.updateColors();
+        if (emojiSuggestionsController != null) emojiSuggestionsController.updateColors();
 
         updateRecordedDeleteIconColors();
         if (recordCircle != null) {
@@ -8164,6 +8358,125 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         }
     }
 
+    /** Publishes host-owned command snapshots. Does not open the menu or send commands. */
+    public void setBotCommands(java.util.List<org.telegram.ui.bots.BotCommand> commands) {
+        if (destroyed) return;
+        if (botCommandsAdapter == null) botCommandsAdapter = new org.telegram.ui.bots.BotCommandsMenuView.BotCommandsAdapter(resourcesProvider);
+        botCommandsAdapter.setCommands(commands);
+        botCommands = botCommandsAdapter.getCommands();
+        if (botCommands.isEmpty()) {
+            if (botCommandsMenuContainer != null) botCommandsMenuContainer.dismissImmediately();
+        } else if (botCommandsMenuButton == null) {
+            botCommandsMenuButton = new org.telegram.ui.bots.BotCommandsMenuView(getContext(), resourcesProvider);
+            botCommandsMenuButton.setExpanded(true, false);
+            botCommandsMenuButton.setOnClickListener(v -> {
+                if (botCommandsMenuIsShowing()) dismissBotCommandsMenu(); else showBotCommandsMenu();
+                try { performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING); } catch (Exception ignored) { }
+            });
+            messageEditTextContainer.addView(botCommandsMenuButton, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 32, Gravity.BOTTOM | Gravity.LEFT, 10, 8, 10, 8));
+        }
+        checkBotCommandsMenu(false);
+        if (botCommandsMenuContainer != null) botCommandsMenuContainer.requestLayout();
+    }
+
+    public java.util.List<org.telegram.ui.bots.BotCommand> getBotCommands() { return botCommands; }
+    public org.telegram.ui.bots.BotCommandsMenuView getBotCommandsMenuButton() { return botCommandsMenuButton; }
+    public org.telegram.ui.bots.BotCommandsMenuContainer getBotCommandsMenuContainer() { return botCommandsMenuContainer; }
+    public boolean botCommandsMenuIsShowing() { return botCommandsMenuContainer != null && botCommandsMenuContainer.isShowing(); }
+
+    private boolean canShowBotCommandsMenu() {
+        return !destroyed && !isPaused && !botCommands.isEmpty() && editingMessageObject == null
+                && !recordingAudioVideo && recordInterfaceState == 0 && audioToSend == null && videoToSendMessageObject == null;
+    }
+
+    private void checkBotCommandsMenu(boolean animated) {
+        if (botCommandsMenuButton == null) return;
+        boolean visible = canShowBotCommandsMenu();
+        if (!visible && botCommandsMenuContainer != null) botCommandsMenuContainer.dismissImmediately();
+        botCommandsMenuButton.setVisibility(visible ? VISIBLE : GONE);
+        boolean expanded = TextUtils.isEmpty(getFieldText()) && !(keyboardVisible || waitingForKeyboardOpen || isPopupShowing());
+        if (botCommandsMenuButton.expanded != expanded) {
+            if (animated) beginDelayedTransition();
+            botCommandsMenuButton.setExpanded(expanded, animated);
+        }
+    }
+
+    public void showBotCommandsMenu() {
+        if (!canShowBotCommandsMenu() || sizeNotifierLayout == null) return;
+        if (stickersExpanded) setStickersExpanded(false, false, false);
+        if (botCommandsMenuContainer == null) {
+            botCommandsMenuContainer = new org.telegram.ui.bots.BotCommandsMenuContainer(getContext(), resourcesProvider) {
+                @Override protected void onDismiss() {
+                    if (botCommandsMenuButton != null) botCommandsMenuButton.setOpened(false);
+                    if (mentionsController != null) mentionsController.scheduleRefresh();
+                    if (emojiSuggestionsController != null) emojiSuggestionsController.scheduleRefresh();
+                }
+                @Override protected void onMeasure(int width, int height) {
+                    updateBotCommandsMenuPadding(MeasureSpec.getSize(height));
+                    super.onMeasure(width, height);
+                }
+                @Override protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+                    super.onLayout(changed, left, top, right, bottom);
+                    updateBotCommandsMenuPadding(getMeasuredHeight());
+                }
+            };
+            botCommandsMenuContainer.listView.setLayoutManager(new org.telegram.tgui.recyclerview.LinearLayoutManager(getContext()));
+            botCommandsMenuContainer.listView.setAdapter(botCommandsAdapter);
+            botCommandsMenuContainer.listView.setOnItemClickListener((RecyclerListView.OnItemClickListener) (view, position) -> {
+                org.telegram.ui.bots.BotCommand command = validBotCommand(view, position);
+                if (command == null) return;
+                // Complete cleanup before invoking host code, which can publish and open a new menu.
+                setFieldText("");
+                dismissBotCommandsMenu();
+                if (delegate != null) delegate.onBotCommandSelected(command);
+            });
+            botCommandsMenuContainer.listView.setOnItemLongClickListener((RecyclerListView.OnItemLongClickListener) (view, position) -> {
+                org.telegram.ui.bots.BotCommand command = validBotCommand(view, position);
+                if (command == null) return false;
+                setFieldText(command.command + " ");
+                dismissBotCommandsMenu();
+                return true;
+            });
+            botCommandsMenuContainer.setClipToPadding(false);
+            int index = sizeNotifierLayout.indexOfChild(this);
+            sizeNotifierLayout.addView(botCommandsMenuContainer, index < 0 ? 0 : index,
+                    LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.BOTTOM));
+        }
+        botCommandsMenuContainer.show();
+        botCommandsMenuButton.setOpened(true);
+        if (mentionsController != null) mentionsController.refresh();
+        if (emojiSuggestionsController != null) emojiSuggestionsController.refresh();
+    }
+
+    private org.telegram.ui.bots.BotCommand validBotCommand(View view, int position) {
+        if (!canShowBotCommandsMenu() || !botCommandsMenuIsShowing()
+                || !(view instanceof org.telegram.ui.bots.BotCommandsMenuView.BotCommandView)
+                || position < 0 || position >= botCommands.size()) return null;
+        org.telegram.ui.bots.BotCommand bound = ((org.telegram.ui.bots.BotCommandsMenuView.BotCommandView) view).getBotCommand();
+        return bound == botCommands.get(position) ? bound : null;
+    }
+
+    public void dismissBotCommandsMenu() {
+        if (botCommandsMenuContainer != null) botCommandsMenuContainer.dismiss();
+    }
+
+    private void updateBotCommandsMenuPadding(int height) {
+        if (botCommandsMenuContainer == null || botCommandsAdapter == null) return;
+        RecyclerListView list = botCommandsMenuContainer.listView;
+        int fourRows = 0, count = botCommandsAdapter.getItemCount();
+        for (int i = 0; i < Math.min(4, list.getChildCount()); i++) fourRows += list.getChildAt(i).getMeasuredHeight();
+        int padding = Math.max(0, height - (fourRows > 0 ? fourRows + dp(8) + dp(count > 4 ? 12 : 0)
+                : dp(8 + (count > 4 ? 36 * 4.3f : 36 * Math.max(1, count)))));
+        if (padding == list.getPaddingTop()) return;
+        org.telegram.tgui.recyclerview.LinearLayoutManager manager = (org.telegram.tgui.recyclerview.LinearLayoutManager) list.getLayoutManager();
+        int position = manager == null ? -1 : manager.findFirstVisibleItemPosition();
+        View first = position < 0 ? null : manager.findViewByPosition(position);
+        int offset = first == null ? 0 : first.getTop() - list.getPaddingTop();
+        list.setTopGlowOffset(padding);
+        list.setPadding(0, padding, 0, dp(8));
+        if (first != null) manager.scrollToPositionWithOffset(position, offset);
+    }
+
     /** Sets a host-owned reply keyboard and opens it when the field is empty. */
     public void setReplyKeyboard(org.telegram.ui.bots.ReplyKeyboard keyboard) { setReplyKeyboard(keyboard, true); }
 
@@ -8523,6 +8836,10 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
     }
 
     public boolean hidePopup(boolean byBackButton, boolean forceAnimate) {
+        if (botCommandsMenuIsShowing()) {
+            dismissBotCommandsMenu();
+            if (byBackButton) return true;
+        }
         if (isPopupShowing()) {
             if (byBackButton && searchingType != 0 || forceAnimate) {
                 setSearchingTypeInternal(0, true);
@@ -8886,6 +9203,8 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             }
             if (!recordingAudioVideo) {
                 recordingAudioVideo = true;
+                if (mentionsController != null) mentionsController.refresh();
+                if (emojiSuggestionsController != null) emojiSuggestionsController.refresh();
                 updateRecordInterface(RECORD_STATE_ENTER, true);
             } else if (recordCircle != null) {
                 recordCircle.showWaves(true, true);
@@ -8905,6 +9224,8 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             videoToSendMessageObject = null;
             checkSendButton(true);
             recordingAudioVideo = true;
+            if (mentionsController != null) mentionsController.refresh();
+            if (emojiSuggestionsController != null) emojiSuggestionsController.refresh();
             updateRecordInterface(RECORD_STATE_ENTER, true);
         } else if (id == NotificationCenter.audioDidSent) {
             int guid = (Integer) args[0];
@@ -9102,6 +9423,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             return;
         }
         stickersExpanded = expanded;
+        if (emojiSuggestionsController != null) emojiSuggestionsController.refresh();
         if (delegate != null) {
             delegate.onStickersExpandedChange();
         }
@@ -9837,10 +10159,14 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        // tgui: upstream shifts the field for the bot commands menu button / send-as avatar here
-        ((MarginLayoutParams) emojiButton.getLayoutParams()).leftMargin = dp(3);
-        if (messageEditText != null) {
-            ((MarginLayoutParams) messageEditText.getLayoutParams()).leftMargin = dp(50);
+        checkBotCommandsMenu(true);
+        if (botCommandsMenuButton != null && botCommandsMenuButton.getVisibility() == VISIBLE) {
+            botCommandsMenuButton.measure(widthMeasureSpec, heightMeasureSpec);
+            ((MarginLayoutParams) emojiButton.getLayoutParams()).leftMargin = dp(10) + botCommandsMenuButton.getMeasuredWidth();
+            if (messageEditText != null) ((MarginLayoutParams) messageEditText.getLayoutParams()).leftMargin = dp(57) + botCommandsMenuButton.getMeasuredWidth();
+        } else {
+            ((MarginLayoutParams) emojiButton.getLayoutParams()).leftMargin = dp(3);
+            if (messageEditText != null) ((MarginLayoutParams) messageEditText.getLayoutParams()).leftMargin = dp(50);
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 

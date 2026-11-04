@@ -59,6 +59,11 @@ import org.telegram.ui.Components.StickersAlert;
 import org.telegram.ui.Components.Attachment;
 import org.telegram.ui.Components.ChatAttachAlert;
 import org.telegram.ui.bots.ReplyKeyboard;
+import org.telegram.ui.Components.Mention;
+import org.telegram.ui.Components.MentionsController;
+import org.telegram.ui.Components.EmojiSuggestion;
+import org.telegram.ui.Components.EmojiSuggestionQuery;
+import org.telegram.ui.Components.EmojiSuggestionsController;
 import org.telegram.ui.Cells.VoiceBubbleCell;
 import org.telegram.ui.Components.ChatActivityEnterView;
 import org.telegram.ui.Components.ChatBubbleItemAnimator;
@@ -110,6 +115,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
     private static final int MENU_DOCUMENT_THUMB = 23;
     private static final int MENU_INLINE = 24;
     private static final int MENU_REPLY_KEYBOARD = 25;
+    private static final int MENU_MENTIONS = 26;
+    private static final int MENU_SUGGEST_EMOJI = 27;
+    private static final int MENU_BOT_COMMANDS = 28;
+    private static final int MENU_SEND_PREVIEW = 29;
     private long firstInlineId;
     private final ArrayList<Runnable> inlineCompletions = new ArrayList<>();
     private long firstDocumentThumbnailId;
@@ -573,6 +582,23 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                     scrollToMessage(firstLocationId);
                 } else if (id == MENU_POLL) {
                     scrollToMessage(firstPollId);
+                } else if (id == MENU_SEND_PREVIEW) {
+                    enterView.setFieldText(context.getString(org.telegram.uidemo.R.string.send_preview_draft));
+                    AndroidUtilities.runOnUIThread(() -> enterView.showMessageSendPreview(), 200);
+                } else if (id == MENU_BOT_COMMANDS) {
+                    enterView.showBotCommandsMenu();
+                } else if (id == MENU_SUGGEST_EMOJI) {
+                    new org.telegram.ui.ActionBar.AlertDialog.Builder(getParentActivity(), getResourceProvider())
+                            .setTitle(getParentActivity().getString(org.telegram.uidemo.R.string.suggest_emoji_menu))
+                            .setItems(new CharSequence[]{getParentActivity().getString(org.telegram.uidemo.R.string.suggest_emoji_keyword_example),
+                                    getParentActivity().getString(org.telegram.uidemo.R.string.suggest_emoji_animated_example)}, (dialog, which) -> {
+                                enterView.getEditField().requestFocus();
+                                CharSequence text = which == 0 ? getParentActivity().getString(org.telegram.uidemo.R.string.suggest_emoji_keyword) : "🐥🐥";
+                                enterView.setFieldText(org.telegram.messenger.Emoji.replaceEmoji(text, enterView.getEditField().getPaint().getFontMetricsInt(), true));
+                            }).show();
+                } else if (id == MENU_MENTIONS) {
+                    enterView.getEditField().requestFocus();
+                    enterView.setFieldText("@");
                 } else if (id == MENU_REPLY_KEYBOARD) {
                     showReplyKeyboardOptions();
                 } else if (id == MENU_INLINE) {
@@ -602,6 +628,10 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         otherItem.addSubItem(MENU_DOCUMENT_THUMB, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.document_thumbnail_messages));
         otherItem.addSubItem(MENU_INLINE, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.inline_messages));
         otherItem.addSubItem(MENU_REPLY_KEYBOARD, R.drawable.input_bot2, context.getString(org.telegram.uidemo.R.string.reply_keyboard_menu));
+        otherItem.addSubItem(MENU_MENTIONS, R.drawable.msg_addcontact, context.getString(org.telegram.uidemo.R.string.mention_menu));
+        otherItem.addSubItem(MENU_SUGGEST_EMOJI, R.drawable.msg_emoji_smiles, context.getString(org.telegram.uidemo.R.string.suggest_emoji_menu));
+        otherItem.addSubItem(MENU_BOT_COMMANDS, R.drawable.input_bot2, context.getString(org.telegram.uidemo.R.string.bot_commands_menu));
+        otherItem.addSubItem(MENU_SEND_PREVIEW, R.drawable.msg_message, context.getString(org.telegram.uidemo.R.string.send_preview_menu));
 
         contentView = new ChatInputLayout(context, parentLayout);
         contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
@@ -683,6 +713,45 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
         contentView.addView(enterView, contentView.getChildCount(), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
         contentView.setEnterView(enterView);
         enterView.setReplyKeyboard(sampleReplyKeyboard(context, true, false), false);
+        enterView.setMessageEffects(java.util.Arrays.asList(
+                new org.telegram.ui.Components.MessageEffect(1, "🐥", LocalEmojiSamples.JSON_ID),
+                new org.telegram.ui.Components.MessageEffect(2, "🥰", LocalEmojiSamples.TGS_ID)));
+        enterView.setBotCommands(java.util.Arrays.asList(
+                new org.telegram.ui.bots.BotCommand("start", "start", context.getString(org.telegram.uidemo.R.string.bot_command_start)),
+                new org.telegram.ui.bots.BotCommand("help", "help", context.getString(org.telegram.uidemo.R.string.bot_command_help)),
+                new org.telegram.ui.bots.BotCommand("settings", "settings", context.getString(org.telegram.uidemo.R.string.bot_command_settings)),
+                new org.telegram.ui.bots.BotCommand("weather", "weather@local_demo", context.getString(org.telegram.uidemo.R.string.bot_command_weather)),
+                new org.telegram.ui.bots.BotCommand("about", "about", context.getString(org.telegram.uidemo.R.string.bot_command_about)),
+                new org.telegram.ui.bots.BotCommand("feedback", "feedback", context.getString(org.telegram.uidemo.R.string.bot_command_feedback))));
+        java.util.List<Mention> mentionUsers = java.util.Arrays.asList(
+                new Mention(101, context.getString(org.telegram.uidemo.R.string.mention_alice), "alice", null),
+                new Mention(102, context.getString(org.telegram.uidemo.R.string.mention_bob), "bob", null),
+                new Mention(103, context.getString(org.telegram.uidemo.R.string.mention_carol), null, null),
+                new Mention(104, context.getString(org.telegram.uidemo.R.string.mention_david), "david", null),
+                new Mention(105, context.getString(org.telegram.uidemo.R.string.mention_eve), "eve", null));
+        new MentionsController(enterView, contentView, (query, results) -> {
+            String prefix = query.query.toLowerCase(java.util.Locale.ROOT);
+            java.util.ArrayList<Mention> matches = new java.util.ArrayList<>();
+            for (Mention user : mentionUsers) {
+                if (user.name.toString().toLowerCase(java.util.Locale.ROOT).startsWith(prefix)
+                        || user.username != null && user.username.toLowerCase(java.util.Locale.ROOT).startsWith(prefix)) matches.add(user);
+            }
+            results.onResult(matches);
+        }, getResourceProvider());
+        EmojiSuggestionsController emojiSuggestions = new EmojiSuggestionsController(enterView, contentView, (query, results) -> {
+            java.util.ArrayList<EmojiSuggestion> matches = new java.util.ArrayList<>();
+            if (query.type == EmojiSuggestionQuery.Type.EMOJI || context.getString(org.telegram.uidemo.R.string.suggest_emoji_keyword).startsWith(query.query.toLowerCase(java.util.Locale.ROOT))) {
+                matches.add(new EmojiSuggestion("duck-animated", "🐥", 90001));
+                String[] codes = {"😀", "😃", "😄", "😁", "😆", "😅", "😂", "😊", "🥰", "😍", "🙂", "🐥"};
+                for (int i = 0; i < codes.length; i++) matches.add(new EmojiSuggestion("unicode-" + i, codes[i], 0));
+            }
+            results.onResult(matches);
+        }, getResourceProvider());
+        emojiSuggestions.setDelegate(new EmojiSuggestionsController.Delegate() {
+            @Override public void onLongPressed(EmojiSuggestion suggestion) {
+                android.widget.Toast.makeText(context, context.getString(org.telegram.uidemo.R.string.suggest_emoji_host_action, suggestion.emoji), android.widget.Toast.LENGTH_SHORT).show();
+            }
+        });
 
         topPanel = new ChatInputTopPanel(context, enterView, getResourceProvider());
         topPanel.setListener(new ChatInputTopPanel.Listener() {
@@ -1066,6 +1135,22 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
                 for (int i = stickerSamples.gifs.size() - 1; i >= 0; i--) if (stickerSamples.gifs.get(i).id == gif.id) stickerSamples.gifs.remove(i);
                 refreshMediaPanel();
             }
+        }
+
+        @Override
+        public void onSendTextWithEffect(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate, long effectId) {
+            onSendText(text, entities, notify, scheduleDate);
+            showSentEffect(effectId);
+        }
+
+        @Override public void onSendVoiceWithEffect(MediaController.RecordedAudio audio, boolean notify, int scheduleDate, long effectId) {
+            onSendVoice(audio, notify, scheduleDate);
+            showSentEffect(effectId);
+        }
+
+        private void showSentEffect(long effectId) {
+            if (effectId != 0 && getParentActivity() != null) android.widget.Toast.makeText(getParentActivity(),
+                    getParentActivity().getString(org.telegram.uidemo.R.string.send_preview_effect_sent, effectId), android.widget.Toast.LENGTH_SHORT).show();
         }
 
         @Override
@@ -1455,7 +1540,7 @@ public class DemoChatFragment extends BaseFragment implements NotificationCenter
             clearSelection();
             return false;
         }
-        if (enterView != null && enterView.isPopupShowing()) {
+        if (enterView != null && (enterView.botCommandsMenuIsShowing() || enterView.isPopupShowing())) {
             enterView.hidePopup(true);
             return false;
         }

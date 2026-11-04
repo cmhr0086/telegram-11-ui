@@ -419,6 +419,17 @@ public class TextBubbleCell extends View {
     private int textX, textY;
     private int textLeftOffset;
     private int timeX;
+    private boolean drawTime = true;
+    private float timeAnchorX = Float.NaN, timeAnchorY = Float.NaN;
+    /** Controls time and delivery-status drawing without changing bubble measurements. */
+    public void setDrawTime(boolean draw) { if (drawTime != draw) { drawTime = draw; invalidate(); } }
+    protected boolean shouldDrawTime() { return drawTime; }
+    /** Last laid-out time text origin, in this cell's coordinates, including when hidden. */
+    public boolean getTimePosition(android.graphics.PointF out) {
+        if (out == null || Float.isNaN(timeAnchorX) || Float.isNaN(timeAnchorY)) return false;
+        out.set(timeAnchorX, timeAnchorY); return true;
+    }
+    protected void recordTimePosition(float x, float y) { timeAnchorX = x; timeAnchorY = y; }
     private boolean emojiOnlyMode;
     boolean isEmojiOnlyMode() { return emojiOnlyMode; }
     private TextPaint textPaint;
@@ -613,6 +624,7 @@ public class TextBubbleCell extends View {
      * @param pinnedBottom next message is from the same side (no tail, small bottom corner)
      */
     public void setMessage(TextBubbleMessage message, boolean pinnedTop, boolean pinnedBottom) {
+        timeAnchorX = timeAnchorY = Float.NaN;
         inlineKeyboard.cancel();
         if (message == null || message.inlineKeyboard == null || message.inlineKeyboard.isEmpty()) inlineKeyboard.clear();
         requestLayout();
@@ -1925,6 +1937,8 @@ public class TextBubbleCell extends View {
         final int layoutWidth = getMeasuredWidth();
         final int layoutHeight = getBubbleContentHeight();
         timeX = x;
+        recordTimePosition(timeX, layoutHeight - AndroidUtilities.dp(pinnedBottom || pinnedTop ? 7.5f : 6.5f) - timeLayout.getHeight());
+        if (!drawTime) return;
         Theme.chat_timePaint.setColor(getThemedColor(out ? (drawSelectionBackground ? Theme.key_chat_outTimeSelectedText : Theme.key_chat_outTimeText) : (drawSelectionBackground ? Theme.key_chat_inTimeSelectedText : Theme.key_chat_inTimeText)));
         canvas.save();
         canvas.translate(timeX, layoutHeight - AndroidUtilities.dp(pinnedBottom || pinnedTop ? 7.5f : 6.5f) - timeLayout.getHeight());
@@ -1952,6 +1966,8 @@ public class TextBubbleCell extends View {
         int pillWidth = timeWidth + AndroidUtilities.dp(out ? 32 : 12);
         int pillHeight = AndroidUtilities.dp(17);
         timeRect.set(right - pillWidth, bottom - pillHeight, right, bottom);
+        recordTimePosition(timeRect.left + AndroidUtilities.dp(6), timeRect.centerY() - timeLayout.getHeight() / 2f);
+        if (!drawTime) return;
         Theme.chat_timeBackgroundPaint.setColor(getThemedColor(Theme.key_chat_mediaTimeBackground));
         canvas.drawRoundRect(timeRect, radius, radius, Theme.chat_timeBackgroundPaint);
         Theme.chat_timePaint.setColor(getThemedColor(Theme.key_chat_mediaTimeText));

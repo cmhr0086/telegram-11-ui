@@ -41,6 +41,11 @@ import org.telegram.ui.Components.Gif;
 import org.telegram.ui.Components.Attachment;
 import org.telegram.ui.Components.ChatAttachAlert;
 import org.telegram.ui.bots.ReplyKeyboard;
+import org.telegram.ui.Components.Mention;
+import org.telegram.ui.Components.MentionsController;
+import org.telegram.ui.Components.EmojiSuggestion;
+import org.telegram.ui.Components.EmojiSuggestionQuery;
+import org.telegram.ui.Components.EmojiSuggestionsController;
 import org.telegram.ui.TelegramUI;
 
 import java.text.SimpleDateFormat;
@@ -290,6 +295,10 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 org.telegram.messenger.MediaDataController.addAnimatedEmojiSpans(entities, styled, Theme.chat_msgTextPaint.getFontMetricsInt());
                 send(styled);
             }
+            @Override public void onSendTextWithEffect(CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean notify, int scheduleDate, long effectId) {
+                onSendText(text, entities, notify, scheduleDate);
+                if (effectId != 0) android.widget.Toast.makeText(context, context.getString(com.example.tguihost.R.string.send_preview_effect_sent, effectId), android.widget.Toast.LENGTH_SHORT).show();
+            }
             @Override public void onEmojiPanelCreated(EmojiView panel) { emojiPanel = panel; updateMediaPanel(); }
             @Override public void onSendSticker(Sticker sticker) { sendSticker(sticker); }
             @Override public void onSendGif(Gif gif) {
@@ -305,6 +314,44 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
         contentView.addView(enterView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM));
         contentView.setEnterView(enterView);
         enterView.setReplyKeyboard(sampleReplyKeyboard(context, true, false), false);
+        enterView.setMessageEffects(java.util.Collections.singletonList(
+                new org.telegram.ui.Components.MessageEffect(1, "🐥", 90001)));
+        enterView.setBotCommands(java.util.Arrays.asList(
+                new org.telegram.ui.bots.BotCommand("start", "start", context.getString(com.example.tguihost.R.string.bot_command_start)),
+                new org.telegram.ui.bots.BotCommand("help", "help", context.getString(com.example.tguihost.R.string.bot_command_help)),
+                new org.telegram.ui.bots.BotCommand("settings", "settings", context.getString(com.example.tguihost.R.string.bot_command_settings)),
+                new org.telegram.ui.bots.BotCommand("weather", "weather@local_demo", context.getString(com.example.tguihost.R.string.bot_command_weather)),
+                new org.telegram.ui.bots.BotCommand("about", "about", context.getString(com.example.tguihost.R.string.bot_command_about)),
+                new org.telegram.ui.bots.BotCommand("feedback", "feedback", context.getString(com.example.tguihost.R.string.bot_command_feedback))));
+        java.util.List<Mention> mentionUsers = java.util.Arrays.asList(
+                new Mention(101, context.getString(com.example.tguihost.R.string.mention_alice), "alice", null),
+                new Mention(102, context.getString(com.example.tguihost.R.string.mention_bob), "bob", null),
+                new Mention(103, context.getString(com.example.tguihost.R.string.mention_carol), null, null),
+                new Mention(104, context.getString(com.example.tguihost.R.string.mention_david), "david", null),
+                new Mention(105, context.getString(com.example.tguihost.R.string.mention_eve), "eve", null));
+        new MentionsController(enterView, contentView, (query, results) -> {
+            String prefix = query.query.toLowerCase(java.util.Locale.ROOT);
+            java.util.ArrayList<Mention> matches = new java.util.ArrayList<>();
+            for (Mention user : mentionUsers) {
+                if (user.name.toString().toLowerCase(java.util.Locale.ROOT).startsWith(prefix)
+                        || user.username != null && user.username.toLowerCase(java.util.Locale.ROOT).startsWith(prefix)) matches.add(user);
+            }
+            results.onResult(matches);
+        }, getResourceProvider());
+        EmojiSuggestionsController emojiSuggestions = new EmojiSuggestionsController(enterView, contentView, (query, results) -> {
+            java.util.ArrayList<EmojiSuggestion> matches = new java.util.ArrayList<>();
+            if (query.type == EmojiSuggestionQuery.Type.EMOJI || context.getString(com.example.tguihost.R.string.suggest_emoji_keyword).startsWith(query.query.toLowerCase(java.util.Locale.ROOT))) {
+                matches.add(new EmojiSuggestion("duck-animated", "🐥", 90001));
+                String[] codes = {"😀", "😃", "😄", "😁", "😆", "😅", "😂", "😊", "🥰", "😍", "🙂", "🐥"};
+                for (int i = 0; i < codes.length; i++) matches.add(new EmojiSuggestion("unicode-" + i, codes[i], 0));
+            }
+            results.onResult(matches);
+        }, getResourceProvider());
+        emojiSuggestions.setDelegate(new EmojiSuggestionsController.Delegate() {
+            @Override public void onLongPressed(EmojiSuggestion suggestion) {
+                android.widget.Toast.makeText(context, context.getString(com.example.tguihost.R.string.suggest_emoji_host_action, suggestion.emoji), android.widget.Toast.LENGTH_SHORT).show();
+            }
+        });
 
         contentView.addView(actionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
         contentView.setActionBar(actionBar);
@@ -582,7 +629,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             clearSelection();
             return false;
         }
-        if (enterView != null && enterView.isPopupShowing()) {
+        if (enterView != null && (enterView.botCommandsMenuIsShowing() || enterView.isPopupShowing())) {
             enterView.hidePopup(true);
             return false;
         }
