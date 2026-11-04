@@ -280,3 +280,8 @@ UndoView `886b99a`、本地动态表情 `ecb00e3`、相册 `a3d5ef2`、主题 CR
 - 最终构建：`:tgui:assembleRelease :demo:assembleDebug :demo:assembleDebugAndroidTest :tgui:publishToMavenLocal` 通过（TEMP/roadmap-final-build.log）；最后发布 AAR 的消费端 debug + R8 release 通过（roadmap-final-host.log）。
 - 最终设备输出 `RoadmapInstrumentation: UndoView + AnimatedEmojiDeviceChecks + AlbumDeviceChecks + RoundVideoDeviceChecks passed`（roadmap-final-instrumentation.log），包含 ThemeFileDeviceChecks、损坏/超限压缩源以及实际 MediaPlayer 首帧/暂停/恢复/释放断言。不要仅凭 adb exit code 判定成功。
 - 2026-11-03 fetch 核实 origin/dev/ui-lib 仍为7eb17f0，无需重放已有提交。工作分支未修改 main，未合并旧 codex/ui-library。截图与日志在本机 TEMP，不作为已上传的远端附件；PR 记录本地证据及未验证范围。
+
+## 2026-11-05 Listen 宿主接入
+从 dev/ui-lib@e40ffdf 建立 codex/listen-host-fixes。Windows 完整 Temurin 21 下 ui5 publishToMavenLocal、tgui assembleRelease、demo assembleDebug 通过。原 JBR 缺 jlink，未改业务绕过。详情见 [LISTEN-HOST.md](LISTEN-HOST.md)。工作区主题文件原为 CRLF，已仅规范为与 Git blob 相同的 LF，重发本地构建需在 LF 状态下执行。尚无库代码修复；不合并、不发版。
+
+Listen 收尾：原生宿主完成首次 107 项设备回归，冷启动主题与返回栈修复都在 Listen 侧；库保持 ui5 原内容，无 API / 资源差异。详见 LISTEN-HOST.md，最终消费端验收以 Listen REPORT.md 为准。
