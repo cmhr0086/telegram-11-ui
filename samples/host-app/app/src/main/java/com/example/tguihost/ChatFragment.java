@@ -72,6 +72,9 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
     private ChatActivityEnterView enterView;
     private NumberTextView selectedCount;
     private EmojiView emojiPanel;
+    private org.telegram.ui.MediaViewer mediaViewer;
+    private TextBubbleMessage viewerAlbum;
+    private int viewerTile = -1;
     private StickerSet localPack;
     private final ArrayList<Sticker> recentStickers = new ArrayList<>();
     private final ArrayList<Sticker> favoriteStickers = new ArrayList<>();
@@ -101,6 +104,12 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             item.photoHeight = i == 0 ? 600 : 320;
             photos.add(item);
         }
+        android.net.Uri sampleVideo = android.net.Uri.parse("android.resource://"
+                + org.telegram.messenger.ApplicationLoader.applicationContext.getPackageName() + "/" + com.example.tguihost.R.raw.sample_video);
+        TextBubbleMessage video = TextBubbleMessage.video(nextId++, false, "12:34", TextBubbleMessage.STATE_NONE,
+                photos.get(1).photo, sampleVideo, 6, null);
+        video.photoWidth = 480; video.photoHeight = 270;
+        photos.add(video);
         messages.add(TextBubbleMessage.album(nextId++, false, "12:34", TextBubbleMessage.STATE_NONE,
                 photos, org.telegram.messenger.ApplicationLoader.applicationContext.getString(com.example.tguihost.R.string.local_album_sample)));
         messages.add(TextBubbleMessage.roundVideo(nextId++, true, "12:35", TextBubbleMessage.STATE_READ,
@@ -162,6 +171,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
 
     @Override
     public void onFragmentDestroy() {
+        if (mediaViewer != null) mediaViewer.close(false);
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.emojiLoaded);
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.didSetNewWallpapper);
         if (enterView != null) {
@@ -172,6 +182,57 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
 
     private void add(CharSequence text, boolean out, int state) {
         messages.add(new TextBubbleMessage(nextId++, text, out, timeFormat.format(new Date()), state));
+    }
+
+    private void openAlbumViewer(org.telegram.ui.Cells.AlbumBubbleCell source, TextBubbleMessage album, int index) {
+        if (mediaViewer != null) mediaViewer.close(false);
+        ArrayList<org.telegram.ui.MediaViewer.Item> pages = new ArrayList<>();
+        for (TextBubbleMessage member : album.albumMedia) {
+            org.telegram.ui.MediaViewer.Item page = member.videoUri == null
+                    ? org.telegram.ui.MediaViewer.Item.photo(member.photo, title, album.time, album.text)
+                    : org.telegram.ui.MediaViewer.Item.video(member.videoUri, member.photo, title, album.time, album.text);
+            page.width = member.photoWidth; page.height = member.photoHeight; page.groupId = album.id; page.tag = member;
+            pages.add(page);
+        }
+        mediaViewer = org.telegram.ui.MediaViewer.open(getParentActivity(), pages, index, new org.telegram.ui.MediaViewer.Provider() {
+            @Override public void onPlaybackSpeedError(float speed) {
+                if (getParentActivity() != null) Toast.makeText(getParentActivity(), getParentActivity().getString(
+                        com.example.tguihost.R.string.media_viewer_speed_error, Float.toString(speed)), Toast.LENGTH_LONG).show();
+            }
+            @Override public boolean canPerformAction(org.telegram.ui.MediaViewer.Action action, int i, org.telegram.ui.MediaViewer.Item item) {
+                return true;
+            }
+            @Override public void onAction(org.telegram.ui.MediaViewer.Action action, int i, org.telegram.ui.MediaViewer.Item item) {
+                if (getParentActivity() == null) return;
+                int label = action == org.telegram.ui.MediaViewer.Action.SHARE ? R.string.ShareFile
+                        : action == org.telegram.ui.MediaViewer.Action.SAVE ? R.string.SaveToGallery : R.string.Delete;
+                Toast.makeText(getParentActivity(), getParentActivity().getString(
+                        com.example.tguihost.R.string.media_viewer_host_action, getParentActivity().getString(label), i + 1),
+                        Toast.LENGTH_LONG).show();
+            }
+            @Override public boolean getSourceRect(int i, android.graphics.RectF rect, float[] radii) {
+                org.telegram.ui.Cells.AlbumBubbleCell current = findAlbumCell(album);
+                if (current == null || !current.isShown() || !current.getTileRectOnScreen(i, rect)) return false;
+                System.arraycopy(current.getTileRadii(i), 0, radii, 0, 8);
+                return true;
+            }
+            @Override public void setSourceVisible(int i, boolean visible) {
+                viewerAlbum = visible ? null : album;
+                viewerTile = visible ? -1 : i;
+                org.telegram.ui.Cells.AlbumBubbleCell current = findAlbumCell(album);
+                if (current != null) current.setTileVisible(i, visible);
+            }
+            @Override public void onClosed() { mediaViewer = null; viewerAlbum = null; viewerTile = -1; }
+        });
+    }
+
+    private org.telegram.ui.Cells.AlbumBubbleCell findAlbumCell(TextBubbleMessage album) {
+        for (int i = 0; i < listView.getChildCount(); i++) {
+            View child = listView.getChildAt(i);
+            if (child instanceof org.telegram.ui.Cells.AlbumBubbleCell
+                    && ((org.telegram.ui.Cells.AlbumBubbleCell) child).getMessage() == album) return (org.telegram.ui.Cells.AlbumBubbleCell) child;
+        }
+        return null;
     }
 
     private void bindGroupSender(TextBubbleMessage message) {
@@ -650,6 +711,7 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
     @Override
     public void onPause() {
         super.onPause();
+        if (mediaViewer != null) mediaViewer.close(false);
         if (contentView != null) {
             contentView.onPause();
         }
@@ -768,7 +830,8 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
                 }
                 @Override public void onAlbumMediaPressed(org.telegram.ui.Cells.AlbumBubbleCell source,
                         TextBubbleMessage album, TextBubbleMessage item, int index) {
-                    Toast.makeText(context, context.getString(com.example.tguihost.R.string.album_item, index + 1), Toast.LENGTH_SHORT).show();
+                    if (actionBar.isActionModeShowed()) { toggle(album); return; }
+                    openAlbumViewer(source, album, index);
                 }
             });
             cell.setDelegate(new TextBubbleCell.Delegate() {
@@ -802,6 +865,11 @@ public class ChatFragment extends BaseFragment implements NotificationCenter.Not
             TextBubbleCell cell = (TextBubbleCell) holder.itemView;
             cell.setAvatarDrawnByList(true);
             cell.setMessage(m, pinnedTop, pinnedBottom);
+            if (cell instanceof org.telegram.ui.Cells.AlbumBubbleCell) {
+                for (int tile = 0; tile < m.albumMedia.size(); tile++) {
+                    ((org.telegram.ui.Cells.AlbumBubbleCell) cell).setTileVisible(tile, viewerAlbum != m || viewerTile != tile);
+                }
+            }
             cell.setCheckBoxVisible(actionBar.isActionModeShowed(), false);
             cell.setChecked(selected.contains(m), false);
         }
